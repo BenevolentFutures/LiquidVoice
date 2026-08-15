@@ -2910,22 +2910,28 @@ struct BottomOverlayView: View {
     }
 
     var body: some View {
+        HStack(alignment: .center, spacing: 6) {
+            self.overlayContent
+            self.quickActionRail
+        }
+    }
+
+    /// The copy / reprocess actions as a vertical rail on the overlay's trailing edge.
+    ///
+    /// This is the overlay's only chrome. The top control row (mode / prompt / actions /
+    /// settings) was removed: every one of those was either a mode switch that already has
+    /// a global hotkey, or the Actions menu whose two useful entries are these very icons.
+    /// A vertical rail also grows along the overlay's free axis, so unlike the old row it
+    /// cannot overflow the right edge as items are added.
+    private var quickActionRail: some View {
+        VStack(spacing: 6) {
+            self.copyLastChip
+            self.reprocessLastChip
+        }
+    }
+
+    private var overlayContent: some View {
         VStack(spacing: max(4, self.layout.vPadding / 2)) {
-            if self.layout.showsTopControls {
-                HStack(spacing: self.isCompactControls ? 6 : 8) {
-                    self.modeSelectorView
-                    self.promptSelectorView
-                    Spacer(minLength: 4)
-                    self.actionsSelectorView
-                    self.copyLastChip
-                    self.reprocessLastChip
-                    if !self.isCompactControls {
-                        self.settingsChip
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: self.isCompactControls ? .center : .leading)
-                .padding(.horizontal, self.layout.hPadding)
-            }
 
             VStack(spacing: self.layout.vPadding / 2) {
                 if self.shouldReservePreviewArea {
@@ -3081,15 +3087,11 @@ struct BottomOverlayView: View {
                     BottomWaveformView(color: self.modeColor, layout: self.layout)
                         .frame(width: self.layout.waveformWidth, height: self.layout.waveformHeight)
 
-                    // Mode label + model load hint
+                    // Model load hint. The mode label ("Dictate" / "Edit" / "Command") used to
+                    // sit above this; it was removed along with the top control row, since the
+                    // mode is already carried by the waveform's colour.
                     if self.layout.showsModeLabel {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(self.modeLabel)
-                                .font(.system(size: self.layout.modeFontSize, weight: .semibold))
-                                .foregroundStyle(self.modeColor)
-                                .lineLimit(1)
-                                .fixedSize(horizontal: true, vertical: false)
-
                             if !self.appServices.asr.isAsrReady &&
                                 (self.appServices.asr.isLoadingModel || self.appServices.asr.isDownloadingModel)
                                 && self.settings.overlaySize != .small

@@ -2055,7 +2055,13 @@ struct BottomOverlayView: View {
                 return LayoutConstants(
                     hPadding: 18,
                     vPadding: 12,
-                    waveformWidth: 150,
+                    // Do not raise waveformWidth to grow the bars: previewMaxWidth is
+                    // max(waveformWidth * 2.2, containerWidth - hPadding * 2), so widening it
+                    // widens the transcript area too, overflowing containerWidth and pushing the
+                    // trailing action rail outside the overlay window, where it gets clipped.
+                    // The bars only occupy barCount * barWidth + (barCount - 1) * barSpacing
+                    // (9 * 5 + 8 * 5.5 = 89pt here), so 130 already has ample room.
+                    waveformWidth: 130,
                     waveformHeight: 44,
                     iconSize: 20,
                     transFontSize: 13,

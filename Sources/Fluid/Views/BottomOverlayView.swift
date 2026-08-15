@@ -2055,17 +2055,17 @@ struct BottomOverlayView: View {
                 return LayoutConstants(
                     hPadding: 18,
                     vPadding: 12,
-                    waveformWidth: 130,
-                    waveformHeight: 32,
+                    waveformWidth: 150,
+                    waveformHeight: 44,
                     iconSize: 20,
                     transFontSize: 13,
                     modeFontSize: 12,
                     cornerRadius: 18,
                     barCount: 9,
-                    barWidth: 3.5,
-                    barSpacing: 4.5,
-                    minBarHeight: 6,
-                    maxBarHeight: 28,
+                    barWidth: 5.0,
+                    barSpacing: 5.5,
+                    minBarHeight: 8,
+                    maxBarHeight: 40,
                     containerWidth: 340,
                     overlayWidth: 380,
                     overlayHeight: 156,
@@ -2927,7 +2927,36 @@ struct BottomOverlayView: View {
         VStack(spacing: 6) {
             self.copyLastChip
             self.reprocessLastChip
+            self.targetAppIconView
         }
+    }
+
+    /// The app that dictated text will be typed into, plus the model-loading spinner.
+    ///
+    /// Deliberately drawn without the chips' background: it reports state rather than
+    /// accepting a click, and giving it chip chrome would imply it is a third button.
+    /// The frame is reserved whether or not an icon resolves, so the two chips above it
+    /// never shift position as the frontmost app changes.
+    private var targetAppIconView: some View {
+        let appIcon = self.displayedAppIcon
+        let showModelLoading = !self.appServices.asr.isAsrReady &&
+            (self.appServices.asr.isLoadingModel || self.appServices.asr.isDownloadingModel)
+        return VStack(spacing: 2) {
+            if showModelLoading {
+                ProgressView()
+                    .controlSize(.mini)
+            }
+            if let appIcon {
+                Image(nsImage: appIcon)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: self.layout.iconSize, height: self.layout.iconSize)
+                    .clipShape(RoundedRectangle(cornerRadius: self.layout.iconSize / 4))
+            }
+        }
+        .frame(width: self.layout.iconSize, height: self.layout.iconSize)
+        .opacity((appIcon != nil || showModelLoading) ? 1 : 0)
+        .help("Dictation target app")
     }
 
     private var overlayContent: some View {
@@ -3057,32 +3086,9 @@ struct BottomOverlayView: View {
                     }
                 }
 
-                // Waveform + Mode label row
+                // Waveform row. The target-app icon used to lead this row; it now sits at the
+                // bottom of the trailing action rail (see `targetAppIconView`).
                 HStack(spacing: self.layout.hPadding / 1.5) {
-                    // Target app icon (the app where text will be typed)
-                    let appIcon = self.displayedAppIcon
-                    let showModelLoading = self.layout.showsModeLabel && !self.appServices.asr.isAsrReady &&
-                        (self.appServices.asr.isLoadingModel || self.appServices.asr.isDownloadingModel)
-                    VStack(spacing: 2) {
-                        if showModelLoading {
-                            ProgressView()
-                                .controlSize(.mini)
-                        }
-                        if let appIcon = appIcon {
-                            Image(nsImage: appIcon)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: self.layout.iconSize, height: self.layout.iconSize)
-                                .clipShape(RoundedRectangle(cornerRadius: self.layout.iconSize / 4))
-                        } else if !self.layout.showsModeLabel {
-                            Circle()
-                                .fill(self.modeColor.opacity(0.9))
-                                .frame(width: max(self.layout.iconSize * 0.45, 7), height: max(self.layout.iconSize * 0.45, 7))
-                        }
-                    }
-                    .frame(width: self.layout.iconSize, height: self.layout.iconSize)
-                    .opacity((appIcon != nil || showModelLoading || !self.layout.showsModeLabel) ? 1 : 0)
-
                     // Waveform visualization
                     BottomWaveformView(color: self.modeColor, layout: self.layout)
                         .frame(width: self.layout.waveformWidth, height: self.layout.waveformHeight)

@@ -43,9 +43,11 @@ struct SettingsView: View {
     @Binding var rewriteShortcut: HotkeyShortcut
     @Binding var cancelRecordingShortcut: HotkeyShortcut
     @Binding var pasteLastTranscriptionShortcut: HotkeyShortcut?
+    @Binding var reprocessLastDictationShortcut: HotkeyShortcut?
     @Binding var commandModeShortcutEnabled: Bool
     @Binding var rewriteShortcutEnabled: Bool
     @Binding var pasteLastTranscriptionShortcutEnabled: Bool
+    @Binding var reprocessLastDictationShortcutEnabled: Bool
     @Binding var hotkeyManagerInitialized: Bool
     @Binding var hotkeyMode: HotkeyActivationMode
     @Binding var enableStreamingPreview: Bool
@@ -794,6 +796,35 @@ struct SettingsView: View {
                                             }
                                             self.pasteLastTranscriptionShortcut = nil
                                             self.pasteLastTranscriptionShortcutEnabled = false
+                                        }
+                                    )
+                                    Divider().opacity(0.2).padding(.vertical, 4)
+
+                                    self.shortcutRow(
+                                        content: .init(
+                                            icon: "arrow.clockwise",
+                                            iconColor: .secondary,
+                                            title: "Reprocess Last Dictation",
+                                            description: "Re-run your most recent dictation through the current AI settings"
+                                        ),
+                                        shortcut: self.reprocessLastDictationShortcut,
+                                        isRecording: self.isRecording(.reprocessLast),
+                                        isAnyRecordingActive: self.isRecordingAnyShortcut,
+                                        recordingMessage: self.isRecording(.reprocessLast) ? self.shortcutRecordingMessage : nil,
+                                        isEnabled: self.$reprocessLastDictationShortcutEnabled,
+                                        requiresShortcutToEnable: true,
+                                        onChangePressed: {
+                                            DebugLogger.shared.debug("Starting to record new reprocess last dictation shortcut", source: "SettingsView")
+                                            self.shortcutRecordingMessage = nil
+                                            self.activeShortcutRecordingTarget = .reprocessLast
+                                        },
+                                        onRemovePressed: {
+                                            if self.activeShortcutRecordingTarget == .reprocessLast {
+                                                self.shortcutRecordingMessage = nil
+                                                self.activeShortcutRecordingTarget = nil
+                                            }
+                                            self.reprocessLastDictationShortcut = nil
+                                            self.reprocessLastDictationShortcutEnabled = false
                                         }
                                     )
                                 }

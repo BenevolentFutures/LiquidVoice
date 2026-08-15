@@ -1962,6 +1962,8 @@ struct BottomOverlayView: View {
     @State private var isHoveringPromptChip = false
     @State private var isHoveringActionsChip = false
     @State private var isHoveringSettingsChip = false
+    @State private var isHoveringCopyChip = false
+    @State private var isHoveringReprocessChip = false
     @State private var modeSelectorFrameInScreen: CGRect = .zero
     @State private var modeSelectorWindow: NSWindow?
     @State private var promptSelectorFrameInScreen: CGRect = .zero
@@ -2733,6 +2735,65 @@ struct BottomOverlayView: View {
             )
     }
 
+    /// Whether the one-shot history actions (copy / reprocess) can run right now.
+    /// Mirrors the Actions menu's own gate so the chips and the menu never disagree.
+    private var quickActionsDisabled: Bool {
+        self.historyStore.entries.isEmpty || self.contentState.isProcessing
+    }
+
+    /// An icon-only chip for a one-shot action, styled to match `settingsChip`.
+    /// Labelless by design — the tooltip carries the meaning, so the control row stays narrow.
+    private func quickActionChip(
+        systemName: String,
+        help: String,
+        isHovered: Binding<Bool>,
+        action: @escaping () -> Void
+    ) -> some View {
+        let disabled = self.quickActionsDisabled
+        return HStack(spacing: 0) {
+            Image(systemName: systemName)
+                .font(.system(size: max(self.promptSelectorFontSize + 1, 10), weight: .semibold))
+                .foregroundStyle(.white.opacity(disabled ? 0.32 : 0.72))
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, self.promptSelectorVerticalPadding)
+        .background(
+            self.chipBackground(isHovered: isHovered.wrappedValue, disabled: disabled)
+        )
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovered.wrappedValue = hovering && !disabled
+        }
+        .onTapGesture {
+            guard self.layout.showsTopControls, !disabled else { return }
+            self.closePromptMenu()
+            self.closeModeMenu()
+            self.closeActionsMenu()
+            action()
+        }
+        .help(disabled ? "No saved dictation history available" : help)
+    }
+
+    private var copyLastChip: some View {
+        self.quickActionChip(
+            systemName: "doc.on.doc",
+            help: "Copy Last Transcription",
+            isHovered: self.$isHoveringCopyChip
+        ) {
+            self.contentState.onCopyLastRequested?()
+        }
+    }
+
+    private var reprocessLastChip: some View {
+        self.quickActionChip(
+            systemName: "arrow.clockwise",
+            help: "Reprocess Last Dictation",
+            isHovered: self.$isHoveringReprocessChip
+        ) {
+            self.contentState.onReprocessLastRequested?()
+        }
+    }
+
     private var settingsChip: some View {
         let disabled = false
         return HStack(spacing: 0) {
@@ -2856,6 +2917,8 @@ struct BottomOverlayView: View {
                     self.promptSelectorView
                     Spacer(minLength: 4)
                     self.actionsSelectorView
+                    self.copyLastChip
+                    self.reprocessLastChip
                     if !self.isCompactControls {
                         self.settingsChip
                     }
@@ -3163,6 +3226,8 @@ struct BottomOverlayView: View {
             self.isHoveringPromptChip = false
             self.isHoveringActionsChip = false
             self.isHoveringSettingsChip = false
+            self.isHoveringCopyChip = false
+            self.isHoveringReprocessChip = false
             switch self.contentState.mode {
             case .dictation: self.contentState.promptPickerMode = .dictate
             case .edit, .write, .rewrite: self.contentState.promptPickerMode = .edit
@@ -3185,6 +3250,8 @@ struct BottomOverlayView: View {
             self.isHoveringPromptChip = false
             self.isHoveringActionsChip = false
             self.isHoveringSettingsChip = false
+            self.isHoveringCopyChip = false
+            self.isHoveringReprocessChip = false
             if !self.layout.usesFixedCanvas {
                 self.refreshDynamicPreviewSizeIfNeeded(for: self.currentPreviewSizingText)
             }
@@ -3233,6 +3300,8 @@ struct BottomOverlayView: View {
             self.isHoveringPromptChip = false
             self.isHoveringActionsChip = false
             self.isHoveringSettingsChip = false
+            self.isHoveringCopyChip = false
+            self.isHoveringReprocessChip = false
         }
         // TODO: Add tap-to-expand for command mode history (future enhancement)
         // .contentShape(Rectangle())

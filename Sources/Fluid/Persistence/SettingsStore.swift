@@ -1401,12 +1401,16 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    /// Anonymous analytics toggle (default: ON). Uses default-true semantics so existing installs
-    /// upgrading to a version that includes analytics do not silently default to OFF.
+    /// Anonymous analytics toggle (default: OFF in this fork).
+    ///
+    /// Upstream defaults this to ON so installs that predate analytics opt in silently.
+    /// Liquid Voice has no analytics backend at all (`AnalyticsConfig.isConfigured` is
+    /// hard-wired to `false`), so defaulting to ON here would only misreport the app's
+    /// behaviour in Settings. The toggle is kept so a restored backup round-trips cleanly.
     var shareAnonymousAnalytics: Bool {
         get {
             let value = self.defaults.object(forKey: Keys.shareAnonymousAnalytics)
-            if value == nil { return true }
+            if value == nil { return false }
             return self.defaults.bool(forKey: Keys.shareAnonymousAnalytics)
         }
         set {
@@ -2838,6 +2842,41 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    /// Whether the "Reprocess Last Dictation" global hotkey is active. Opt-in and off by default.
+    var reprocessLastDictationShortcutEnabled: Bool {
+        get {
+            let value = self.defaults.object(forKey: Keys.reprocessLastDictationShortcutEnabled)
+            return value as? Bool ?? false
+        }
+        set {
+            objectWillChange.send()
+            self.defaults.set(newValue, forKey: Keys.reprocessLastDictationShortcutEnabled)
+        }
+    }
+
+    /// The shortcut that re-runs the most recent dictation through the current AI settings.
+    /// Unbound (nil) by default so it never collides with an existing shortcut until the user assigns one.
+    var reprocessLastDictationHotkeyShortcut: HotkeyShortcut? {
+        get {
+            if let data = defaults.data(forKey: Keys.reprocessLastDictationHotkeyShortcut),
+               let shortcut = try? JSONDecoder().decode(HotkeyShortcut.self, from: data)
+            {
+                return shortcut
+            }
+            return nil
+        }
+        set {
+            objectWillChange.send()
+            guard let newValue else {
+                self.defaults.removeObject(forKey: Keys.reprocessLastDictationHotkeyShortcut)
+                return
+            }
+            if let data = try? JSONEncoder().encode(newValue) {
+                self.defaults.set(data, forKey: Keys.reprocessLastDictationHotkeyShortcut)
+            }
+        }
+    }
+
     var commandModeConfirmBeforeExecute: Bool {
         get {
             // Default to true (safer - ask before running commands)
@@ -3193,6 +3232,8 @@ final class SettingsStore: ObservableObject {
             cancelRecordingHotkeyShortcut: self.cancelRecordingHotkeyShortcut,
             pasteLastTranscriptionHotkeyShortcut: self.pasteLastTranscriptionHotkeyShortcut,
             pasteLastTranscriptionShortcutEnabled: self.pasteLastTranscriptionShortcutEnabled,
+            reprocessLastDictationHotkeyShortcut: self.reprocessLastDictationHotkeyShortcut,
+            reprocessLastDictationShortcutEnabled: self.reprocessLastDictationShortcutEnabled,
             showThinkingTokens: self.showThinkingTokens,
             hideFromDockAndAppSwitcher: self.hideFromDockAndAppSwitcher,
             showMainWindowAtLoginLaunch: self.showMainWindowAtLoginLaunch,
@@ -3316,6 +3357,12 @@ final class SettingsStore: ObservableObject {
         }
         if let pasteLastTranscriptionShortcutEnabled = payload.pasteLastTranscriptionShortcutEnabled {
             self.pasteLastTranscriptionShortcutEnabled = pasteLastTranscriptionShortcutEnabled
+        }
+        if let reprocessLastDictationHotkeyShortcut = payload.reprocessLastDictationHotkeyShortcut {
+            self.reprocessLastDictationHotkeyShortcut = reprocessLastDictationHotkeyShortcut
+        }
+        if let reprocessLastDictationShortcutEnabled = payload.reprocessLastDictationShortcutEnabled {
+            self.reprocessLastDictationShortcutEnabled = reprocessLastDictationShortcutEnabled
         }
         self.showThinkingTokens = payload.showThinkingTokens
         self.hideFromDockAndAppSwitcher = payload.hideFromDockAndAppSwitcher
@@ -5287,6 +5334,8 @@ private extension SettingsStore {
         static let cancelRecordingHotkeyShortcut = "CancelRecordingHotkeyShortcut"
         static let pasteLastTranscriptionHotkeyShortcut = "PasteLastTranscriptionHotkeyShortcut"
         static let pasteLastTranscriptionShortcutEnabled = "PasteLastTranscriptionShortcutEnabled"
+        static let reprocessLastDictationHotkeyShortcut = "ReprocessLastDictationHotkeyShortcut"
+        static let reprocessLastDictationShortcutEnabled = "ReprocessLastDictationShortcutEnabled"
         static let commandModeLinkedToGlobal = "CommandModeLinkedToGlobal"
         static let commandModeShortcutEnabled = "CommandModeShortcutEnabled"
 

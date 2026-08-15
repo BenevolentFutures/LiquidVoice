@@ -105,6 +105,7 @@ enum ShortcutRecordingTarget: Hashable {
     case edit
     case cancel
     case pasteLast
+    case reprocessLast
     case dictationPrompt(String)
     case newPrompt
 
@@ -122,6 +123,8 @@ enum ShortcutRecordingTarget: Hashable {
             return "Cancel Recording"
         case .pasteLast:
             return "Paste Last Transcription"
+        case .reprocessLast:
+            return "Reprocess Last Dictation"
         case .dictationPrompt:
             return "Prompt Shortcut"
         case .newPrompt:
@@ -131,7 +134,7 @@ enum ShortcutRecordingTarget: Hashable {
 
     var enablesFeatureOnAssignment: Bool {
         switch self {
-        case .secondaryDictation, .command, .edit, .pasteLast:
+        case .secondaryDictation, .command, .edit, .pasteLast, .reprocessLast:
             return true
         case .primaryDictation, .cancel, .dictationPrompt, .newPrompt:
             return false
@@ -145,7 +148,7 @@ enum ShortcutRecordingTarget: Hashable {
 
     var allowsMouseShortcut: Bool {
         switch self {
-        case .primaryDictation, .pasteLast:
+        case .primaryDictation, .pasteLast, .reprocessLast:
             return true
         case .secondaryDictation, .command, .edit, .cancel, .dictationPrompt, .newPrompt:
             return false
@@ -219,6 +222,8 @@ struct ContentView: View {
     @State private var cancelRecordingHotkeyShortcut: HotkeyShortcut = SettingsStore.shared.cancelRecordingHotkeyShortcut
     @State private var pasteLastTranscriptionHotkeyShortcut: HotkeyShortcut? = SettingsStore.shared.pasteLastTranscriptionHotkeyShortcut
     @State private var isPasteLastTranscriptionShortcutEnabled: Bool = SettingsStore.shared.pasteLastTranscriptionShortcutEnabled
+    @State private var reprocessLastDictationHotkeyShortcut: HotkeyShortcut? = SettingsStore.shared.reprocessLastDictationHotkeyShortcut
+    @State private var isReprocessLastDictationShortcutEnabled: Bool = SettingsStore.shared.reprocessLastDictationShortcutEnabled
     @State private var isPromptModeShortcutEnabled: Bool = SettingsStore.shared.promptModeShortcutEnabled
     @State private var isCommandModeShortcutEnabled: Bool = SettingsStore.shared.commandModeShortcutEnabled
     @State private var isRewriteModeShortcutEnabled: Bool = SettingsStore.shared.rewriteModeShortcutEnabled
@@ -478,11 +483,25 @@ struct ContentView: View {
             .onChange(of: self.isPasteLastTranscriptionShortcutEnabled) { newValue in
                 self.handlePasteLastTranscriptionShortcutEnabledChange(newValue)
             }
+            .onChange(of: self.reprocessLastDictationHotkeyShortcut) { _, newValue in
+                // The hotkey manager reads this value live from SettingsStore, so persisting is enough.
+                SettingsStore.shared.reprocessLastDictationHotkeyShortcut = newValue
+            }
+            .onChange(of: self.isReprocessLastDictationShortcutEnabled) { newValue in
+                self.handleReprocessLastDictationShortcutEnabledChange(newValue)
+            }
     }
 
     private func handlePasteLastTranscriptionShortcutEnabledChange(_ isEnabled: Bool) {
         SettingsStore.shared.pasteLastTranscriptionShortcutEnabled = isEnabled
         if !isEnabled, self.activeShortcutRecordingTarget == .pasteLast {
+            self.clearShortcutRecordingMode()
+        }
+    }
+
+    private func handleReprocessLastDictationShortcutEnabledChange(_ isEnabled: Bool) {
+        SettingsStore.shared.reprocessLastDictationShortcutEnabled = isEnabled
+        if !isEnabled, self.activeShortcutRecordingTarget == .reprocessLast {
             self.clearShortcutRecordingMode()
         }
     }
@@ -1015,6 +1034,7 @@ struct ContentView: View {
         let optionalConfiguredShortcuts: [(ShortcutRecordingTarget, HotkeyShortcut?)] = [
             (.command, self.commandModeHotkeyShortcut),
             (.pasteLast, self.pasteLastTranscriptionHotkeyShortcut),
+            (.reprocessLast, self.reprocessLastDictationHotkeyShortcut),
         ]
 
         for (otherTarget, configuredShortcut) in configuredShortcuts where otherTarget != target {
@@ -1084,6 +1104,10 @@ struct ContentView: View {
             // The hotkey manager reads this shortcut directly from SettingsStore, so no manager update is needed.
             self.pasteLastTranscriptionHotkeyShortcut = shortcut
             SettingsStore.shared.pasteLastTranscriptionHotkeyShortcut = shortcut
+        case .reprocessLast:
+            // The hotkey manager reads this shortcut directly from SettingsStore, so no manager update is needed.
+            self.reprocessLastDictationHotkeyShortcut = shortcut
+            SettingsStore.shared.reprocessLastDictationHotkeyShortcut = shortcut
         case let .dictationPrompt(key):
             guard let selection = SettingsStore.shared.dictationPromptSelection(forConfigurationKey: key) else { return }
             var configuration = SettingsStore.shared.dictationPromptConfiguration(for: selection)
@@ -1131,6 +1155,9 @@ struct ContentView: View {
         case .pasteLast:
             self.isPasteLastTranscriptionShortcutEnabled = enabled
             SettingsStore.shared.pasteLastTranscriptionShortcutEnabled = enabled
+        case .reprocessLast:
+            self.isReprocessLastDictationShortcutEnabled = enabled
+            SettingsStore.shared.reprocessLastDictationShortcutEnabled = enabled
         case .primaryDictation, .cancel, .dictationPrompt, .newPrompt:
             break
         }
@@ -1463,9 +1490,11 @@ struct ContentView: View {
             rewriteShortcut: self.$rewriteModeHotkeyShortcut,
             cancelRecordingShortcut: self.$cancelRecordingHotkeyShortcut,
             pasteLastTranscriptionShortcut: self.$pasteLastTranscriptionHotkeyShortcut,
+            reprocessLastDictationShortcut: self.$reprocessLastDictationHotkeyShortcut,
             commandModeShortcutEnabled: self.$isCommandModeShortcutEnabled,
             rewriteShortcutEnabled: self.$isRewriteModeShortcutEnabled,
             pasteLastTranscriptionShortcutEnabled: self.$isPasteLastTranscriptionShortcutEnabled,
+            reprocessLastDictationShortcutEnabled: self.$isReprocessLastDictationShortcutEnabled,
             hotkeyManagerInitialized: self.$hotkeyManagerInitialized,
             hotkeyMode: self.$hotkeyMode,
             enableStreamingPreview: self.$enableStreamingPreview,
@@ -3415,6 +3444,11 @@ struct ContentView: View {
         // Re-insert the most recent transcription on demand (no clipboard involved).
         self.hotkeyManager?.setPasteLastTranscriptionCallback {
             self.pasteLastDictationFromHistory()
+        }
+
+        // Re-run the most recent dictation through the current AI settings on demand.
+        self.hotkeyManager?.setReprocessLastDictationCallback {
+            self.reprocessLastDictation()
         }
 
         // Monitor initialization status

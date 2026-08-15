@@ -254,6 +254,7 @@ final class GlobalHotkeyManager: NSObject {
     private var isShortcutCaptureActiveProvider: (() -> Bool)?
     private var cancelCallback: (() -> Bool)? // Returns true if handled
     private var pasteLastTranscriptionCallback: (() -> Void)?
+    private var reprocessLastDictationCallback: (() -> Void)?
     private var hotkeyMode: HotkeyActivationMode = SettingsStore.shared.hotkeyMode
     private let automaticTapThresholdSeconds: TimeInterval = 0.4
 
@@ -601,6 +602,10 @@ final class GlobalHotkeyManager: NSObject {
         self.pasteLastTranscriptionCallback = callback
     }
 
+    func setReprocessLastDictationCallback(_ callback: @escaping () -> Void) {
+        self.reprocessLastDictationCallback = callback
+    }
+
     private func setupGlobalHotkeyWithRetry() {
         for attempt in 1...self.maxRetryAttempts {
             DebugLogger.shared.debug("Setup attempt \(attempt)/\(self.maxRetryAttempts)", source: "GlobalHotkeyManager")
@@ -833,6 +838,17 @@ final class GlobalHotkeyManager: NSObject {
                 // modifiers to release, every repeat would otherwise queue another insertion and
                 // paste N times. triggerPasteLastTranscription ignores repeats.
                 self.triggerPasteLastTranscription(isAutorepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0)
+                return nil
+            }
+
+            // Check the "reprocess last dictation" shortcut (a one-shot action, like paste last).
+            if SettingsStore.shared.reprocessLastDictationShortcutEnabled,
+               let reprocessShortcut = SettingsStore.shared.reprocessLastDictationHotkeyShortcut,
+               reprocessShortcut.matches(keyCode: keyCode, modifiers: eventModifiers)
+            {
+                // Auto-repeat while the chord is held would queue a reprocess per repeat and
+                // rewrite the entry N times; triggerReprocessLastDictation ignores repeats.
+                self.triggerReprocessLastDictation(isAutorepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0)
                 return nil
             }
 
@@ -1789,6 +1805,14 @@ final class GlobalHotkeyManager: NSObject {
             return true
         }
 
+        if SettingsStore.shared.reprocessLastDictationShortcutEnabled,
+           let reprocessShortcut = SettingsStore.shared.reprocessLastDictationHotkeyShortcut,
+           reprocessShortcut.matchesMouse(button: mouseButton, modifiers: eventModifiers)
+        {
+            self.triggerReprocessLastDictation(isAutorepeat: false)
+            return true
+        }
+
         if self.primaryShortcuts.contains(where: { $0.matchesMouse(button: mouseButton, modifiers: eventModifiers) }) {
             guard self.beginPrimaryShortcutPress(.mouse(mouseButton)) else { return true }
             self.handlePrimaryDictationTriggerDown()
@@ -1807,6 +1831,14 @@ final class GlobalHotkeyManager: NSObject {
            let pasteShortcut = SettingsStore.shared.pasteLastTranscriptionHotkeyShortcut,
            pasteShortcut.isMouseShortcut,
            pasteShortcut.mouseButton == mouseButton
+        {
+            return true
+        }
+
+        if SettingsStore.shared.reprocessLastDictationShortcutEnabled,
+           let reprocessShortcut = SettingsStore.shared.reprocessLastDictationHotkeyShortcut,
+           reprocessShortcut.isMouseShortcut,
+           reprocessShortcut.mouseButton == mouseButton
         {
             return true
         }
@@ -1832,6 +1864,25 @@ final class GlobalHotkeyManager: NSObject {
             }
             DebugLogger.shared.info("Paste last transcription hotkey triggered", source: "GlobalHotkeyManager")
             self.pasteLastTranscriptionCallback?()
+        }
+    }
+
+    private func triggerReprocessLastDictation(isAutorepeat: Bool) {
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            // Holding the chord auto-repeats the key-down; act only on the initial press.
+            guard !isAutorepeat else { return }
+            guard self.canTriggerRecordingAction("Reprocess last dictation hotkey") else { return }
+            // Reprocessing mid-capture would race the in-flight transcription; ignore while recording.
+            guard !self.asrService.isRunning else {
+                DebugLogger.shared.info(
+                    "Reprocess last dictation hotkey ignored - recording in progress",
+                    source: "GlobalHotkeyManager"
+                )
+                return
+            }
+            DebugLogger.shared.info("Reprocess last dictation hotkey triggered", source: "GlobalHotkeyManager")
+            self.reprocessLastDictationCallback?()
         }
     }
 

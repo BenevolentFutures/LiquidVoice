@@ -14,7 +14,17 @@ struct AnalyticsConfig {
         return AnalyticsConfig(postHogApiKey: key, postHogHost: host.isEmpty ? AnalyticsConfig.defaultEUHost : host)
     }
 
+    /// Liquid Voice ships with analytics permanently disabled.
+    ///
+    /// Upstream FluidVoice sends aggregate usage events to PostHog and enables this by
+    /// default (see `SettingsStore.analyticsConsentEnabled`, which returns `true` when the
+    /// user has never chosen). This fork does not phone home at all, so every send path —
+    /// `bootstrap`, `write`, `startFlushLoopIfNeeded`, `flushIfNeeded` — short-circuits here.
+    ///
+    /// This is hard-wired rather than done by blanking `POSTHOG_API_KEY` in `Info.plist`
+    /// alone, so that merging an upstream change to that plist cannot silently re-enable
+    /// telemetry. The plist values are blanked too; both are required to turn it back on.
     nonisolated var isConfigured: Bool {
-        !self.postHogApiKey.isEmpty
+        false
     }
 }

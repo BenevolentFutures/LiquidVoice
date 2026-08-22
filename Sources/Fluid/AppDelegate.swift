@@ -338,6 +338,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     // MARK: - Periodic Update Checks
 
     private func schedulePeriodicUpdateChecks() {
+        if Self.upstreamUpdatesDisabled { return }
+
         // Schedule a timer to check for updates every hour (3600 seconds)
         // The actual check logic inside checkForUpdatesAutomatically() handles:
         // - Whether auto-updates are enabled
@@ -352,6 +354,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     // MARK: - Manual Update Check
 
     @objc func checkForUpdatesManually() {
+        if Self.upstreamUpdatesDisabled {
+            DebugLogger.shared.info("Manual update check refused (Liquid Voice fork)", source: "AppDelegate")
+            self.showUpdateAlert(
+                title: "Updates Are Managed Locally",
+                message: "Liquid Voice is a local fork of FluidVoice. Rebuild from ~/Projects/LiquidVoice to update."
+            )
+            return
+        }
+
         // Confirm invocation
         DebugLogger.shared.info("🔎 Manual update check triggered", source: "AppDelegate")
 
@@ -403,7 +414,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     // MARK: - Automatic Update Check
 
+    /// Liquid Voice is a fork. The upstream updater replaces the app bundle in
+    /// place from altic-dev/Fluid-oss, which would overwrite this build with
+    /// stock FluidVoice. Updates come from a local rebuild instead.
+    static let upstreamUpdatesDisabled = true
+
     private func checkForUpdatesAutomatically() {
+        if Self.upstreamUpdatesDisabled {
+            DebugLogger.shared.debug("Upstream update check skipped (Liquid Voice fork)", source: "AppDelegate")
+            return
+        }
+
         // Check if we should perform an automatic update check
         guard SettingsStore.shared.shouldCheckForUpdates() else {
             let reason = !SettingsStore.shared.autoUpdateCheckEnabled ? "disabled by user" : "checked recently"

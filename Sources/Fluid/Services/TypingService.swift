@@ -16,7 +16,13 @@ final class TypingService {
         DebugLogger.shared.debug(message(), source: "TypingService")
     }
 
-    private var isCurrentlyTyping = false
+    /// Serial worker for insertions. Consecutive dictations queue here instead of being
+    /// dropped: the old `isCurrentlyTyping` guard silently discarded any dictation that
+    /// arrived while a previous insertion (or its pasteboard-restore session) was still
+    /// in flight — user speech vanished with only an "already_typing" bench line.
+    private static let typingWorkQueue = DispatchQueue(label: "TypingService.Work", qos: .userInitiated)
+    private let pendingCountLock = NSLock()
+    private var pendingInsertions = 0
 
     private struct FocusSnapshot {
         let pid: pid_t
@@ -332,13 +338,6 @@ final class TypingService {
             return
         }
 
-        // Prevent concurrent typing operations
-        guard !self.isCurrentlyTyping else {
-            self.bench("request_return reason=already_typing")
-            self.log("[TypingService] WARNING: Skipping text injection - already in progress")
-            return
-        }
-
         // Check accessibility permissions first
         guard AXIsProcessTrusted() else {
             self.bench("request_return reason=accessibility_not_trusted")
@@ -348,19 +347,28 @@ final class TypingService {
         }
 
         self.log("[TypingService] Accessibility check passed, proceeding with text injection")
-        self.isCurrentlyTyping = true
+        self.pendingCountLock.lock()
+        self.pendingInsertions += 1
+        let queuedBehind = self.pendingInsertions - 1
+        self.pendingCountLock.unlock()
+        if queuedBehind > 0 {
+            self.bench("request_queued behind=\(queuedBehind)")
+            self.log("[TypingService] Insertion queued behind \(queuedBehind) in-flight operation(s)")
+        }
 
-        DispatchQueue.global(qos: .userInitiated).async {
+        Self.typingWorkQueue.async {
             let workerStartedAt = ProcessInfo.processInfo.systemUptime
             self.bench("worker_start queueDelayMs=\(Self.elapsedMs(from: requestedAt, to: workerStartedAt))")
 
             defer {
                 let completedAt = ProcessInfo.processInfo.systemUptime
-                self.isCurrentlyTyping = false
+                self.pendingCountLock.lock()
+                self.pendingInsertions -= 1
+                self.pendingCountLock.unlock()
                 self.bench(
                     "complete totalMs=\(Self.elapsedMs(from: requestedAt, to: completedAt)) textReadyToCompleteMs=\(textReadyAt.map { String(Self.elapsedMs(from: $0, to: completedAt)) } ?? "nil")"
                 )
-                self.log("[TypingService] Typing operation completed, isCurrentlyTyping set to false")
+                self.log("[TypingService] Typing operation completed")
             }
 
             self.log("[TypingService] Starting async text insertion process")
@@ -678,6 +686,7 @@ final class TypingService {
     private func withTemporaryPasteboardString(
         _ text: String,
         restoreDelayMicros: useconds_t,
+        verifyInsertion: Bool = true,
         action: () -> Bool
     ) -> Bool {
         Self.pasteboardSessionSemaphore.wait()
@@ -698,7 +707,10 @@ final class TypingService {
             return false
         }
         let temporaryChangeCount = pasteboard.changeCount
-        let focusedTextSnapshot = self.captureFocusedTextSnapshot()
+        // Verification reads the focused element's AX text, which is meaningless for
+        // terminals (and each AX read can stall for seconds against a busy app), so
+        // terminal-family callers skip it and use a short fixed restore delay instead.
+        let focusedTextSnapshot = verifyInsertion ? self.captureFocusedTextSnapshot() : nil
         let actionResult = action()
         guard actionResult else {
             self.restorePasteboardSnapshot(snapshot, to: pasteboard)
@@ -743,7 +755,15 @@ final class TypingService {
             usleep(80_000)
         }
 
-        return self.withTemporaryPasteboardString(text, restoreDelayMicros: 5_000_000) {
+        // Terminals consume a paste within ~100ms and expose no verifiable AX text, so
+        // holding the pasteboard session for the full 5s verification window only stalls
+        // (and previously dropped) back-to-back dictations.
+        let isTerminalTarget = self.isGhosttyApplication(pid: targetPID)
+        return self.withTemporaryPasteboardString(
+            text,
+            restoreDelayMicros: isTerminalTarget ? 1_000_000 : 5_000_000,
+            verifyInsertion: !isTerminalTarget
+        ) {
             let vKey = Self.pasteVirtualKeyCode
             guard let cmdVDown = CGEvent(keyboardEventSource: nil, virtualKey: vKey, keyDown: true),
                   let cmdVUp = CGEvent(keyboardEventSource: nil, virtualKey: vKey, keyDown: false)
@@ -1073,8 +1093,15 @@ final class TypingService {
         return nil
     }
 
+    /// AX requests default to a 6-second messaging timeout when the target app's main
+    /// thread is busy (a TUI mid-redraw, an app processing a paste). That stall sits on
+    /// the typing worker and delays — previously dropped — subsequent dictations, so all
+    /// AX reads in this pipeline are bounded to a fraction of a second instead.
+    private static let axMessagingTimeoutSeconds: Float = 0.3
+
     private func getSystemFocusedElementAndPID() -> (element: AXUIElement, pid: pid_t)? {
         let systemWideElement = AXUIElementCreateSystemWide()
+        AXUIElementSetMessagingTimeout(systemWideElement, Self.axMessagingTimeoutSeconds)
         var focusedElementRef: CFTypeRef?
 
         let result = AXUIElementCopyAttributeValue(systemWideElement, kAXFocusedUIElementAttribute as CFString, &focusedElementRef)
@@ -1082,6 +1109,7 @@ final class TypingService {
         guard CFGetTypeID(focusedElementRef) == AXUIElementGetTypeID() else { return nil }
 
         let element = unsafeBitCast(focusedElementRef, to: AXUIElement.self)
+        AXUIElementSetMessagingTimeout(element, Self.axMessagingTimeoutSeconds)
         var pid: pid_t = 0
         AXUIElementGetPid(element, &pid)
         guard pid > 0 else { return nil }

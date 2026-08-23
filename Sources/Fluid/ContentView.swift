@@ -2594,14 +2594,19 @@ struct ContentView: View {
             DebugLogger.shared.info("Actions: Paste requested but history is empty", source: "ContentView")
             return
         }
+        self.pasteDictationEntryFromHistory(last)
+    }
 
+    /// Inserts a specific history entry's text into the focused external field. Backs both
+    /// "paste last" and the overlay history menu's per-entry paste.
+    private func pasteDictationEntryFromHistory(_ entry: TranscriptionHistoryEntry) {
         // Prefer the processed text (what was actually delivered, possibly AI-enhanced),
         // falling back to raw for older entries or when enhancement was off.
-        let processed = last.processedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let raw = last.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let processed = entry.processedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw = entry.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         let text = processed.isEmpty ? raw : processed
         guard !text.isEmpty else {
-            DebugLogger.shared.info("Actions: Paste skipped because latest history text is empty", source: "ContentView")
+            DebugLogger.shared.info("Actions: Paste skipped because history entry text is empty", source: "ContentView")
             return
         }
 
@@ -3242,6 +3247,9 @@ struct ContentView: View {
         }
         NotchContentState.shared.onPasteLastRequested = {
             self.pasteLastDictationFromHistory()
+        }
+        NotchContentState.shared.onHistoryEntryPasteRequested = { entry in
+            self.pasteDictationEntryFromHistory(entry)
         }
         NotchContentState.shared.onUndoLastAIRequested = {
             self.undoLastAIProcessingFromHistory()

@@ -112,6 +112,7 @@ final class BottomOverlayWindowController {
         BottomOverlayPromptMenuController.shared.hide()
         BottomOverlayModeMenuController.shared.hide()
         BottomOverlayActionsMenuController.shared.hide()
+        BottomOverlayHistoryMenuController.shared.hide()
         self.ensureMouseDownMonitors()
 
         // Create window if needed
@@ -265,6 +266,7 @@ final class BottomOverlayWindowController {
         BottomOverlayPromptMenuController.shared.hide()
         BottomOverlayModeMenuController.shared.hide()
         BottomOverlayActionsMenuController.shared.hide()
+        BottomOverlayHistoryMenuController.shared.hide()
         NotchContentState.shared.setProcessing(false)
         NotchContentState.shared.bottomOverlayAudioLevel = 0
     }
@@ -461,6 +463,7 @@ final class BottomOverlayWindowController {
         BottomOverlayPromptMenuController.shared.dismissIfNeeded(for: screenPoint)
         BottomOverlayModeMenuController.shared.dismissIfNeeded(for: screenPoint)
         BottomOverlayActionsMenuController.shared.dismissIfNeeded(for: screenPoint)
+        BottomOverlayHistoryMenuController.shared.dismissIfNeeded(for: screenPoint)
     }
 
     private func positionWindow() {
@@ -1321,6 +1324,334 @@ final class BottomOverlayActionsMenuController {
     }
 }
 
+/// Floating panel for the overlay's dictation-history browser. Same NSPanel recipe as the
+/// prompt/actions menus, but sized generously: the menu shows the full text of recent
+/// dictations, so it is deliberately wide and tall.
+final class BottomOverlayHistoryMenuController {
+    static let shared = BottomOverlayHistoryMenuController()
+
+    private var menuWindow: NSPanel?
+    private var hostingView: NSHostingView<BottomOverlayHistoryMenuView>?
+    private var selectorFrameInScreen: CGRect = .zero
+    private weak var parentWindow: NSWindow?
+    private var menuMaxWidth: CGFloat = 480
+    private var menuGap: CGFloat = 6
+    private var pendingPositionWorkItem: DispatchWorkItem?
+
+    private init() {}
+
+    func updateAnchor(selectorFrameInScreen: CGRect, parentWindow: NSWindow?, maxWidth: CGFloat, menuGap: CGFloat) {
+        guard selectorFrameInScreen.width > 0, selectorFrameInScreen.height > 0 else { return }
+
+        let resolvedMaxWidth = max(maxWidth, 280)
+        let widthChanged = abs(self.menuMaxWidth - resolvedMaxWidth) > 0.5
+
+        self.selectorFrameInScreen = selectorFrameInScreen
+        self.parentWindow = parentWindow
+        self.menuMaxWidth = resolvedMaxWidth
+        self.menuGap = max(menuGap, 0)
+
+        if self.menuWindow?.isVisible == true {
+            if widthChanged {
+                self.updateMenuContent()
+            }
+            self.attachToParentWindowIfNeeded()
+            self.scheduleMenuPositionUpdate()
+        }
+    }
+
+    func toggleFromTap() {
+        if self.menuWindow?.isVisible == true {
+            self.hide()
+            return
+        }
+        self.showMenuIfPossible()
+    }
+
+    func hide() {
+        self.pendingPositionWorkItem?.cancel()
+        self.pendingPositionWorkItem = nil
+
+        if let menuWindow = self.menuWindow, let parent = menuWindow.parent {
+            parent.removeChildWindow(menuWindow)
+        }
+        self.menuWindow?.orderOut(nil)
+    }
+
+    func dismissIfNeeded(for screenPoint: NSPoint) {
+        guard self.menuWindow?.isVisible == true else { return }
+        let insideMenu = self.menuWindow?.frame.contains(screenPoint) ?? false
+        let insideSelector = self.selectorFrameInScreen.contains(screenPoint)
+        if !insideMenu, !insideSelector {
+            self.hide()
+        }
+    }
+
+    private func scheduleMenuPositionUpdate() {
+        guard self.pendingPositionWorkItem == nil else { return }
+
+        let task = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingPositionWorkItem = nil
+            self.updateMenuSizeAndPosition()
+        }
+
+        self.pendingPositionWorkItem = task
+        DispatchQueue.main.async(execute: task)
+    }
+
+    private func showMenuIfPossible() {
+        guard self.selectorFrameInScreen.width > 0, self.selectorFrameInScreen.height > 0 else { return }
+
+        self.createWindowIfNeeded()
+        self.updateMenuContent()
+        self.attachToParentWindowIfNeeded()
+        self.updateMenuSizeAndPosition()
+        self.menuWindow?.orderFrontRegardless()
+    }
+
+    private func createWindowIfNeeded() {
+        guard self.menuWindow == nil else { return }
+
+        let panel = NSPanel(
+            contentRect: .zero,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+
+        panel.isFloatingPanel = true
+        panel.level = .floating
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.isMovableByWindowBackground = false
+        panel.hidesOnDeactivate = false
+        panel.animationBehavior = .none
+
+        let hostingView = NSHostingView(rootView: self.makeMenuContent())
+        let fittingSize = hostingView.fittingSize
+        hostingView.frame = NSRect(origin: .zero, size: fittingSize)
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = .clear
+
+        panel.setContentSize(fittingSize)
+        panel.contentView = hostingView
+
+        self.hostingView = hostingView
+        self.menuWindow = panel
+    }
+
+    private func makeMenuContent() -> BottomOverlayHistoryMenuView {
+        BottomOverlayHistoryMenuView(
+            maxWidth: self.menuMaxWidth,
+            onDismissRequested: { [weak self] in
+                self?.hide()
+            }
+        )
+    }
+
+    private func updateMenuContent() {
+        self.hostingView?.rootView = self.makeMenuContent()
+    }
+
+    private func attachToParentWindowIfNeeded() {
+        guard let menuWindow = self.menuWindow else { return }
+
+        if let currentParent = menuWindow.parent, currentParent !== self.parentWindow {
+            currentParent.removeChildWindow(menuWindow)
+        }
+
+        if let parentWindow = self.parentWindow, menuWindow.parent !== parentWindow {
+            parentWindow.addChildWindow(menuWindow, ordered: .above)
+        }
+    }
+
+    private func updateMenuSizeAndPosition() {
+        guard let menuWindow = self.menuWindow, let hostingView = self.hostingView else { return }
+        guard self.selectorFrameInScreen.width > 0, self.selectorFrameInScreen.height > 0 else { return }
+
+        let fittingSize = hostingView.fittingSize
+        guard fittingSize.width > 0, fittingSize.height > 0 else { return }
+
+        // Anchored to the history chip's leading edge rather than centered on it: the
+        // chip sits on the overlay's left rail and the menu is far wider than the chip.
+        let preferredX = self.selectorFrameInScreen.minX
+        let preferredY = self.selectorFrameInScreen.maxY + self.menuGap
+
+        let screen = self.parentWindow?.screen
+            ?? NSScreen.screens.first(where: { $0.frame.contains(NSPoint(x: self.selectorFrameInScreen.midX, y: self.selectorFrameInScreen.midY)) })
+            ?? NSScreen.main
+
+        var targetX = preferredX
+        var targetY = preferredY
+
+        if let screen {
+            let visible = screen.visibleFrame
+            let horizontalInset: CGFloat = 8
+            let verticalInset: CGFloat = 8
+
+            if fittingSize.width < visible.width - (horizontalInset * 2) {
+                targetX = max(visible.minX + horizontalInset, min(preferredX, visible.maxX - fittingSize.width - horizontalInset))
+            } else {
+                targetX = visible.minX + horizontalInset
+            }
+
+            if fittingSize.height < visible.height - (verticalInset * 2) {
+                targetY = max(visible.minY + verticalInset, min(preferredY, visible.maxY - fittingSize.height - verticalInset))
+            } else {
+                targetY = visible.minY + verticalInset
+            }
+        }
+
+        let targetFrame = NSRect(x: targetX, y: targetY, width: fittingSize.width, height: fittingSize.height)
+        let currentFrame = menuWindow.frame
+        let frameTolerance: CGFloat = 0.5
+        let isSameFrame =
+            abs(currentFrame.origin.x - targetFrame.origin.x) <= frameTolerance &&
+            abs(currentFrame.origin.y - targetFrame.origin.y) <= frameTolerance &&
+            abs(currentFrame.size.width - targetFrame.size.width) <= frameTolerance &&
+            abs(currentFrame.size.height - targetFrame.size.height) <= frameTolerance
+
+        if !isSameFrame {
+            menuWindow.setFrame(targetFrame, display: false)
+        }
+    }
+}
+
+/// The history browser itself: recent dictations newest-first, full text per entry.
+/// Clicking an entry re-inserts its text into the dictation target app.
+private struct BottomOverlayHistoryMenuView: View {
+    @ObservedObject private var contentState = NotchContentState.shared
+    @ObservedObject private var historyStore = TranscriptionHistoryStore.shared
+
+    let maxWidth: CGFloat
+    let onDismissRequested: () -> Void
+
+    @State private var hoveredRowID: UUID?
+
+    private static let maxEntriesShown = 12
+    private static let maxListHeight: CGFloat = 480
+
+    private static let timestampFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter
+    }()
+
+    private var visibleEntries: [TranscriptionHistoryEntry] {
+        Array(self.historyStore.entries.prefix(Self.maxEntriesShown))
+    }
+
+    private func displayText(for entry: TranscriptionHistoryEntry) -> String {
+        let processed = entry.processedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw = entry.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return processed.isEmpty ? raw : processed
+    }
+
+    private func rowBackground(rowID: UUID) -> some View {
+        let isHovered = self.hoveredRowID == rowID
+        return RoundedRectangle(cornerRadius: 7)
+            .fill(isHovered ? Color.white.opacity(0.20) : Color.clear)
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(isHovered ? Color.white.opacity(0.24) : Color.clear, lineWidth: 1)
+            )
+    }
+
+    private func historyRow(_ entry: TranscriptionHistoryEntry) -> some View {
+        let text = self.displayText(for: entry)
+        return Button(action: {
+            self.contentState.onHistoryEntryPasteRequested?(entry)
+            self.restoreTypingTargetApp()
+            self.onDismissRequested()
+        }) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(text)
+                    .font(.system(size: 12.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(10)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 6) {
+                    Text(Self.timestampFormatter.localizedString(for: entry.timestamp, relativeTo: Date()))
+                    Text("·")
+                    Text(entry.appName)
+                        .lineLimit(1)
+                    Spacer()
+                    if entry.wasAIProcessed {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 9, weight: .semibold))
+                    }
+                }
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(.white.opacity(0.45))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(self.rowBackground(rowID: entry.id))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            self.hoveredRowID = hovering ? entry.id : nil
+        }
+        .help("Insert this dictation into the focused app")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Recent Dictations")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.55))
+                Spacer()
+                Text("click to insert")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.35))
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 8)
+
+            if self.visibleEntries.isEmpty {
+                Text("No dictations yet")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 10)
+            } else {
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(self.visibleEntries) { entry in
+                            self.historyRow(entry)
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                    .padding(.bottom, 6)
+                }
+                .frame(maxHeight: Self.maxListHeight)
+            }
+        }
+        .frame(width: self.maxWidth)
+        .background(Color.black)
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .preferredColorScheme(.dark)
+    }
+
+    private func restoreTypingTargetApp() {
+        let pid = NotchContentState.shared.recordingTargetPID
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            if let pid { _ = TypingService.activateApp(pid: pid) }
+        }
+    }
+}
+
 private struct BottomOverlayModeMenuView: View {
     @ObservedObject private var contentState = NotchContentState.shared
     @ObservedObject private var settings = SettingsStore.shared
@@ -1965,6 +2296,9 @@ struct BottomOverlayView: View {
     @State private var isHoveringCopyChip = false
     @State private var isHoveringReprocessChip = false
     @State private var isHoveringCancelChip = false
+    @State private var isHoveringHistoryChip = false
+    @State private var historyChipFrameInScreen: CGRect = .zero
+    @State private var historyChipWindow: NSWindow?
     @State private var modeSelectorFrameInScreen: CGRect = .zero
     @State private var modeSelectorWindow: NSWindow?
     @State private var promptSelectorFrameInScreen: CGRect = .zero
@@ -2780,6 +3114,7 @@ struct BottomOverlayView: View {
             self.closePromptMenu()
             self.closeModeMenu()
             self.closeActionsMenu()
+            self.closeHistoryMenu()
             action()
         }
         .help(disabled ? disabledHelp : help)
@@ -2841,6 +3176,7 @@ struct BottomOverlayView: View {
             self.closePromptMenu()
             self.closeModeMenu()
             self.closeActionsMenu()
+            self.closeHistoryMenu()
             self.contentState.onOpenPreferencesRequested?()
         }
         .help("Open Preferences")
@@ -2935,9 +3271,74 @@ struct BottomOverlayView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 6) {
+            self.leadingActionRail
             self.overlayContent
             self.quickActionRail
         }
+    }
+
+    /// The leading rail balancing `quickActionRail`: history browser on top, the dictation
+    /// target app icon at the bottom. The invisible middle slot keeps its three slots the
+    /// same heights as the trailing rail's three chips, so the two columns mirror each other.
+    private var leadingActionRail: some View {
+        VStack(spacing: 6) {
+            self.historyChip
+            self.railChipSpacer
+            self.targetAppIconView
+        }
+    }
+
+    /// A chip-sized transparent slot (see `leadingActionRail`).
+    private var railChipSpacer: some View {
+        Image(systemName: "xmark")
+            .font(.system(size: max(self.promptSelectorFontSize + 1, 10), weight: .semibold))
+            .padding(.horizontal, 9)
+            .padding(.vertical, self.promptSelectorVerticalPadding)
+            .hidden()
+    }
+
+    /// Opens the recent-dictations browser anchored above the chip.
+    private var historyChip: some View {
+        let disabled = self.historyStore.entries.isEmpty
+        return HStack(spacing: 0) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: max(self.promptSelectorFontSize + 1, 10), weight: .semibold))
+                .foregroundStyle(.white.opacity(disabled ? 0.32 : 0.72))
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, self.promptSelectorVerticalPadding)
+        .background(
+            self.chipBackground(isHovered: self.isHoveringHistoryChip, disabled: disabled)
+        )
+        .background(
+            PromptSelectorAnchorReader { frameInScreen, window in
+                self.historyChipFrameInScreen = frameInScreen
+                self.historyChipWindow = window
+            }
+            .allowsHitTesting(false)
+        )
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            self.isHoveringHistoryChip = hovering && !disabled
+        }
+        .onTapGesture {
+            guard self.layout.showsTopControls, !disabled else { return }
+            self.closePromptMenu()
+            self.closeModeMenu()
+            self.closeActionsMenu()
+            BottomOverlayHistoryMenuController.shared.updateAnchor(
+                selectorFrameInScreen: self.historyChipFrameInScreen,
+                parentWindow: self.historyChipWindow,
+                maxWidth: 480,
+                menuGap: self.promptMenuGap
+            )
+            BottomOverlayHistoryMenuController.shared.toggleFromTap()
+        }
+        .help(disabled ? "No saved dictation history available" : "Recent Dictations")
+    }
+
+    private func closeHistoryMenu() {
+        BottomOverlayHistoryMenuController.shared.hide()
     }
 
     /// The copy / reprocess actions as a vertical rail on the overlay's trailing edge.
@@ -2952,7 +3353,6 @@ struct BottomOverlayView: View {
             self.copyLastChip
             self.reprocessLastChip
             self.cancelChip
-            self.targetAppIconView
         }
     }
 
@@ -3112,7 +3512,7 @@ struct BottomOverlayView: View {
                 }
 
                 // Waveform row. The target-app icon used to lead this row; it now sits at the
-                // bottom of the trailing action rail (see `targetAppIconView`).
+                // bottom of the leading action rail (see `targetAppIconView`).
                 HStack(spacing: self.layout.hPadding / 1.5) {
                     // Waveform visualization
                     BottomWaveformView(color: self.modeColor, layout: self.layout)
@@ -3262,6 +3662,7 @@ struct BottomOverlayView: View {
             self.isHoveringCopyChip = false
             self.isHoveringReprocessChip = false
             self.isHoveringCancelChip = false
+            self.isHoveringHistoryChip = false
             switch self.contentState.mode {
             case .dictation: self.contentState.promptPickerMode = .dictate
             case .edit, .write, .rewrite: self.contentState.promptPickerMode = .edit
@@ -3287,6 +3688,7 @@ struct BottomOverlayView: View {
             self.isHoveringCopyChip = false
             self.isHoveringReprocessChip = false
             self.isHoveringCancelChip = false
+            self.isHoveringHistoryChip = false
             if !self.layout.usesFixedCanvas {
                 self.refreshDynamicPreviewSizeIfNeeded(for: self.currentPreviewSizingText)
             }
@@ -3338,6 +3740,7 @@ struct BottomOverlayView: View {
             self.isHoveringCopyChip = false
             self.isHoveringReprocessChip = false
             self.isHoveringCancelChip = false
+            self.isHoveringHistoryChip = false
         }
         // TODO: Add tap-to-expand for command mode history (future enhancement)
         // .contentShape(Rectangle())

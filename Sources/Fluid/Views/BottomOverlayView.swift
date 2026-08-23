@@ -3277,14 +3277,14 @@ struct BottomOverlayView: View {
         }
     }
 
-    /// The leading rail balancing `quickActionRail`: history browser on top, the dictation
-    /// target app icon at the bottom. The invisible middle slot keeps its three slots the
-    /// same heights as the trailing rail's three chips, so the two columns mirror each other.
+    /// The leading rail balancing `quickActionRail`: history browser on top, then the
+    /// copy / reprocess history actions. The dictation target app icon used to close this
+    /// column; it now lives inside the pill's bottom-left corner (see `overlayContent`).
     private var leadingActionRail: some View {
         VStack(spacing: 6) {
             self.historyChip
-            self.railChipSpacer
-            self.targetAppIconView
+            self.copyLastChip
+            self.reprocessLastChip
         }
     }
 
@@ -3341,18 +3341,21 @@ struct BottomOverlayView: View {
         BottomOverlayHistoryMenuController.shared.hide()
     }
 
-    /// The copy / reprocess actions as a vertical rail on the overlay's trailing edge.
+    /// The trailing rail: cancel alone at the top-right, mirroring the history chip at the
+    /// top-left. The two invisible slots below keep this column the same height as the
+    /// leading rail's three chips, so the pill stays vertically centered between them and
+    /// nothing shifts if a chip is added or removed on either side.
     ///
-    /// This is the overlay's only chrome. The top control row (mode / prompt / actions /
-    /// settings) was removed: every one of those was either a mode switch that already has
-    /// a global hotkey, or the Actions menu whose two useful entries are these very icons.
-    /// A vertical rail also grows along the overlay's free axis, so unlike the old row it
-    /// cannot overflow the right edge as items are added.
+    /// This and the leading rail are the overlay's only chrome. The top control row
+    /// (mode / prompt / actions / settings) was removed: every one of those was either a
+    /// mode switch that already has a global hotkey, or the Actions menu whose useful
+    /// entries are these very icons. A vertical rail also grows along the overlay's free
+    /// axis, so unlike the old row it cannot overflow the right edge as items are added.
     private var quickActionRail: some View {
         VStack(spacing: 6) {
-            self.copyLastChip
-            self.reprocessLastChip
             self.cancelChip
+            self.railChipSpacer
+            self.railChipSpacer
         }
     }
 
@@ -3614,6 +3617,14 @@ struct BottomOverlayView: View {
                     }
                 }
             )
+            // Dictation target app icon, tucked into the pill's bottom-left corner. It sits
+            // over the reserved corner of the waveform row, inside the black area rather
+            // than out on the rail, so the chrome columns hold only actions.
+            .overlay(alignment: .bottomLeading) {
+                self.targetAppIconView
+                    .padding(.leading, self.isPillSize ? 7 : self.layout.hPadding * 0.6)
+                    .padding(.bottom, self.isPillSize ? 7 : self.layout.vPadding * 0.7)
+            }
             .frame(maxWidth: .infinity, alignment: .top)
             .transaction { transaction in
                 if self.shouldSuppressPreviewDuringRelease {

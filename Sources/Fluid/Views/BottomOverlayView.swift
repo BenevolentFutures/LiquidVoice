@@ -3398,14 +3398,16 @@ struct BottomOverlayView: View {
             }
     }
 
-    /// The leading rail balancing `quickActionRail`: history browser on top, then the
-    /// copy / reprocess history actions. The dictation target app icon used to close this
-    /// column; it now lives inside the pill's bottom-left corner (see `overlayContent`).
+    /// The leading rail balancing `quickActionRail`: history at the top corner, copy at
+    /// the bottom corner, the middle slot reserved — the same top/bottom spread as
+    /// cancel / reprocess on the trailing rail, so the four icons frame the pill
+    /// symmetrically. The dictation target app icon lives inside the pill itself
+    /// (see `overlayContent`).
     private var leadingActionRail: some View {
         VStack(spacing: 6) {
             self.historyChip
+            self.railChipSpacer
             self.copyLastChip
-            self.reprocessLastChip
         }
     }
 
@@ -3462,10 +3464,10 @@ struct BottomOverlayView: View {
         BottomOverlayHistoryMenuController.shared.hide()
     }
 
-    /// The trailing rail: cancel alone at the top-right, mirroring the history chip at the
-    /// top-left. The two invisible slots below keep this column the same height as the
-    /// leading rail's three chips, so the pill stays vertically centered between them and
-    /// nothing shifts if a chip is added or removed on either side.
+    /// The trailing rail: cancel at the top-right mirroring history at the top-left,
+    /// reprocess at the bottom-right mirroring copy's side. The invisible middle slot
+    /// keeps both columns three slots tall, so the pill stays vertically centered
+    /// between them and nothing shifts if a chip is added or removed on either side.
     ///
     /// This and the leading rail are the overlay's only chrome. The top control row
     /// (mode / prompt / actions / settings) was removed: every one of those was either a
@@ -3476,7 +3478,7 @@ struct BottomOverlayView: View {
         VStack(spacing: 6) {
             self.cancelChip
             self.railChipSpacer
-            self.railChipSpacer
+            self.reprocessLastChip
         }
     }
 
@@ -3720,13 +3722,13 @@ struct BottomOverlayView: View {
                     }
                 }
             )
-            // Dictation target app icon, tucked into the pill's bottom-left corner. It sits
-            // over the reserved corner of the waveform row, inside the black area rather
-            // than out on the rail, so the chrome columns hold only actions.
+            // Dictation target app icon, inside the pill at the left edge of the waveform
+            // row — its center rides the waveform's horizontal midline. Inside the black
+            // area rather than out on the rail, so the chrome columns hold only actions.
             .overlay(alignment: .bottomLeading) {
                 self.targetAppIconView
                     .padding(.leading, self.isPillSize ? 7 : self.layout.hPadding * 0.6)
-                    .padding(.bottom, self.isPillSize ? 7 : self.layout.vPadding * 0.7)
+                    .padding(.bottom, self.layout.vPadding + (self.layout.waveformHeight - self.layout.iconSize) / 2)
             }
             .frame(maxWidth: .infinity, alignment: .top)
             .transaction { transaction in
@@ -4048,12 +4050,15 @@ struct BottomWaveformView: View {
         let normalizedLevel = min(max(level, 0), 1)
         let denominator = max(1.0 - self.noiseThreshold, 0.001)
         let adjustedLevel = max(min((normalizedLevel - self.noiseThreshold) / denominator, 1.0), 0.0)
-        // Lower exponent => normal speech pushes the trace higher while talking.
-        let amplifiedLevel = pow(adjustedLevel, 0.55)
+        // Slightly super-linear: keeps a steady background (music, hum) low while speech
+        // peaks stretch tall, so the trace reads with contrast rather than as a plateau.
+        let amplifiedLevel = pow(adjustedLevel, 1.15)
 
-        // Slight deterministic shimmer so a held tone doesn't freeze into a flat plateau.
+        // Two incommensurate cosines give neighbouring samples visibly different heights —
+        // the "grain" of the trace — without the periodic look of a single wave.
         self.traceTick &+= 1
-        let shimmer = 0.9 + 0.1 * cos(CGFloat(truncatingRemainder(self.traceTick)) * 1.7)
+        let grainPhase = CGFloat(truncatingRemainder(self.traceTick))
+        let shimmer = 0.6 + 0.25 * cos(grainPhase * 1.7) + 0.15 * cos(grainPhase * 4.3)
         let nextHeight = min(
             self.maxHeight,
             max(self.minHeight, self.minHeight + (self.maxHeight - self.minHeight) * amplifiedLevel * shimmer)

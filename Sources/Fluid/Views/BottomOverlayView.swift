@@ -60,6 +60,9 @@ final class BottomOverlayWindowController {
     private init() {
         NotificationCenter.default.addObserver(forName: NSNotification.Name("OverlayOffsetChanged"), object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in
+                // Adjusting the settings offset is an explicit "position it for me" —
+                // it supersedes any position the user dragged the overlay to.
+                self?.clearSavedDragPosition()
                 self?.positionWindow()
             }
         }
@@ -482,14 +485,19 @@ final class BottomOverlayWindowController {
         let visibleFrame = screen.visibleFrame
         let windowSize = window.frame.size
 
-        // Horizontal centering
-        let x = fullFrame.midX - windowSize.width / 2
-
-        // Vertical positioning with safety clamping
-        let offset = SettingsStore.shared.overlayBottomOffset
-
-        // Calculate raw position
-        var y = visibleFrame.minY + CGFloat(offset)
+        let x: CGFloat
+        var y: CGFloat
+        if let saved = self.savedDragPositionFractions {
+            // A user-dragged position, stored as fractions of the screen so it lands in the
+            // same relative spot on whichever display dictation happens on — and can never
+            // restore off-screen when a remembered display goes away or shrinks.
+            x = fullFrame.minX + fullFrame.width * saved.x - windowSize.width / 2
+            y = fullFrame.minY + fullFrame.height * saved.y
+        } else {
+            // Default: horizontally centered, settings offset above the bottom.
+            x = fullFrame.midX - windowSize.width / 2
+            y = visibleFrame.minY + CGFloat(SettingsStore.shared.overlayBottomOffset)
+        }
 
         // Safety Clamping:
         // 1. Min: Ensure it's at least visibleFrame.minY (not below the dock/visible area)
@@ -498,9 +506,67 @@ final class BottomOverlayWindowController {
         let maxY = visibleFrame.maxY - windowSize.height - 40 // Buffer from top
 
         y = max(min(y, maxY), minY)
+        let clampedX = max(min(x, visibleFrame.maxX - windowSize.width), visibleFrame.minX)
 
         // Apply position directly to avoid implicit frame animations during hover-driven resizes.
-        window.setFrameOrigin(NSPoint(x: x, y: y))
+        window.setFrameOrigin(NSPoint(x: clampedX, y: y))
+    }
+
+    // MARK: - User-dragged position
+
+    /// The overlay's dragged position as fractions of the host screen's frame:
+    /// `x` is the window's center-x, `y` the window's bottom edge. Fractional storage keeps
+    /// the anchor meaningful across displays of different sizes; `positionWindow` clamps the
+    /// result into the visible frame, so a vanished display falls back safely on-screen.
+    private var savedDragPositionFractions: (x: CGFloat, y: CGFloat)? {
+        let defaults = UserDefaults.standard
+        guard let x = defaults.object(forKey: Self.dragPositionXFractionKey) as? Double,
+              let y = defaults.object(forKey: Self.dragPositionYFractionKey) as? Double
+        else { return nil }
+        return (CGFloat(x), CGFloat(y))
+    }
+
+    private static let dragPositionXFractionKey = "OverlayDraggedPositionXFraction"
+    private static let dragPositionYFractionKey = "OverlayDraggedPositionYFraction"
+
+    /// The live window origin, exposed for the view's drag gesture.
+    var frameOriginForDrag: NSPoint? {
+        self.window?.frame.origin
+    }
+
+    /// Follows the pointer during a drag. Free-form on purpose: clamping happens on
+    /// release (`commitDraggedPosition`), so the drag itself never fights the hand.
+    func dragWindow(to origin: NSPoint) {
+        guard NotchContentState.shared.isBottomOverlayPresented else { return }
+        self.window?.setFrameOrigin(origin)
+    }
+
+    /// Persists where a drag left the overlay, then re-runs positioning so the
+    /// committed (clamped, fraction-quantized) spot is also the one on screen.
+    func commitDraggedPosition() {
+        guard let window = self.window, NotchContentState.shared.isBottomOverlayPresented else { return }
+        let screen = window.screen ?? self.targetScreen ?? OverlayScreenResolver.screenForCurrentPointer()
+        guard let screen, screen.frame.width > 0, screen.frame.height > 0 else { return }
+
+        self.targetScreen = screen
+        let frame = window.frame
+        let xFraction = (frame.midX - screen.frame.minX) / screen.frame.width
+        let yFraction = (frame.minY - screen.frame.minY) / screen.frame.height
+        let defaults = UserDefaults.standard
+        defaults.set(Double(min(max(xFraction, 0), 1)), forKey: Self.dragPositionXFractionKey)
+        defaults.set(Double(min(max(yFraction, 0), 1)), forKey: Self.dragPositionYFractionKey)
+        self.positionWindow()
+    }
+
+    private func clearSavedDragPosition() {
+        UserDefaults.standard.removeObject(forKey: Self.dragPositionXFractionKey)
+        UserDefaults.standard.removeObject(forKey: Self.dragPositionYFractionKey)
+    }
+
+    /// Double-click: forget the dragged position and return to the default anchor.
+    func resetDraggedPositionToDefault() {
+        self.clearSavedDragPosition()
+        self.positionWindow()
     }
 
     private func parkWindowOffscreen() {
@@ -2312,6 +2378,8 @@ struct BottomOverlayView: View {
     @State private var processingStatusCycleID = 0
     @State private var lastResolvedAppIcon: NSImage?
     @State private var borderAnimationStartedAt: Date?
+    @State private var dragStartMouseLocation: NSPoint?
+    @State private var dragStartWindowOrigin: NSPoint?
 
     struct LayoutConstants {
         let hPadding: CGFloat
@@ -3275,6 +3343,40 @@ struct BottomOverlayView: View {
             self.overlayContent
             self.quickActionRail
         }
+        // Whole-overlay drag with position memory; double-click returns to the default
+        // anchor. Both sit on the parent so the chips' own taps win where they overlap.
+        .onTapGesture(count: 2) {
+            BottomOverlayWindowController.shared.resetDraggedPositionToDefault()
+        }
+        .gesture(self.windowDragGesture)
+    }
+
+    /// Moves the panel by tracking the pointer in screen coordinates. The gesture's own
+    /// translation is in view space, which shifts as the window moves under the cursor —
+    /// `NSEvent.mouseLocation` sidesteps that feedback loop entirely.
+    private var windowDragGesture: some Gesture {
+        DragGesture(minimumDistance: 3)
+            .onChanged { _ in
+                let mouse = NSEvent.mouseLocation
+                if self.dragStartMouseLocation == nil {
+                    self.dragStartMouseLocation = mouse
+                    self.dragStartWindowOrigin = BottomOverlayWindowController.shared.frameOriginForDrag
+                }
+                guard let startMouse = self.dragStartMouseLocation,
+                      let startOrigin = self.dragStartWindowOrigin else { return }
+                BottomOverlayWindowController.shared.dragWindow(to: NSPoint(
+                    x: startOrigin.x + (mouse.x - startMouse.x),
+                    y: startOrigin.y + (mouse.y - startMouse.y)
+                ))
+            }
+            .onEnded { _ in
+                let didMove = self.dragStartWindowOrigin != nil
+                self.dragStartMouseLocation = nil
+                self.dragStartWindowOrigin = nil
+                if didMove {
+                    BottomOverlayWindowController.shared.commitDraggedPosition()
+                }
+            }
     }
 
     /// The leading rail balancing `quickActionRail`: history browser on top, then the

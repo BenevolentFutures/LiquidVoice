@@ -2386,6 +2386,10 @@ struct BottomOverlayView: View {
         let vPadding: CGFloat
         let waveformWidth: CGFloat
         let waveformHeight: CGFloat
+        /// Width of the voice-trace visualizer frame. Separate from `waveformWidth`, which
+        /// also feeds the preview-width math (see the medium-size comment below) and so
+        /// cannot grow without overflowing the container.
+        let visualizerWidth: CGFloat
         let iconSize: CGFloat
         let transFontSize: CGFloat
         let modeFontSize: CGFloat
@@ -2412,14 +2416,15 @@ struct BottomOverlayView: View {
                     vPadding: 8,
                     waveformWidth: 46,
                     waveformHeight: 30,
+                    visualizerWidth: 46,
                     iconSize: 18,
                     transFontSize: 10,
                     modeFontSize: 9,
                     cornerRadius: 23,
-                    barCount: 8,
-                    barWidth: 3.0,
-                    barSpacing: 2.5,
-                    minBarHeight: 4,
+                    barCount: 15,
+                    barWidth: 1.5,
+                    barSpacing: 1.5,
+                    minBarHeight: 2,
                     maxBarHeight: 28,
                     containerWidth: 100,
                     overlayWidth: 100,
@@ -2436,15 +2441,16 @@ struct BottomOverlayView: View {
                     vPadding: 6,
                     waveformWidth: 90,
                     waveformHeight: 20,
+                    visualizerWidth: 150,
                     iconSize: 16,
                     transFontSize: 11,
                     modeFontSize: 10,
                     cornerRadius: 14,
-                    barCount: 7,
-                    barWidth: 3.0,
-                    barSpacing: 3.5,
-                    minBarHeight: 5,
-                    maxBarHeight: 16,
+                    barCount: 43,
+                    barWidth: 1.5,
+                    barSpacing: 2.0,
+                    minBarHeight: 2,
+                    maxBarHeight: 18,
                     containerWidth: 200,
                     overlayWidth: 300,
                     overlayHeight: 124,
@@ -2466,14 +2472,15 @@ struct BottomOverlayView: View {
                     // (9 * 5 + 8 * 5.5 = 89pt here), so 130 already has ample room.
                     waveformWidth: 130,
                     waveformHeight: 44,
+                    visualizerWidth: 260,
                     iconSize: 20,
                     transFontSize: 13,
                     modeFontSize: 12,
                     cornerRadius: 18,
-                    barCount: 9,
-                    barWidth: 5.0,
-                    barSpacing: 5.5,
-                    minBarHeight: 8,
+                    barCount: 65,
+                    barWidth: 2.0,
+                    barSpacing: 2.0,
+                    minBarHeight: 2,
                     maxBarHeight: 40,
                     containerWidth: 340,
                     overlayWidth: 380,
@@ -2490,14 +2497,15 @@ struct BottomOverlayView: View {
                     vPadding: 12,
                     waveformWidth: 180,
                     waveformHeight: 48,
+                    visualizerWidth: 420,
                     iconSize: 26,
                     transFontSize: 15,
                     modeFontSize: 14,
                     cornerRadius: 24,
-                    barCount: 11,
-                    barWidth: 5.0,
-                    barSpacing: 6.0,
-                    minBarHeight: 8,
+                    barCount: 93,
+                    barWidth: 2.0,
+                    barSpacing: 2.5,
+                    minBarHeight: 2,
                     maxBarHeight: 44,
                     containerWidth: 600,
                     overlayWidth: 600,
@@ -3616,30 +3624,12 @@ struct BottomOverlayView: View {
                     }
                 }
 
-                // Waveform row. The target-app icon used to lead this row; it now sits at the
-                // bottom of the leading action rail (see `targetAppIconView`).
-                HStack(spacing: self.layout.hPadding / 1.5) {
-                    // Waveform visualization
-                    BottomWaveformView(color: self.modeColor, layout: self.layout)
-                        .frame(width: self.layout.waveformWidth, height: self.layout.waveformHeight)
-
-                    // Model load hint. The mode label ("Dictate" / "Edit" / "Command") used to
-                    // sit above this; it was removed along with the top control row, since the
-                    // mode is already carried by the waveform's colour.
-                    if self.layout.showsModeLabel {
-                        VStack(alignment: .leading, spacing: 2) {
-                            if !self.appServices.asr.isAsrReady &&
-                                (self.appServices.asr.isLoadingModel || self.appServices.asr.isDownloadingModel)
-                                && self.settings.overlaySize != .small
-                            {
-                                Text("Loading model…")
-                                    .font(.system(size: max(self.layout.modeFontSize - 2, 9), weight: .medium))
-                                    .foregroundStyle(.orange.opacity(0.85))
-                                    .lineLimit(1)
-                            }
-                        }
-                    }
-                }
+                // Waveform row: the scrolling voice trace, alone on its row. The target-app
+                // icon that used to lead it sits in the pill's corner, and the "Loading
+                // model…" hint that used to trail it is carried by the corner icon's spinner —
+                // the trace is wide enough now that a trailing label would overflow the pill.
+                BottomWaveformView(color: self.modeColor, layout: self.layout)
+                    .frame(width: self.layout.visualizerWidth, height: self.layout.waveformHeight)
             }
             .padding(.horizontal, self.layout.hPadding)
             .padding(.vertical, self.layout.vPadding)
@@ -3872,9 +3862,11 @@ struct BottomWaveformView: View {
     let layout: BottomOverlayView.LayoutConstants
 
     @ObservedObject private var contentState = NotchContentState.shared
-    // Initialize with max possible bar count (11 for large) to prevent index-out-of-range before onAppear
-    @State private var barHeights: [CGFloat] = Array(repeating: 6, count: 11)
+    // Initialize with max possible bar count (93 for large) to prevent index-out-of-range before onAppear
+    @State private var barHeights: [CGFloat] = Array(repeating: 2, count: 93)
     @State private var noiseThreshold: CGFloat = .init(SettingsStore.shared.visualizerNoiseThreshold)
+    // Monotonic sample counter driving the per-sample shimmer in `updateBars`.
+    @State private var traceTick: UInt64 = 0
 
     private var barCount: Int {
         self.layout.barCount
@@ -3929,12 +3921,15 @@ struct BottomWaveformView: View {
         self.contentState.isBottomOverlayReleaseTransitioning || self.contentState.isBottomOverlayDismissing
     }
 
-    /// Safe accessor for bar heights to prevent index-out-of-range crashes
+    /// Safe accessor for bar heights to prevent index-out-of-range crashes.
+    /// Reads the newest `barCount` samples when the buffer is larger than the display.
     private func safeBarHeight(at index: Int) -> CGFloat {
-        guard index >= 0 && index < self.barHeights.count else {
+        let offset = max(0, self.barHeights.count - self.barCount)
+        let resolved = offset + index
+        guard resolved >= 0 && resolved < self.barHeights.count else {
             return self.minHeight
         }
-        return self.barHeights[index]
+        return self.barHeights[resolved]
     }
 
     var body: some View {
@@ -3993,19 +3988,30 @@ struct BottomWaveformView: View {
         }
     }
 
+    /// The scrolling voice trace: each audio tick pushes a new sample in at the right and
+    /// the history flows left, fading as it ages. One composited glow instead of a shadow
+    /// per bar — at ~90 fine bars, per-bar shadows are a real compositing cost.
     private var barsView: some View {
-        HStack(spacing: self.barSpacing) {
+        HStack(alignment: .center, spacing: self.barSpacing) {
             ForEach(0..<self.barCount, id: \.self) { index in
                 RoundedRectangle(cornerRadius: self.barWidth / 2)
                     .frame(width: self.barWidth, height: self.displayHeight(at: index))
-                    .shadow(
-                        color: self.color.opacity(self.isReleaseAnimationActive ? 0 : self.currentGlowIntensity),
-                        radius: self.isReleaseAnimationActive ? 0 : self.currentGlowRadius,
-                        x: 0,
-                        y: 0
-                    )
+                    .opacity(self.traceAgeOpacity(at: index))
             }
         }
+        .compositingGroup()
+        .shadow(
+            color: self.color.opacity(self.isReleaseAnimationActive ? 0 : self.currentGlowIntensity),
+            radius: self.isReleaseAnimationActive ? 0 : self.currentGlowRadius,
+            x: 0,
+            y: 0
+        )
+    }
+
+    /// Older samples (left) fade back; the newest (right) stay near full strength.
+    private func traceAgeOpacity(at index: Int) -> Double {
+        let t = Double(index) / Double(max(self.barCount - 1, 1))
+        return 0.35 + 0.65 * pow(t, 1.4)
     }
 
     private func displayHeight(at index: Int) -> CGFloat {
@@ -4015,21 +4021,10 @@ struct BottomWaveformView: View {
         return self.safeBarHeight(at: index)
     }
 
-    private func visualizerPeakHeight(at index: Int) -> CGFloat {
-        let centerDistance = abs(CGFloat(index) - CGFloat(self.barCount - 1) / 2)
-        let maxDistance = max(CGFloat(self.barCount - 1) / 2, 1)
-        let normalizedDistance = min(centerDistance / maxDistance, 1)
-        let factor = max(0.18, 0.96 - normalizedDistance * 0.78)
-        return self.minHeight + (self.maxHeight - self.minHeight) * factor
-    }
-
     private func setFlatProcessingBars() {
-        // Ensure array is properly sized before modifying
-        guard self.barHeights.count >= self.barCount else { return }
-
         // During AI processing we want the visualizer to settle to silence (flat).
         withAnimation(.easeOut(duration: 0.18)) {
-            for i in 0..<self.barCount {
+            for i in self.barHeights.indices {
                 self.barHeights[i] = self.minHeight
             }
         }
@@ -4042,16 +4037,24 @@ struct BottomWaveformView: View {
         let normalizedLevel = min(max(level, 0), 1)
         let denominator = max(1.0 - self.noiseThreshold, 0.001)
         let adjustedLevel = max(min((normalizedLevel - self.noiseThreshold) / denominator, 1.0), 0.0)
-        // Lower exponent => normal speech pushes the bars higher (taller "waves" while talking).
+        // Lower exponent => normal speech pushes the trace higher while talking.
         let amplifiedLevel = pow(adjustedLevel, 0.55)
 
-        withAnimation(.easeOut(duration: 0.08)) {
-            for i in 0..<self.barCount {
-                let peakHeight = self.visualizerPeakHeight(at: i)
-                let variation = 0.92 + 0.08 * cos(CGFloat(i) * 1.45)
-                let nextHeight = self.minHeight + (peakHeight - self.minHeight) * amplifiedLevel * variation
-                self.barHeights[i] = min(self.maxHeight, max(self.minHeight, nextHeight))
-            }
+        // Slight deterministic shimmer so a held tone doesn't freeze into a flat plateau.
+        self.traceTick &+= 1
+        let shimmer = 0.9 + 0.1 * cos(CGFloat(truncatingRemainder(self.traceTick)) * 1.7)
+        let nextHeight = min(
+            self.maxHeight,
+            max(self.minHeight, self.minHeight + (self.maxHeight - self.minHeight) * amplifiedLevel * shimmer)
+        )
+
+        withAnimation(.linear(duration: 0.06)) {
+            self.barHeights.removeFirst()
+            self.barHeights.append(nextHeight)
         }
+    }
+
+    private func truncatingRemainder(_ tick: UInt64) -> Int {
+        Int(tick % 1024)
     }
 }

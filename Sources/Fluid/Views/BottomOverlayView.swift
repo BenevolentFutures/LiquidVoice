@@ -1491,7 +1491,9 @@ final class BottomOverlayHistoryMenuController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = false
+        // A real window shadow: the browser hovers over the equally-dark overlay pill, and
+        // without a shadow the two black surfaces read as one shape.
+        panel.hasShadow = true
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none
@@ -1681,6 +1683,12 @@ private struct BottomOverlayHistoryMenuView: View {
             .padding(.horizontal, 10)
             .padding(.top, 8)
 
+            // Hairline under the header gives the card internal structure — part of what
+            // makes it read as its own surface rather than a growth off the overlay.
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(height: 1)
+
             if self.visibleEntries.isEmpty {
                 Text("No dictations yet")
                     .font(.system(size: 12.5))
@@ -1701,11 +1709,14 @@ private struct BottomOverlayHistoryMenuView: View {
             }
         }
         .frame(width: self.maxWidth)
-        .background(Color.black)
+        // Elevated dark surface, deliberately a step lighter than the overlay's pure-black
+        // pill, with a stronger border — the panel's window shadow does the rest of the
+        // work of separating the two layers.
+        .background(Color(red: 0.09, green: 0.09, blue: 0.11))
         .cornerRadius(10)
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                .stroke(Color.white.opacity(0.22), lineWidth: 1)
         )
         .preferredColorScheme(.dark)
     }

@@ -1964,6 +1964,7 @@ struct BottomOverlayView: View {
     @State private var isHoveringSettingsChip = false
     @State private var isHoveringCopyChip = false
     @State private var isHoveringReprocessChip = false
+    @State private var isHoveringCancelChip = false
     @State private var modeSelectorFrameInScreen: CGRect = .zero
     @State private var modeSelectorWindow: NSWindow?
     @State private var promptSelectorFrameInScreen: CGRect = .zero
@@ -2749,13 +2750,17 @@ struct BottomOverlayView: View {
 
     /// An icon-only chip for a one-shot action, styled to match `settingsChip`.
     /// Labelless by design — the tooltip carries the meaning, so the control row stays narrow.
+    /// `disabled`/`disabledHelp` default to the shared history-actions gate; the cancel chip
+    /// overrides them because cancelling needs no history and must work mid-processing.
     private func quickActionChip(
         systemName: String,
         help: String,
         isHovered: Binding<Bool>,
+        disabled: Bool? = nil,
+        disabledHelp: String = "No saved dictation history available",
         action: @escaping () -> Void
     ) -> some View {
-        let disabled = self.quickActionsDisabled
+        let disabled = disabled ?? self.quickActionsDisabled
         return HStack(spacing: 0) {
             Image(systemName: systemName)
                 .font(.system(size: max(self.promptSelectorFontSize + 1, 10), weight: .semibold))
@@ -2777,7 +2782,7 @@ struct BottomOverlayView: View {
             self.closeActionsMenu()
             action()
         }
-        .help(disabled ? "No saved dictation history available" : help)
+        .help(disabled ? disabledHelp : help)
     }
 
     private var copyLastChip: some View {
@@ -2797,6 +2802,19 @@ struct BottomOverlayView: View {
             isHovered: self.$isHoveringReprocessChip
         ) {
             self.contentState.onReprocessLastRequested?()
+        }
+    }
+
+    /// Cancels the in-flight dictation (same path as the Escape / cancel hotkey):
+    /// stops recording without transcribing and hides the overlay.
+    private var cancelChip: some View {
+        self.quickActionChip(
+            systemName: "xmark",
+            help: "Cancel Dictation",
+            isHovered: self.$isHoveringCancelChip,
+            disabled: false
+        ) {
+            self.contentState.onCancelRequested?()
         }
     }
 
@@ -2933,6 +2951,7 @@ struct BottomOverlayView: View {
         VStack(spacing: 6) {
             self.copyLastChip
             self.reprocessLastChip
+            self.cancelChip
             self.targetAppIconView
         }
     }
@@ -3242,6 +3261,7 @@ struct BottomOverlayView: View {
             self.isHoveringSettingsChip = false
             self.isHoveringCopyChip = false
             self.isHoveringReprocessChip = false
+            self.isHoveringCancelChip = false
             switch self.contentState.mode {
             case .dictation: self.contentState.promptPickerMode = .dictate
             case .edit, .write, .rewrite: self.contentState.promptPickerMode = .edit
@@ -3266,6 +3286,7 @@ struct BottomOverlayView: View {
             self.isHoveringSettingsChip = false
             self.isHoveringCopyChip = false
             self.isHoveringReprocessChip = false
+            self.isHoveringCancelChip = false
             if !self.layout.usesFixedCanvas {
                 self.refreshDynamicPreviewSizeIfNeeded(for: self.currentPreviewSizingText)
             }
@@ -3316,6 +3337,7 @@ struct BottomOverlayView: View {
             self.isHoveringSettingsChip = false
             self.isHoveringCopyChip = false
             self.isHoveringReprocessChip = false
+            self.isHoveringCancelChip = false
         }
         // TODO: Add tap-to-expand for command mode history (future enhancement)
         // .contentShape(Rectangle())

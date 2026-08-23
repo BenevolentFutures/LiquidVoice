@@ -54,7 +54,13 @@ final class TypingService {
     private static let pasteboardSessionSemaphore = DispatchSemaphore(value: 1)
     private static let pasteboardRestoreQueue = DispatchQueue(label: "TypingService.PasteboardRestore", qos: .utility)
     private static var focusSnapshot: FocusSnapshot?
-    private static let ghosttyBundleIdentifier = "com.mitchellh.ghostty"
+    /// Terminals built on Ghostty's input stack, where direct CGEvent unicode insertion is
+    /// unreliable and the Reliable Paste path must be forced. c11 (Stage 11's multiplexer)
+    /// is a Ghostty derivative with its own bundle ID, so it needs the same carve-out.
+    private static let ghosttyFamilyBundleIdentifiers: Set<String> = [
+        "com.mitchellh.ghostty",
+        "com.stage11.c11",
+    ]
 
     private var textInsertionMode: SettingsStore.TextInsertionMode {
         SettingsStore.shared.textInsertionMode
@@ -232,7 +238,8 @@ final class TypingService {
             return false
         }
 
-        return app.bundleIdentifier == Self.ghosttyBundleIdentifier
+        guard let bundleIdentifier = app.bundleIdentifier else { return false }
+        return Self.ghosttyFamilyBundleIdentifiers.contains(bundleIdentifier)
     }
 
     private func ghosttyTargetPID(preferredTargetPID: pid_t?) -> pid_t? {
@@ -361,6 +368,15 @@ final class TypingService {
                 usleep(useconds_t(settleDelayMs * 1000))
             }
             self.bench("settle_delay_done delayMs=\(settleDelayMs) elapsedMs=\(Self.elapsedMs(since: requestedAt))")
+            // Fast transcriptions can complete before the user releases the stop hotkey's
+            // modifiers. A physically-held modifier corrupts every insertion path that posts
+            // keyboard events (terminals interpret ⌥/⌘ + key as bindings), so wait briefly
+            // for a clean keyboard before typing.
+            let modifiersReleased = Self.awaitModifierKeyRelease(timeoutMs: 1000)
+            self.bench("modifier_release_wait_done released=\(modifiersReleased) elapsedMs=\(Self.elapsedMs(since: requestedAt))")
+            if !modifiersReleased {
+                self.log("[TypingService] WARNING: modifier keys still held after wait; proceeding anyway")
+            }
             self.log("[TypingService] Delay completed, calling insertTextInstantly")
             let insertStartedAt = ProcessInfo.processInfo.systemUptime
             self.bench("insert_call")
@@ -377,6 +393,25 @@ final class TypingService {
                 }
             }
         }
+    }
+
+    /// Blocks until every physical modifier key is released, or the timeout passes.
+    /// Returns whether the keyboard was clean when it returned. Called on the typing
+    /// worker queue only — never on the main thread.
+    private static func awaitModifierKeyRelease(timeoutMs: Int) -> Bool {
+        let modifierMask: CGEventFlags = [
+            .maskCommand, .maskAlternate, .maskControl, .maskShift, .maskSecondaryFn,
+        ]
+        func modifiersDown() -> Bool {
+            let flags = CGEventSource.flagsState(.combinedSessionState)
+            return flags.intersection(modifierMask).isEmpty == false
+        }
+        let deadline = ProcessInfo.processInfo.systemUptime + Double(timeoutMs) / 1000.0
+        while modifiersDown() {
+            if ProcessInfo.processInfo.systemUptime >= deadline { return false }
+            usleep(10_000)
+        }
+        return true
     }
 
     private func bench(_ message: String) {
@@ -780,6 +815,14 @@ final class TypingService {
                 let chunkPointer = baseAddress.advanced(by: chunkStart)
                 keyDown.keyboardSetUnicodeString(stringLength: chunkLength, unicodeString: chunkPointer)
                 keyUp.keyboardSetUnicodeString(stringLength: chunkLength, unicodeString: chunkPointer)
+
+                // Events created with a nil source inherit the CURRENT hardware modifier
+                // state. Dictation is stopped by a modifier hotkey (e.g. ⌥Space), and fast
+                // local transcription can finish while the modifier is still physically held —
+                // the target app then sees ⌥+<unicode> instead of plain text. Terminals
+                // (Ghostty/c11) interpret that as a keybinding and silently drop the text.
+                keyDown.flags = []
+                keyUp.flags = []
 
                 post(keyDown)
                 post(keyUp)

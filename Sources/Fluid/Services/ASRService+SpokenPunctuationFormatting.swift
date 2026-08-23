@@ -43,6 +43,7 @@ private enum SpokenPunctuationFormatter {
                 haystack.contains("iterm") ||
                 haystack.contains("warp") ||
                 haystack.contains("ghostty") ||
+                haystack.contains("stage11.c11") ||
                 haystack.contains("kitty") ||
                 haystack.contains("alacritty") ||
                 haystack.contains("slack") ||

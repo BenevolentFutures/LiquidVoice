@@ -1217,7 +1217,7 @@ struct ContentView: View {
         }
         .listStyle(.sidebar)
         .animation(nil, value: self.selectedSidebarItem)
-        .navigationTitle("FluidVoice")
+        .navigationTitle("Liquid Voice")
         .tint(self.theme.palette.accent)
     }
 
@@ -1447,8 +1447,8 @@ struct ContentView: View {
                     self.instructionStep(number: "2", text: "Choose **Allow** in the system dialog")
                 } else if self.asr.micStatus == .denied {
                     self.instructionStep(number: "1", text: "Click **Open Settings** above")
-                    self.instructionStep(number: "2", text: "Find **FluidVoice** in the microphone list")
-                    self.instructionStep(number: "3", text: "Toggle **FluidVoice ON** to allow access")
+                    self.instructionStep(number: "2", text: "Find **Liquid Voice** in the microphone list")
+                    self.instructionStep(number: "3", text: "Toggle **Liquid Voice ON** to allow access")
                 }
             }
             .padding(.leading, 4)
@@ -3922,7 +3922,7 @@ extension ContentView {
     private func positionWindowBesideSystemSettings(requestID: UUID) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
             guard self.accessibilityGuideRequestID == requestID else { return }
-            guard let window = NSApp.windows.first(where: { $0.isVisible && $0.title == "FluidVoice" }) ?? NSApp.keyWindow else {
+            guard let window = NSApp.windows.first(where: { $0.isVisible && $0.title == "Liquid Voice" }) ?? NSApp.keyWindow else {
                 return
             }
 
@@ -4091,7 +4091,7 @@ extension ContentView {
     private func cancelAccessibilityPermissionFlow() {
         self.finishAccessibilityPermissionFlow()
         NSApp.activate(ignoringOtherApps: true)
-        (NSApp.windows.first { $0.isVisible && $0.title == "FluidVoice" } ?? NSApp.keyWindow)?
+        (NSApp.windows.first { $0.isVisible && $0.title == "Liquid Voice" } ?? NSApp.keyWindow)?
             .makeKeyAndOrderFront(nil)
     }
 
@@ -4156,7 +4156,7 @@ extension ContentView {
             return runningAppURL
         }
 
-        let installedURL = URL(fileURLWithPath: "/Applications/FluidVoice.app")
+        let installedURL = URL(fileURLWithPath: "/Applications/Liquid Voice.app")
         if FileManager.default.fileExists(atPath: installedURL.path) {
             return installedURL
         }

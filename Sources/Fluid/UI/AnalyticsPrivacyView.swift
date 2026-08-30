@@ -10,7 +10,7 @@ struct AnalyticsPrivacyView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Anonymous Analytics")
                         .font(.system(size: 18, weight: .semibold))
-                    Text("What FluidVoice collects when analytics is enabled")
+                    Text("What Liquid Voice collects when analytics is enabled")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }

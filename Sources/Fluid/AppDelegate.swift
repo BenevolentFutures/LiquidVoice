@@ -332,7 +332,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private func isMainWindow(_ window: NSWindow) -> Bool {
         guard window.level == .normal else { return false }
         guard window.styleMask.contains(.titled) else { return false }
-        return window.title == "FluidVoice" || window.title.contains("FluidVoice")
+        return window.title == "Liquid Voice" || window.title.contains("Liquid Voice")
     }
 
     // MARK: - Periodic Update Checks
@@ -399,7 +399,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                         title: isBeta ? "No Beta Updates" : "No Updates",
                         message: isBeta
                             ? "You're already running the latest build available in the beta channel."
-                            : "You're already running the latest version of Fluid!"
+                            : "You're already running the latest version of Liquid Voice!"
                     )
                 } else {
                     DebugLogger.shared.error("Update check failed: \(error)", source: "AppDelegate")
@@ -495,7 +495,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         let alert = NSAlert()
         alert.messageText = "Update Available"
-        alert.informativeText = "FluidVoice \(version) is now available. Would you like to install it now?\n\nThe app will restart automatically after installation."
+        alert.informativeText = "Liquid Voice \(version) is now available. Would you like to install it now?\n\nThe app will restart automatically after installation."
         alert.alertStyle = .informational
         alert.addButton(withTitle: "Install Now")
         alert.addButton(withTitle: "Later")

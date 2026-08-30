@@ -235,7 +235,7 @@ struct SettingsView: View {
                             // Launch at startup
                             self.settingsToggleRow(
                                 title: "Launch at startup",
-                                description: "Automatically start FluidVoice when you log in",
+                                description: "Automatically start Liquid Voice when you log in",
                                 footnote: self.settings.launchAtStartupStatusMessage,
                                 errorMessage: self.settings.launchAtStartupErrorMessage,
                                 isOn: self.launchAtStartupBinding
@@ -245,7 +245,7 @@ struct SettingsView: View {
                             // Show window when launched at login
                             self.settingsToggleRow(
                                 title: "Show window when launched at login",
-                                description: "When off, FluidVoice starts silently in the menu bar at login. Opening the app yourself always shows the window.",
+                                description: "When off, Liquid Voice starts silently in the menu bar at login. Opening the app yourself always shows the window.",
                                 isOn: Binding(
                                     get: { SettingsStore.shared.showMainWindowAtLoginLaunch },
                                     set: { SettingsStore.shared.showMainWindowAtLoginLaunch = $0 }
@@ -256,7 +256,7 @@ struct SettingsView: View {
                             // Hide from Dock & App Switcher
                             self.settingsToggleRow(
                                 title: "Hide from Dock & App Switcher",
-                                description: "Keep FluidVoice in the menu bar only (hides Dock icon and Cmd+Tab entry)",
+                                description: "Keep Liquid Voice in the menu bar only (hides Dock icon and Cmd+Tab entry)",
                                 footnote: "Note: May require app restart to take effect.",
                                 isOn: Binding(
                                     get: { SettingsStore.shared.hideFromDockAndAppSwitcher },
@@ -470,7 +470,7 @@ struct SettingsView: View {
                                                 msg.messageText = isBeta ? "You're Up To Date (Beta)" : "You're Up To Date"
                                                 msg.informativeText = isBeta
                                                     ? "You're already running the latest build available in the beta channel."
-                                                    : "You're already running the latest version of FluidVoice."
+                                                    : "You're already running the latest version of Liquid Voice."
                                             } else {
                                                 msg.messageText = "Update Check Failed"
                                                 msg.informativeText = "Unable to check for updates. Please try again later.\n\nError: \(error.localizedDescription)"
@@ -499,7 +499,7 @@ struct SettingsView: View {
                                     let targetVersion = self.rollbackVersion
                                     let confirm = NSAlert()
                                     confirm.messageText = "Rollback to \(infoText)?"
-                                    confirm.informativeText = "This will restore a previous app version and relaunch FluidVoice."
+                                    confirm.informativeText = "This will restore a previous app version and relaunch Liquid Voice."
                                     confirm.alertStyle = .warning
                                     confirm.addButton(withTitle: "Rollback")
                                     confirm.addButton(withTitle: "Cancel")
@@ -519,7 +519,7 @@ struct SettingsView: View {
                                             await MainActor.run {
                                                 let success = NSAlert()
                                                 success.messageText = "Rollback Successful"
-                                                success.informativeText = "Rolled back to \(targetVersion). FluidVoice will relaunch shortly."
+                                                success.informativeText = "Rolled back to \(targetVersion). Liquid Voice will relaunch shortly."
                                                 success.alertStyle = .informational
                                                 success.addButton(withTitle: "Report Bug")
                                                 success.addButton(withTitle: "OK")
@@ -961,7 +961,7 @@ struct SettingsView: View {
 
                                     self.optionToggleRow(
                                         title: "Pause Media During Transcription",
-                                        description: "Automatically pause currently playing audio/video when transcription starts. Resumes only if FluidVoice paused it.",
+                                        description: "Automatically pause currently playing audio/video when transcription starts. Resumes only if Liquid Voice paused it.",
                                         isOn: Binding(
                                             get: { SettingsStore.shared.pauseMediaDuringTranscription },
                                             set: { SettingsStore.shared.pauseMediaDuringTranscription = $0 }
@@ -1128,7 +1128,7 @@ struct SettingsView: View {
 
                             self.optionToggleRow(
                                 title: "Microphone Changes",
-                                description: "Show an alert when FluidVoice changes or loses its microphone.",
+                                description: "Show an alert when Liquid Voice changes or loses its microphone.",
                                 isOn: Binding(
                                     get: { self.settings.showMicrophoneChangeAlerts },
                                     set: { enabled in
@@ -1618,7 +1618,7 @@ struct SettingsView: View {
 
             self.presentInfoAlert(
                 title: "Backup Exported",
-                message: "Saved your FluidVoice backup to:\n\(url.path)"
+                message: "Saved your Liquid Voice backup to:\n\(url.path)"
             )
         } catch {
             self.presentErrorAlert(
@@ -1706,7 +1706,7 @@ struct SettingsView: View {
             let confirm = NSAlert()
             confirm.messageText = "Prune saved audio?"
             confirm.informativeText = """
-            This budget is below current audio usage. FluidVoice will delete the oldest saved audio first and keep transcript history.
+            This budget is below current audio usage. Liquid Voice will delete the oldest saved audio first and keep transcript history.
             """
             confirm.alertStyle = .warning
             confirm.addButton(withTitle: "Apply and Prune")
@@ -2348,7 +2348,7 @@ private extension SettingsView {
             )
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-            Text("FluidVoice tries microphones from top to bottom. Drag to reorder; unavailable devices keep their place.")
+            Text("Liquid Voice tries microphones from top to bottom. Drag to reorder; unavailable devices keep their place.")
                 .font(self.theme.typography.bodySmall)
                 .foregroundStyle(self.settingsSecondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -2535,7 +2535,7 @@ private extension SettingsView {
             )
         } else {
             self.microphoneQualityGuidanceRow(
-                message: "This order applies only to FluidVoice and does not change your macOS input.",
+                message: "This order applies only to Liquid Voice and does not change your macOS input.",
                 systemImage: "info.circle",
                 color: self.settingsSecondaryText
             )
@@ -2907,7 +2907,7 @@ struct AnalyticsConfirmationView: View {
             Text("Are you sure you want to stop sharing anonymous analytics?")
                 .font(.headline)
 
-            Text("By sharing anonymous usage data, you help us build the features you care about most. We never collect personal information (Audio, Transcription text etc), ever. Your support simply helps us make FluidVoice better for you.")
+            Text("By sharing anonymous usage data, you help us build the features you care about most. We never collect personal information (Audio, Transcription text etc), ever. Your support simply helps us make Liquid Voice better for you.")
                 .font(self.theme.typography.bodySmall)
                 .foregroundStyle(.secondary)
                 .padding(12)

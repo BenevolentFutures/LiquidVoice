@@ -507,7 +507,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         // Open Main Window
-        let openItem = NSMenuItem(title: "Open Fluid Voice", action: #selector(openMainWindow), keyEquivalent: "")
+        let openItem = NSMenuItem(title: "Open Liquid Voice", action: #selector(openMainWindow), keyEquivalent: "")
         openItem.target = self
         menu.addItem(openItem)
 
@@ -557,7 +557,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
 
         // Quit
         let quitItem = NSMenuItem(
-            title: "Quit Fluid Voice",
+            title: "Quit Liquid Voice",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )
@@ -731,7 +731,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
                     msg.messageText = isBeta ? "You’re Up To Date (Beta)" : "You’re Up To Date"
                     msg.informativeText = isBeta
                         ? "You're already running the latest build available in the beta channel."
-                        : "You're already running the latest version of FluidVoice."
+                        : "You're already running the latest version of Liquid Voice."
                 } else {
                     msg.messageText = "Update Check Failed"
                     msg.informativeText = "Unable to check for updates. Please try again later.\n\nError: \(error.localizedDescription)"
@@ -759,7 +759,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
 
         let confirm = NSAlert()
         confirm.messageText = "Rollback to \(availableVersion)?"
-        confirm.informativeText = "This will restore the backup and relaunch FluidVoice."
+        confirm.informativeText = "This will restore the backup and relaunch Liquid Voice."
         confirm.alertStyle = .warning
         confirm.addButton(withTitle: "Rollback")
         confirm.addButton(withTitle: "Cancel")
@@ -771,7 +771,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
                 try await SimpleUpdater.shared.rollbackToLatestBackup()
                 let success = NSAlert()
                 success.messageText = "Rollback Successful"
-                success.informativeText = "Rolled back to \(availableVersion). FluidVoice will relaunch shortly."
+                success.informativeText = "Rolled back to \(availableVersion). Liquid Voice will relaunch shortly."
                 success.alertStyle = .informational
                 success.addButton(withTitle: "Report Bug")
                 success.addButton(withTitle: "OK")
@@ -895,7 +895,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         guard window.styleMask.contains(.titled) else { return false }
         guard window.canBecomeKey else { return false }
         guard window.isMiniaturized == false else { return false }
-        return window.title == "FluidVoice" || window.title.contains("FluidVoice")
+        return window.title == "Liquid Voice" || window.title.contains("Liquid Voice")
     }
 
     @objc private func openPreferences() {
@@ -957,7 +957,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "FluidVoice"
+        window.title = "Liquid Voice"
         window.animationBehavior = .none
         window.minSize = self.mainWindowMinimumSize
         window.isReleasedWhenClosed = false

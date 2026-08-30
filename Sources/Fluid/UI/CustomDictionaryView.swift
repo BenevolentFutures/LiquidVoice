@@ -435,7 +435,7 @@ struct CustomDictionaryView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Teach Words")
                             .font(self.theme.typography.sectionTitle)
-                        Text("Show FluidVoice the right spelling, by voice or by typing.")
+                        Text("Show Liquid Voice the right spelling, by voice or by typing.")
                             .font(self.theme.typography.caption)
                             .foregroundStyle(self.theme.palette.secondaryText)
                     }
@@ -493,7 +493,7 @@ struct CustomDictionaryView: View {
 
     private var trainReplacementComposer: some View {
         VStack(alignment: .leading, spacing: self.theme.metrics.spacing.sm) {
-            TextField("Type the correct text, e.g. FluidVoice", text: self.$trainingReplacement)
+            TextField("Type the correct text, e.g. Liquid Voice", text: self.$trainingReplacement)
                 .dictionaryInputChrome()
                 .disabled(self.isTrainingRecording || self.isTrainingProcessing)
                 .onChange(of: self.trainingReplacement) { oldValue, newValue in
@@ -614,7 +614,7 @@ struct CustomDictionaryView: View {
 
     private var manualTriggerField: some View {
         VStack(alignment: .leading, spacing: self.theme.metrics.spacing.sm) {
-            Text("When FluidVoice hears")
+            Text("When Liquid Voice hears")
                 .font(self.theme.typography.captionStrong)
 
             TextField("fluid voice, fluid boys", text: self.$manualTriggerDraft)
@@ -631,7 +631,7 @@ struct CustomDictionaryView: View {
         VStack(alignment: .leading, spacing: self.theme.metrics.spacing.sm) {
             Text("Change it to")
                 .font(self.theme.typography.captionStrong)
-            TextField("FluidVoice", text: self.$manualReplacement)
+            TextField("Liquid Voice", text: self.$manualReplacement)
                 .dictionaryInputChrome()
                 .onSubmit { self.addManualReplacementIfValid() }
             Text("This is what appears in your transcription.")
@@ -651,7 +651,7 @@ struct CustomDictionaryView: View {
 
     private var trainingRecorderPanel: some View {
         VStack(alignment: .leading, spacing: self.theme.metrics.spacing.md) {
-            Text("Teach FluidVoice your pronunciation")
+            Text("Teach Liquid Voice your pronunciation")
                 .font(self.theme.typography.bodySmallStrong)
 
             if self.trainingAlreadyCorrectWithoutReplacement {
@@ -662,7 +662,7 @@ struct CustomDictionaryView: View {
                 Label(
                     self.activePronunciationMatching
                         ? "Voice profile for \(self.trainingTargetReference) captured 3 times."
-                        : "FluidVoice recognized \(self.trainingTargetReference) 3 times in a row.",
+                        : "Liquid Voice recognized \(self.trainingTargetReference) 3 times in a row.",
                     systemImage: "checkmark.circle.fill"
                 )
                 .font(self.theme.typography.captionStrong)
@@ -679,12 +679,12 @@ struct CustomDictionaryView: View {
                     )
                     self.trainingInstruction(
                         number: 3,
-                        text: "Say \(self.trainingTargetReference) naturally, then pause. FluidVoice records and listens again automatically."
+                        text: "Say \(self.trainingTargetReference) naturally, then pause. Liquid Voice records and listens again automatically."
                     )
                     self.trainingInstruction(
                         number: 4,
                         text: self.activePronunciationMatching
-                            ? "Repeat 3 times to teach FluidVoice how your voice sounds."
+                            ? "Repeat 3 times to teach Liquid Voice how your voice sounds."
                             : "Keep repeating it until the circle reaches 3/3."
                     )
                 }
@@ -866,7 +866,7 @@ struct CustomDictionaryView: View {
                                 .foregroundStyle(self.theme.palette.tertiaryText)
                         }
                     }
-                    Text("Words and phrases FluidVoice will correct automatically.")
+                    Text("Words and phrases Liquid Voice will correct automatically.")
                         .font(self.theme.typography.caption)
                         .foregroundStyle(self.theme.palette.secondaryText)
                 }
@@ -980,7 +980,7 @@ struct CustomDictionaryView: View {
                     Text("Your Dictionary")
                         .font(self.theme.typography.sectionTitle)
 
-                    Text("FluidVoice automatically corrects these words and phrases.")
+                    Text("Liquid Voice automatically corrects these words and phrases.")
                         .font(self.theme.typography.caption)
                         .foregroundStyle(self.theme.palette.secondaryText)
                 }
@@ -1205,7 +1205,7 @@ struct CustomDictionaryView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Word or Phrase")
                     .font(self.theme.typography.captionStrong)
-                TextField("FluidVoice", text: self.$boostTermText)
+                TextField("Liquid Voice", text: self.$boostTermText)
                     .font(self.theme.typography.bodySmall)
                     .dictionaryInputChrome()
                     .onSubmit { self.saveBoostTermIfValid() }
@@ -1332,7 +1332,7 @@ struct CustomDictionaryView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Try Saying")
                                 .font(self.theme.typography.captionStrong)
-                            Text("Examples of what FluidVoice will type.")
+                            Text("Examples of what Liquid Voice will type.")
                                 .font(self.theme.typography.caption)
                                 .foregroundStyle(self.theme.palette.secondaryText)
                             self.punctuationTrySayingPreview
@@ -1468,7 +1468,7 @@ struct CustomDictionaryView: View {
             if self.punctuationRules.isEmpty {
                 self.dictionaryEmptyState(
                     title: "No punctuation rules",
-                    detail: "Add what you say and what FluidVoice should type."
+                    detail: "Add what you say and what Liquid Voice should type."
                 )
             } else {
                 LazyVStack(spacing: self.theme.metrics.spacing.sm) {
@@ -2552,7 +2552,7 @@ private struct VoiceMatchingSettingsRow: View {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "flask.fill")
                         .foregroundStyle(self.theme.palette.accent)
-                    Text("Research Preview: Compares how your voice sounds instead of only the words FluidVoice hears. Results may vary.")
+                    Text("Research Preview: Compares how your voice sounds instead of only the words Liquid Voice hears. Results may vary.")
                         .font(self.theme.typography.caption)
                         .foregroundStyle(self.theme.palette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -2767,12 +2767,12 @@ private enum DictionaryTrainingCopy {
         }
         if isReady {
             return usesVoiceMatching
-                ? "Ready. FluidVoice learned how \(target) sounds in your voice."
-                : "Ready. FluidVoice got \(target) right 3 times in a row."
+                ? "Ready. Liquid Voice learned how \(target) sounds in your voice."
+                : "Ready. Liquid Voice got \(target) right 3 times in a row."
         }
         return usesVoiceMatching
             ? "Say \(target) 3 times to unlock Add Replacement."
-            : "Keep trying until FluidVoice gets \(target) right 3 times in a row."
+            : "Keep trying until Liquid Voice gets \(target) right 3 times in a row."
     }
 }
 
@@ -3508,7 +3508,7 @@ struct AddDictionaryEntrySheet: View {
                 Text("This is what will appear in the final transcription.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                TextField("FluidVoice", text: self.$replacement)
+                TextField("Liquid Voice", text: self.$replacement)
                     .dictionaryInputChrome()
                     .onSubmit { self.saveIfValid() }
             }
@@ -3660,7 +3660,7 @@ struct EditDictionaryEntrySheet: View {
                 Text("This is what will appear in the final transcription.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                TextField("FluidVoice", text: self.$replacement)
+                TextField("Liquid Voice", text: self.$replacement)
                     .dictionaryInputChrome()
                     .onSubmit { self.saveIfValid() }
             }

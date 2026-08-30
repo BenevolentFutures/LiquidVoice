@@ -30,7 +30,7 @@ final class SettingsStore: ObservableObject {
     private(set) var launchAtStartupEnabled = false
     private(set) var launchAtStartupErrorMessage: String?
     private(set) var launchAtStartupStatusMessage =
-        "FluidVoice reflects the actual macOS login item state. Unsigned or development builds may fail to enable this."
+        "Liquid Voice reflects the actual macOS login item state. Unsigned or development builds may fail to enable this."
 
     private init() {
         self.migrateTranscriptionStartSoundIfNeeded()
@@ -2242,11 +2242,11 @@ final class SettingsStore: ObservableObject {
         var displayName: String {
             switch self {
             case .none: return "None"
-            case .fluidSfx0: return "Fluid SFX 0"
-            case .fluidSfx1: return "Fluid SFX 1"
-            case .fluidSfx2: return "Fluid SFX 2"
-            case .fluidSfx3: return "Fluid SFX 3"
-            case .fluidSfx4: return "Fluid SFX 4"
+            case .fluidSfx0: return "Liquid SFX 0"
+            case .fluidSfx1: return "Liquid SFX 1"
+            case .fluidSfx2: return "Liquid SFX 2"
+            case .fluidSfx3: return "Liquid SFX 3"
+            case .fluidSfx4: return "Liquid SFX 4"
             }
         }
 
@@ -4938,11 +4938,11 @@ final class SettingsStore: ObservableObject {
             }
         }
 
-        /// Optional badge text for the card (e.g., "FluidVoice Pick")
+        /// Optional badge text for the card (e.g., "Liquid Voice Pick")
         var badgeText: String? {
             switch self {
-            case .parakeetTDT: return "FluidVoice Pick"
-            case .parakeetTDTv2: return "FluidVoice Pick"
+            case .parakeetTDT: return "Liquid Voice Pick"
+            case .parakeetTDTv2: return "Liquid Voice Pick"
             case .parakeetRealtime: return "Beta"
             case .qwen3Asr: return "Beta"
             case .cohereTranscribeSixBit: return "New"

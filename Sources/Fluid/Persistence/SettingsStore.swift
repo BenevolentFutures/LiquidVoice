@@ -1910,10 +1910,7 @@ final class SettingsStore: ObservableObject {
             AudioDevice.isPrivateDefaultDeviceAggregate(uid: $0.uid, name: $0.name) == false
         }
         let preferredUID = self.preferredInputDeviceUID
-        let connectedUIDs = Set(devices.map(\.uid))
-        var suppressedUIDs = self.suppressedMicrophoneUIDs
-        suppressedUIDs.formIntersection(connectedUIDs)
-        self.suppressedMicrophoneUIDs = suppressedUIDs
+        let suppressedUIDs = self.suppressedMicrophoneUIDs
 
         if entries.isEmpty,
            let preferredUID,

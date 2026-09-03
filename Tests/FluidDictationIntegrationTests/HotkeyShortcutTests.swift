@@ -18,6 +18,139 @@ final class HotkeyShortcutTests: XCTestCase {
     private let showMicrophoneChangeAlertsKey = "ShowMicrophoneChangeAlerts"
     private let experimentalDirectAudioCaptureEnabledKey = "ExperimentalDirectAudioCaptureEnabled"
 
+    @MainActor
+    func testActiveShortcutSummaryListsEverySourceWithKeyCodes() {
+        let summary = GlobalHotkeyManager.activeShortcutSummary(.init(
+            primary: [HotkeyShortcut(keyCode: 61, modifierFlags: [], modifierKeyCodes: [61])],
+            promptAssignments: [(key: "__default__", shortcut: HotkeyShortcut(keyCode: 55, modifierFlags: [], modifierKeyCodes: [55]))],
+            secondaryPromptMode: HotkeyShortcut(keyCode: 60, modifierFlags: []),
+            secondaryPromptModeEnabled: false,
+            command: nil,
+            commandEnabled: false,
+            edit: HotkeyShortcut(keyCode: 15, modifierFlags: [.option]),
+            editEnabled: true,
+            cancel: HotkeyShortcut(keyCode: 53, modifierFlags: []),
+            pasteLast: HotkeyShortcut(mouseButton: 0, modifierFlags: [.command]),
+            pasteLastEnabled: true,
+            mode: .automatic
+        ))
+
+        XCTAssertTrue(summary.hasPrefix("mode=automatic"))
+        XCTAssertTrue(summary.contains("primary[0]=Right ⌥ [keyCode=61"), summary)
+        XCTAssertTrue(summary.contains("prompt[__default__]=Left ⌘ [keyCode=55"), summary)
+        XCTAssertTrue(summary.contains("secondaryPromptMode=Right ⇧ [keyCode=60 flags=0] enabled=false"), summary)
+        XCTAssertTrue(summary.contains("command=none enabled=false"), summary)
+        XCTAssertTrue(summary.contains("edit=⌥ + R [keyCode=15"), summary)
+        XCTAssertTrue(summary.contains("cancel=Escape [keyCode=53"), summary)
+        XCTAssertTrue(summary.contains("pasteLast=⌘ + Left Click [button=0"), summary)
+    }
+
+    @MainActor
+    func testActiveShortcutSummaryListsReprocessLastDictation() {
+        let summary = GlobalHotkeyManager.activeShortcutSummary(.init(
+            primary: [],
+            promptAssignments: [],
+            secondaryPromptMode: HotkeyShortcut(keyCode: 60, modifierFlags: []),
+            secondaryPromptModeEnabled: false,
+            command: nil,
+            commandEnabled: false,
+            edit: HotkeyShortcut(keyCode: 15, modifierFlags: [.option]),
+            editEnabled: false,
+            cancel: HotkeyShortcut(keyCode: 53, modifierFlags: []),
+            pasteLast: nil,
+            pasteLastEnabled: false,
+            reprocessLast: HotkeyShortcut(mouseButton: 4, modifierFlags: []),
+            reprocessLastEnabled: true,
+            mode: .hold
+        ))
+
+        XCTAssertTrue(summary.contains("reprocessLast="), summary)
+        XCTAssertTrue(summary.contains("[button=4"), summary)
+        XCTAssertTrue(summary.hasSuffix("enabled=true"), summary)
+    }
+
+    @MainActor
+    func testMouseShortcutTapCoversPrimaryAndOneShotMouseButtons() {
+        let keyboardOnly = HotkeyShortcut(keyCode: 61, modifierFlags: [], modifierKeyCodes: [61])
+        XCTAssertEqual(GlobalHotkeyManager.mouseButtons(primary: [keyboardOnly], oneShot: [nil, nil]), [])
+
+        let buttons = GlobalHotkeyManager.mouseButtons(
+            primary: [keyboardOnly, HotkeyShortcut(mouseButton: 2, modifierFlags: [])],
+            oneShot: [
+                HotkeyShortcut(mouseButton: 3, modifierFlags: [.command]),
+                HotkeyShortcut(mouseButton: 4, modifierFlags: []),
+            ]
+        )
+        XCTAssertEqual(buttons, [2, 3, 4], "Reprocess and paste-last mouse buttons must reach the filtering tap")
+
+        let reprocessOnly = GlobalHotkeyManager.mouseButtons(
+            primary: [keyboardOnly],
+            oneShot: [nil, HotkeyShortcut(mouseButton: 0, modifierFlags: [.option])]
+        )
+        XCTAssertEqual(reprocessOnly, [0])
+        XCTAssertNotEqual(
+            GlobalHotkeyManager.mouseShortcutEventMask(mouseButtons: reprocessOnly)
+                & (CGEventMask(1) << CGEventType.leftMouseUp.rawValue),
+            0,
+            "The paired mouse-up must reach the tap so it can be swallowed"
+        )
+    }
+
+    func testKeyboardEventMaskExcludesMouseEvents() {
+        let mask = GlobalHotkeyManager.keyboardEventMask()
+        for type in [CGEventType.keyDown, .keyUp, .flagsChanged] {
+            XCTAssertNotEqual(mask & (CGEventMask(1) << type.rawValue), 0, "keyboard mask must include \(type)")
+        }
+        for type in [CGEventType.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp] {
+            XCTAssertEqual(mask & (CGEventMask(1) << type.rawValue), 0, "keyboard mask must not include \(type)")
+        }
+    }
+
+    func testMouseObserverMaskCoversOnlyMouseDowns() {
+        let mask = GlobalHotkeyManager.mouseObserverEventMask()
+        for type in [CGEventType.leftMouseDown, .rightMouseDown, .otherMouseDown] {
+            XCTAssertNotEqual(mask & (CGEventMask(1) << type.rawValue), 0, "observer mask must include \(type)")
+        }
+        for type in [CGEventType.leftMouseUp, .rightMouseUp, .otherMouseUp, .keyDown, .keyUp, .flagsChanged] {
+            XCTAssertEqual(mask & (CGEventMask(1) << type.rawValue), 0, "observer mask must not include \(type)")
+        }
+    }
+
+    func testMouseShortcutMaskMatchesConfiguredButtons() {
+        XCTAssertEqual(GlobalHotkeyManager.mouseShortcutEventMask(mouseButtons: []), 0)
+
+        let leftOnly = GlobalHotkeyManager.mouseShortcutEventMask(mouseButtons: [0])
+        for type in [CGEventType.leftMouseDown, .leftMouseUp] {
+            XCTAssertNotEqual(leftOnly & (CGEventMask(1) << type.rawValue), 0)
+        }
+        for type in [CGEventType.rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp, .keyDown, .flagsChanged] {
+            XCTAssertEqual(leftOnly & (CGEventMask(1) << type.rawValue), 0, "left-only mask must not include \(type)")
+        }
+
+        let sideButton = GlobalHotkeyManager.mouseShortcutEventMask(mouseButtons: [3])
+        for type in [CGEventType.otherMouseDown, .otherMouseUp] {
+            XCTAssertNotEqual(sideButton & (CGEventMask(1) << type.rawValue), 0)
+        }
+        for type in [CGEventType.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp] {
+            XCTAssertEqual(sideButton & (CGEventMask(1) << type.rawValue), 0, "side-button mask must not include \(type)")
+        }
+    }
+
+    func testModifierOnlyShortcutIgnoresTapAfterMouseClick() {
+        let replay = ModifierOnlyFlagsReplay(
+            shortcut: HotkeyShortcut(keyCode: 58, modifierFlags: .option, modifierKeyCodes: [58])
+        )
+
+        replay.flagsChanged(keyCode: 58, modifiers: .option, nextPressed: [58])
+        XCTAssertEqual(replay.activeModifierOnlyType, .transcription)
+
+        replay.mouseDown()
+        replay.flagsChanged(keyCode: 58, modifiers: [], nextPressed: [])
+
+        XCTAssertEqual(replay.cleanFinishCount, 0, "Option+click must not read as an Option tap")
+        XCTAssertNil(replay.activeModifierOnlyType)
+    }
+
     func testHotkeySessionLockDetection() {
         XCTAssertTrue(GlobalHotkeyManager.sessionIsLocked(sessionInfo: ["CGSSessionScreenIsLocked": true]))
         XCTAssertFalse(GlobalHotkeyManager.sessionIsLocked(sessionInfo: ["CGSSessionScreenIsLocked": false]))
@@ -1920,5 +2053,10 @@ private final class ModifierOnlyFlagsReplay {
         if self.activeModifierOnlyType != nil {
             self.otherKeyPressedDuringModifier = true
         }
+    }
+
+    /// Same mark as keyDown; the mouse observer tap calls markOtherInputDuringModifierOnly too.
+    func mouseDown() {
+        self.keyDown()
     }
 }

@@ -151,6 +151,13 @@ final class HotkeyShortcutTests: XCTestCase {
         XCTAssertNil(replay.activeModifierOnlyType)
     }
 
+    func testMicrophoneChangeAlertsSupportProductionAndDebugAppsOnly() {
+        XCTAssertTrue(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.FluidApp.app"))
+        XCTAssertTrue(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.FluidApp.app.dev"))
+        XCTAssertFalse(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.example.tests"))
+        XCTAssertFalse(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: nil))
+    }
+
     func testHotkeySessionLockDetection() {
         XCTAssertTrue(GlobalHotkeyManager.sessionIsLocked(sessionInfo: ["CGSSessionScreenIsLocked": true]))
         XCTAssertFalse(GlobalHotkeyManager.sessionIsLocked(sessionInfo: ["CGSSessionScreenIsLocked": false]))

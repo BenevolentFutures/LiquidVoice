@@ -661,6 +661,7 @@ final class GlobalHotkeyManager: NSObject {
 
     @discardableResult
     private func setupGlobalHotkey() -> Bool {
+        self.finishInterruptedMouseShortcutPress(reason: "hotkey tap reinitialized")
         self.cleanupEventTap()
 
         if !AXIsProcessTrusted() {
@@ -908,6 +909,7 @@ final class GlobalHotkeyManager: NSObject {
 
     // Filter tap, created only for the button families that have a shortcut.
     private func setupMouseShortcutTap(mouseButtons: Set<Int>) {
+        self.finishInterruptedMouseShortcutPress(reason: "mouse shortcut tap rebuilt")
         self.cleanupMouseShortcutTap()
 
         let mask = Self.mouseShortcutEventMask(mouseButtons: mouseButtons)
@@ -996,7 +998,7 @@ final class GlobalHotkeyManager: NSObject {
 
     private func handleMouseShortcutEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            self.clearPrimaryShortcutPressState(mouseOnly: true)
+            self.finishInterruptedMouseShortcutPress(reason: "mouse shortcut tap disabled")
             self.reenableMouseTap(self.mouseShortcutTap, label: "Mouse shortcut") {
                 self.setupMouseShortcutTap(mouseButtons: self.configuredMouseButtons())
             }
@@ -1082,6 +1084,18 @@ final class GlobalHotkeyManager: NSObject {
             self.state.activePrimaryShortcutPress = press
             return true
         }
+    }
+
+    private func finishInterruptedMouseShortcutPress(reason: String) {
+        guard case let .mouse(mouseButton)? = self.activePrimaryShortcutPress,
+              self.finishPrimaryShortcutPress(.mouse(mouseButton))
+        else { return }
+
+        DebugLogger.shared.warning(
+            "Finishing active mouse shortcut press before \(reason)",
+            source: "GlobalHotkeyManager"
+        )
+        self.handlePrimaryDictationTriggerUp()
     }
 
     private func finishPrimaryShortcutPress(_ press: ActivePrimaryShortcutPress) -> Bool {
@@ -2146,7 +2160,7 @@ final class GlobalHotkeyManager: NSObject {
         }
 
         if self.primaryShortcuts.contains(where: { $0.matchesMouse(button: mouseButton, modifiers: eventModifiers) }) {
-            guard self.beginPrimaryShortcutPress(.mouse(mouseButton)) else { return true }
+            guard self.beginPrimaryShortcutPress(.mouse(mouseButton)) else { return false }
             self.handlePrimaryDictationTriggerDown()
             return true
         }

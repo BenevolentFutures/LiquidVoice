@@ -668,6 +668,18 @@ final nonisolated class DirectCoreAudioLifecycleController: @unchecked Sendable 
         qos: .userInitiated
     )
     private let snapshotLock = NSLock()
+    private let abandonLock = NSLock()
+    private var abandonRequestedAt: TimeInterval?
+
+    #if DEBUG
+    /// Debug-only knob: sleeps on the lifecycle queue right before
+    /// `AudioDeviceStart` to reproduce a HAL start that blocks (observed
+    /// 2026-09-11 after a reboot: every start hung ~14s and ended in
+    /// `io_stopped_abnormally`). Off unless the defaults key is set to a
+    /// positive number of seconds. Compiled out of Release builds entirely so a
+    /// stray preference can never stall a shipped app.
+    static let debugStartDelayDefaultsKey = "DirectCaptureDebugStartDelaySeconds"
+    #endif
     private let stoppedHardwareLock = NSLock()
     private var stoppedHardwareGenerations: Set<UInt64> = []
     private var storedSnapshot = Snapshot(
@@ -879,7 +891,31 @@ final nonisolated class DirectCoreAudioLifecycleController: @unchecked Sendable 
                             "\(Self.elapsedMilliseconds(since: validationStartedAt))",
                         level: .info
                     )
+                    #if DEBUG
+                    let debugStartDelay = UserDefaults.standard.double(
+                        forKey: Self.debugStartDelayDefaultsKey
+                    )
+                    if debugStartDelay > 0 {
+                        Self.log(
+                            "Direct capture DEBUG start delay \(debugStartDelay)s generation=\(self.generation)",
+                            level: .warning
+                        )
+                        Thread.sleep(forTimeInterval: debugStartDelay)
+                    }
+                    #endif
                     try validatedInput.start()
+                    if Self.startWasAbandoned(
+                        startBeganAt: validationStartedAt,
+                        abandonRequestedAt: self.abandonRequestTime()
+                    ) {
+                        // The packet gate is still closed here, so no sample
+                        // from this input ever reached the pipeline.
+                        throw Self.error(
+                            "Direct Core Audio start returned after " +
+                                "\(Self.elapsedMilliseconds(since: startStartedAt))ms " +
+                                "but was abandoned; the caller already fell back to AVAudioEngine."
+                        )
+                    }
                     let fingerprintAfterStart = try self.fingerprintReader(deviceID)
                     guard fingerprintAfterStart == validatedInput.formatFingerprint,
                           validatedInput.openPacketGateIfClean()
@@ -983,6 +1019,35 @@ final nonisolated class DirectCoreAudioLifecycleController: @unchecked Sendable 
                 continuation.resume()
             }
         }
+    }
+
+    /// Marks any start that is currently blocked inside Core Audio as abandoned.
+    /// Safe to call from any thread while the lifecycle queue is stuck: the
+    /// blocked `start` checks this the moment `AudioDeviceStart` returns and
+    /// tears the capture down instead of publishing a running input the caller
+    /// has already replaced with AVAudioEngine.
+    func abandonPendingStart(reason: String) {
+        let now = ProcessInfo.processInfo.systemUptime
+        self.abandonLock.lock()
+        self.abandonRequestedAt = now
+        self.abandonLock.unlock()
+        Self.log("Direct capture pending start abandoned reason=\(reason)", level: .warning)
+    }
+
+    private func abandonRequestTime() -> TimeInterval? {
+        self.abandonLock.lock()
+        defer { self.abandonLock.unlock() }
+        return self.abandonRequestedAt
+    }
+
+    /// A start is abandoned when the abandon request arrived after that start's
+    /// lifecycle block began. Older requests belong to earlier starts.
+    static func startWasAbandoned(
+        startBeganAt: TimeInterval,
+        abandonRequestedAt: TimeInterval?
+    ) -> Bool {
+        guard let abandonRequestedAt else { return false }
+        return abandonRequestedAt >= startBeganAt
     }
 
     func shutdown(reason: String) async {

@@ -202,6 +202,13 @@ final class ASRService: ObservableObject {
 
     private let audioCaptureReadinessGate = AudioCaptureReadinessGate()
     private let firstPCMTimeoutNanoseconds: UInt64 = 2_000_000_000
+    /// A direct Core Audio start step that blocks longer than this is abandoned
+    /// and the session falls back to AVAudioEngine for its capture. Observed
+    /// 2026-09-11: after a reboot every AudioDeviceStart on the built-in
+    /// microphone hung ~14s and ended in io_stopped_abnormally, while an
+    /// AVFoundation capture started instantly. A healthy start takes ~30ms.
+    private let directCaptureStartDeadlineNanoseconds: UInt64 = 1_500_000_000
+    private let directCaptureBluetoothStartDeadlineNanoseconds: UInt64 = 3_000_000_000
     private var audioCaptureStartGeneration: UInt64 = 0
     private var audioCaptureAttemptID: UInt64 = 0
     private var isTerminating = false
@@ -990,10 +997,13 @@ final class ASRService: ObservableObject {
                 self.audioStartAttemptInputName = attemptIdentity.name
                 self.audioStartAttemptIsBluetooth = attemptIdentity.isBluetooth
                 self.audioStartAttemptIsInternalMicrophone = attemptIdentity.isInternalMicrophone
-                let device = try await self.directAudioLifecycleController.resolveDevice(
-                    selection: selection,
-                    reason: "recording_start"
-                )
+                let controller = self.directAudioLifecycleController
+                let device = try await self.raceDirectCaptureStep("resolve_device") {
+                    try await controller.resolveDevice(
+                        selection: selection,
+                        reason: "recording_start"
+                    )
+                }
                 self.audioStartAttemptInputUID = device.uid
                 self.audioStartAttemptInputName = device.name
                 self.audioStartAttemptIsBluetooth = device.isBluetooth
@@ -1002,11 +1012,13 @@ final class ASRService: ObservableObject {
                     uid: device.uid,
                     name: device.name
                 )
-                let snapshot = try await self.directAudioLifecycleController.start(
-                    deviceID: device.id,
-                    deviceName: device.name,
-                    reason: "recording_start"
-                )
+                let snapshot = try await self.raceDirectCaptureStep("start") {
+                    try await controller.start(
+                        deviceID: device.id,
+                        deviceName: device.name,
+                        reason: "recording_start"
+                    )
+                }
                 try Task.checkCancellation()
                 self.activeAudioCaptureBackend = .directCoreAudio
                 let callbackDurationMilliseconds =
@@ -1020,23 +1032,78 @@ final class ASRService: ObservableObject {
                 )
                 return
             } catch {
-                await self.directAudioLifecycleController.invalidate(reason: "recording_start_failed")
+                if error is CancellationError {
+                    await self.directAudioLifecycleController.invalidate(reason: "recording_start_cancelled")
+                    throw error
+                }
+                let timedOut = error is DeadlineRace.TimedOut
+                if timedOut {
+                    // The lifecycle queue is still blocked inside Core Audio.
+                    // Do not await it; mark the blocked start so it tears itself
+                    // down when the HAL finally returns.
+                    self.directAudioLifecycleController.abandonPendingStart(
+                        reason: "recording_start_deadline"
+                    )
+                } else {
+                    await self.directAudioLifecycleController.invalidate(reason: "recording_start_failed")
+                }
                 DebugLogger.shared.error(
-                    "Direct Core Audio capture failed: \(error.localizedDescription)",
+                    "Direct Core Audio capture failed: \(error.localizedDescription) " +
+                        "— falling back to AVAudioEngine for this session",
                     source: "ASRService"
                 )
-                throw error
+                self.benchmarkLog(
+                    "audio_backend_fallback from=direct_core_audio to=av_audio_engine " +
+                        "timedOut=\(timedOut) error=\(error.localizedDescription)"
+                )
+                do {
+                    try await self.startAVAudioEngineCapture(reason: "direct_core_audio_failed")
+                } catch let engineError {
+                    DebugLogger.shared.error(
+                        "AVAudioEngine fallback failed as well: \(engineError.localizedDescription)",
+                        source: "ASRService"
+                    )
+                    throw engineError
+                }
+                return
             }
         }
 
         await self.directAudioLifecycleController.invalidate(reason: "av_audio_engine_selected")
 
-        try await self.startAVAudioEngineCapture()
+        try await self.startAVAudioEngineCapture(reason: "faster_recording_start_disabled")
     }
 
-    private func startAVAudioEngineCapture() async throws {
+    /// Runs one step of the direct Core Audio start under a deadline. Core Audio
+    /// can block `AudioDeviceStart` for ~14s when the HAL is wedged; the caller
+    /// must not wait that long with the hotkey apparently dead.
+    private func raceDirectCaptureStep<T>(
+        _ step: String,
+        _ operation: @escaping () async throws -> T
+    ) async throws -> T {
+        let deadline = self.audioStartAttemptIsBluetooth
+            ? self.directCaptureBluetoothStartDeadlineNanoseconds
+            : self.directCaptureStartDeadlineNanoseconds
+        return try await DeadlineRace.run(
+            deadlineNanoseconds: deadline,
+            operation: operation
+        ) { result in
+            let outcome: String
+            switch result {
+            case .success: outcome = "succeeded"
+            case let .failure(error): outcome = "failed: \(error.localizedDescription)"
+            }
+            DebugLogger.shared.warning(
+                "Direct capture \(step) returned after its \(deadline / 1_000_000)ms deadline " +
+                    "and \(outcome)",
+                source: "ASRService"
+            )
+        }
+    }
+
+    private func startAVAudioEngineCapture(reason: String) async throws {
         await self.audioEngineRetirementDrain.waitForScheduledReleases()
-        self.benchmarkLog("audio_backend kind=av_audio_engine reason=faster_recording_start_disabled")
+        self.benchmarkLog("audio_backend kind=av_audio_engine reason=\(reason)")
         try self.configureSession()
         try await self.startEngine()
         try self.setupEngineTap()
@@ -2776,10 +2843,12 @@ final class ASRService: ObservableObject {
         _ = engine.inputNode
         DebugLogger.shared.debug("Input node instantiated", source: "ASRService")
 
-        // Force output node instantiation for output device binding
-        DebugLogger.shared.debug("📍 Forcing output node instantiation...", source: "ASRService")
-        _ = engine.outputNode
-        DebugLogger.shared.debug("✅ Output node instantiated", source: "ASRService")
+        // Do NOT instantiate `engine.outputNode`. This engine only captures.
+        // Once both nodes exist, macOS backs the engine with a default-device
+        // aggregate; binding the input AUHAL to a specific device then fails
+        // with kAudioUnitErr_InvalidPropertyValue (-10851) and the input format
+        // stays 0Hz/0ch for the life of the engine (reproduced on macOS 26.6,
+        // 2026-09-11). An input-only engine binds and captures normally.
 
         // NOTE: Device binding occurs in startEngine() BEFORE engine.prepare()
         // Per CoreAudio docs, device must be set before AudioUnit initialization (prepare)
@@ -3636,6 +3705,22 @@ final class ASRService: ObservableObject {
             self.benchmarkLog(
                 "direct_format_invalidation_ignored staleGeneration=\(invalidation.generation) " +
                     "currentGeneration=\(captureSnapshot.generation) property=\(invalidation.reason)"
+            )
+            return
+        }
+        guard self.activeAudioCaptureBackend != .audioEngine else {
+            // This session already fell back to AVAudioEngine (typically after
+            // an abandoned direct start). The direct input's late failure must
+            // not disable recording or trigger route recovery on a healthy
+            // engine capture; the engine has its own device monitoring.
+            self.benchmarkLog(
+                "direct_format_invalidation_ignored reason=av_audio_engine_active " +
+                    "generation=\(invalidation.generation) property=\(invalidation.reason)"
+            )
+            DebugLogger.shared.info(
+                "Direct capture invalidation (\(invalidation.reason)) ignored while " +
+                    "AVAudioEngine owns the session",
+                source: "ASRService"
             )
             return
         }

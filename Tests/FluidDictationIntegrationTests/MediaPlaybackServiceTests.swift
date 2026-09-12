@@ -1,4 +1,4 @@
-@testable import FluidVoice_Debug
+@testable import Liquid_Voice_Debug
 import Foundation
 #if arch(arm64)
 import MediaRemoteAdapter

@@ -1,4 +1,4 @@
-@testable import FluidVoice_Debug
+@testable import Liquid_Voice_Debug
 import XCTest
 
 // Regression tests for `LLMClient.stripThinkingTags`.

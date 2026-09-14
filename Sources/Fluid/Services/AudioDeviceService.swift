@@ -138,6 +138,10 @@ nonisolated enum AudioDevice {
         for devId in deviceIDs {
             let name = self.getStringProperty(devId, selector: kAudioObjectPropertyName, scope: kAudioObjectPropertyScopeGlobal) ?? "Unknown"
             let uid = self.getStringProperty(devId, selector: kAudioDevicePropertyDeviceUID, scope: kAudioObjectPropertyScopeGlobal) ?? ""
+            // A process-private aggregate that AVAudioEngine builds around the
+            // default device. It is not a microphone, dies with its process, and
+            // once selected it silently routes back to the default input.
+            guard self.isPrivateDefaultDeviceAggregate(uid: uid, name: name) == false else { continue }
             let hasIn = self.hasChannels(devId, scope: kAudioObjectPropertyScopeInput)
             let hasOut = self.hasChannels(devId, scope: kAudioObjectPropertyScopeOutput)
             let transportType = self.getUInt32Property(
@@ -171,6 +175,11 @@ nonisolated enum AudioDevice {
 
     static func listInputDevices() -> [Device] {
         return self.listAllDevices().filter { $0.hasInput }
+    }
+
+    static func isPrivateDefaultDeviceAggregate(uid: String, name: String) -> Bool {
+        let prefix = "CADefaultDeviceAggregate-"
+        return uid.hasPrefix(prefix) || name.hasPrefix(prefix)
     }
 
     /// Refreshes the HAL liveness snapshot. Call only from an existing background

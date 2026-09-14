@@ -1906,7 +1906,9 @@ final class SettingsStore: ObservableObject {
     }
 
     func reconcileMicrophonePriority(with devices: [AudioDevice.Device]) {
-        var entries = self.microphonePriority
+        var entries = self.microphonePriority.filter {
+            AudioDevice.isPrivateDefaultDeviceAggregate(uid: $0.uid, name: $0.name) == false
+        }
         let preferredUID = self.preferredInputDeviceUID
         let connectedUIDs = Set(devices.map(\.uid))
         var suppressedUIDs = self.suppressedMicrophoneUIDs

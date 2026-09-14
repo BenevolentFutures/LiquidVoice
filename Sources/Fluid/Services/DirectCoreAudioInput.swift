@@ -679,6 +679,9 @@ final nonisolated class DirectCoreAudioLifecycleController: @unchecked Sendable 
     /// positive number of seconds. Compiled out of Release builds entirely so a
     /// stray preference can never stall a shipped app.
     static let debugStartDelayDefaultsKey = "DirectCaptureDebugStartDelaySeconds"
+    /// When set, the debug delay applies only to the device with this name, so a
+    /// single wedged input next to healthy ones can be reproduced.
+    static let debugStartDelayDeviceNameDefaultsKey = "DirectCaptureDebugStartDelayDeviceName"
     #endif
     private let stoppedHardwareLock = NSLock()
     private var stoppedHardwareGenerations: Set<UInt64> = []
@@ -895,7 +898,12 @@ final nonisolated class DirectCoreAudioLifecycleController: @unchecked Sendable 
                     let debugStartDelay = UserDefaults.standard.double(
                         forKey: Self.debugStartDelayDefaultsKey
                     )
-                    if debugStartDelay > 0 {
+                    let debugDelayDeviceName = UserDefaults.standard.string(
+                        forKey: Self.debugStartDelayDeviceNameDefaultsKey
+                    )
+                    if debugStartDelay > 0,
+                       debugDelayDeviceName == nil || debugDelayDeviceName == deviceName
+                    {
                         Self.log(
                             "Direct capture DEBUG start delay \(debugStartDelay)s generation=\(self.generation)",
                             level: .warning

@@ -203,12 +203,22 @@ final class ASRService: ObservableObject {
     private let audioCaptureReadinessGate = AudioCaptureReadinessGate()
     private let firstPCMTimeoutNanoseconds: UInt64 = 2_000_000_000
     /// A direct Core Audio start step that blocks longer than this is abandoned
-    /// and the session falls back to AVAudioEngine for its capture. Observed
-    /// 2026-09-11: after a reboot every AudioDeviceStart on the built-in
-    /// microphone hung ~14s and ended in io_stopped_abnormally, while an
-    /// AVFoundation capture started instantly. A healthy start takes ~30ms.
+    /// and its input is quarantined as wedged. Observed 2026-09-11 and
+    /// 2026-09-14: after a reboot the built-in microphone's HAL IO thread failed
+    /// to start (coreaudiod `StartIOThread ... Error: 0x3C`, every ~14s), and
+    /// AudioDeviceStart blocked for 180s. A healthy start takes ~30ms.
     private let directCaptureStartDeadlineNanoseconds: UInt64 = 1_500_000_000
     private let directCaptureBluetoothStartDeadlineNanoseconds: UInt64 = 3_000_000_000
+    /// Upper bound on a wedged-input quarantine when the blocked HAL call never
+    /// returns, so the input is eventually tried again.
+    private let wedgedInputQuarantineCeilingSeconds: TimeInterval = 300
+    /// Inputs whose direct start blocked inside Core Audio, keyed by UID, with
+    /// the uptime the quarantine began. Excluded from capture selection until
+    /// the blocked call returns or the ceiling passes.
+    private var wedgedDirectInputs: [String: TimeInterval] = [:]
+    /// Identifies the current direct lifecycle controller. A controller wedged
+    /// inside Core Audio is replaced; its late callbacks carry an older token.
+    private var directAudioLifecycleControllerToken: UInt64 = 0
     private var audioCaptureStartGeneration: UInt64 = 0
     private var audioCaptureAttemptID: UInt64 = 0
     private var isTerminating = false
@@ -694,7 +704,12 @@ final class ASRService: ObservableObject {
         let reconcilesInputSelection: Bool
     }
 
-    private lazy var directAudioLifecycleController: DirectCoreAudioLifecycleController = {
+    private lazy var directAudioLifecycleController: DirectCoreAudioLifecycleController =
+        self.makeDirectAudioLifecycleController()
+
+    private func makeDirectAudioLifecycleController() -> DirectCoreAudioLifecycleController {
+        self.directAudioLifecycleControllerToken &+= 1
+        let token = self.directAudioLifecycleControllerToken
         let pipeline = self.audioCapturePipeline
         return DirectCoreAudioLifecycleController(
             packetHandler: { samples, frameCount, sampleRate, inputHostTime, inputSampleTime in
@@ -708,11 +723,70 @@ final class ASRService: ObservableObject {
             },
             onFormatInvalidated: { [weak self] invalidation in
                 Task { @MainActor [weak self] in
-                    await self?.handleDirectCaptureFormatInvalidation(invalidation)
+                    guard let self else { return }
+                    guard token == self.directAudioLifecycleControllerToken else {
+                        // A replaced (wedged) controller keeps reporting
+                        // io_stopped_abnormally while its HAL call is stuck. It
+                        // must not drive route recovery for the live capture.
+                        self.benchmarkLog(
+                            "direct_format_invalidation_ignored reason=retired_controller " +
+                                "generation=\(invalidation.generation) property=\(invalidation.reason)"
+                        )
+                        return
+                    }
+                    await self.handleDirectCaptureFormatInvalidation(invalidation)
                 }
             }
         )
-    }()
+    }
+
+    /// Error thrown when a direct start blocked inside Core Audio past its
+    /// deadline. The input is quarantined and the start loop moves on.
+    private struct DirectCaptureInputWedged: LocalizedError {
+        let inputUID: String?
+        let inputName: String?
+        var errorDescription: String? {
+            "Microphone '\(self.inputName ?? "unknown")' did not start within its deadline."
+        }
+    }
+
+    /// Quarantines the input whose start is stuck inside Core Audio and
+    /// replaces the lifecycle controller, whose serial queue stays blocked until
+    /// the HAL returns (up to minutes). The old controller tears its abandoned
+    /// start down on its own queue when that happens.
+    private func retireWedgedDirectController(inputUID: String?, inputName: String?) {
+        let wedgedController = self.directAudioLifecycleController
+        wedgedController.abandonPendingStart(reason: "recording_start_deadline")
+        if let inputUID {
+            self.wedgedDirectInputs[inputUID] = ProcessInfo.processInfo.systemUptime
+        }
+        self.directAudioLifecycleController = self.makeDirectAudioLifecycleController()
+        self.benchmarkLog(
+            "direct_input_quarantined uid=\(inputUID ?? "nil") name='\(inputName ?? "nil")' " +
+                "controllerToken=\(self.directAudioLifecycleControllerToken)"
+        )
+        DebugLogger.shared.warning(
+            "Microphone '\(inputName ?? "unknown")' is stuck inside Core Audio; quarantined " +
+                "until its blocked start returns. Using a fresh audio controller.",
+            source: "ASRService"
+        )
+    }
+
+    private func releaseWedgedDirectInput(uid: String, reason: String) {
+        guard self.wedgedDirectInputs.removeValue(forKey: uid) != nil else { return }
+        self.benchmarkLog("direct_input_quarantine_released uid=\(uid) reason=\(reason)")
+    }
+
+    /// UIDs currently quarantined, expiring any past the ceiling.
+    private func currentlyWedgedDirectInputUIDs() -> Set<String> {
+        let now = ProcessInfo.processInfo.systemUptime
+        for (uid, since) in self.wedgedDirectInputs
+            where now - since > self.wedgedInputQuarantineCeilingSeconds
+        {
+            self.releaseWedgedDirectInput(uid: uid, reason: "ceiling")
+        }
+        return Set(self.wedgedDirectInputs.keys)
+    }
 
     private var activeAudioCaptureBackend: AudioCaptureBackend = .none
     private var audioStartAttemptInputUID: String?
@@ -962,28 +1036,47 @@ final class ASRService: ObservableObject {
                 }.value
                 let allDevices = deviceSnapshot.allDevices
                 let availableInputs = allDevices.filter(\.hasInput)
+                let wedgedInputUIDs = self.currentlyWedgedDirectInputUIDs()
+                let selectionExclusions = excludedInputUIDs.union(wedgedInputUIDs)
                 let selectedInput: AudioDevice.Device?
-                if let forcingInputUID {
+                if let forcingInputUID, wedgedInputUIDs.contains(forcingInputUID) == false {
                     selectedInput = availableInputs.first { $0.uid == forcingInputUID }
                 } else {
                     let resolvedInput = self.resolvedInputDeviceForCapture(
                         availableInputs: availableInputs,
                         defaultInputUID: deviceSnapshot.defaultInputUID,
-                        excluding: excludedInputUIDs
+                        excluding: selectionExclusions
                     )
                     selectedInput = AudioCaptureIdlePolicy.bluetoothInputAwaitingAvailability(
                         priorityInputUIDs: SettingsStore.shared.microphonePriority.map(\.uid),
                         preferredInputUID: SettingsStore.shared.preferredInputDeviceUID,
                         resolvedInputUID: resolvedInput?.uid,
                         allDevices: allDevices,
-                        excluding: excludedInputUIDs
+                        excluding: selectionExclusions
                     ) ?? resolvedInput
                 }
-                guard let attemptIdentity = AudioCaptureIdlePolicy.CaptureAttemptIdentity.resolve(
-                    selectedInput: selectedInput,
-                    forcingInputUID: forcingInputUID,
-                    previous: previousAttemptIdentity
-                ) else {
+                let attemptIdentity = selectedInput == nil && wedgedInputUIDs.isEmpty == false
+                    ? nil
+                    : AudioCaptureIdlePolicy.CaptureAttemptIdentity.resolve(
+                        selectedInput: selectedInput,
+                        forcingInputUID: forcingInputUID,
+                        previous: previousAttemptIdentity
+                    )
+                guard let attemptIdentity else {
+                    if wedgedInputUIDs.isEmpty == false {
+                        let wedgedNames = availableInputs
+                            .filter { wedgedInputUIDs.contains($0.uid) }
+                            .map(\.name)
+                        throw NSError(
+                            domain: "ASRService",
+                            code: -5,
+                            userInfo: [
+                                NSLocalizedDescriptionKey:
+                                    "Microphone not responding: \(wedgedNames.joined(separator: ", "))",
+                                "wedgedInputNames": wedgedNames,
+                            ]
+                        )
+                    }
                     throw NSError(
                         domain: "ASRService",
                         code: -4,
@@ -998,7 +1091,11 @@ final class ASRService: ObservableObject {
                 self.audioStartAttemptIsBluetooth = attemptIdentity.isBluetooth
                 self.audioStartAttemptIsInternalMicrophone = attemptIdentity.isInternalMicrophone
                 let controller = self.directAudioLifecycleController
-                let device = try await self.raceDirectCaptureStep("resolve_device") {
+                let attemptUID = attemptIdentity.uid
+                let device = try await self.raceDirectCaptureStep(
+                    "resolve_device",
+                    inputUID: attemptUID
+                ) {
                     try await controller.resolveDevice(
                         selection: selection,
                         reason: "recording_start"
@@ -1012,7 +1109,7 @@ final class ASRService: ObservableObject {
                     uid: device.uid,
                     name: device.name
                 )
-                let snapshot = try await self.raceDirectCaptureStep("start") {
+                let snapshot = try await self.raceDirectCaptureStep("start", inputUID: device.uid) {
                     try await controller.start(
                         deviceID: device.id,
                         deviceName: device.name,
@@ -1036,17 +1133,27 @@ final class ASRService: ObservableObject {
                     await self.directAudioLifecycleController.invalidate(reason: "recording_start_cancelled")
                     throw error
                 }
-                let timedOut = error is DeadlineRace.TimedOut
-                if timedOut {
-                    // The lifecycle queue is still blocked inside Core Audio.
-                    // Do not await it; mark the blocked start so it tears itself
-                    // down when the HAL finally returns.
-                    self.directAudioLifecycleController.abandonPendingStart(
-                        reason: "recording_start_deadline"
+                if error is DeadlineRace.TimedOut {
+                    // The lifecycle queue is still blocked inside Core Audio, and
+                    // so is this input for every backend: an AVAudioEngine
+                    // fallback on the same microphone blocked the main thread
+                    // for 12s (killing the hotkey event tap) and then failed
+                    // too. Quarantine the input and let the start loop move to
+                    // the next microphone on a fresh controller.
+                    self.benchmarkLog(
+                        "audio_backend_wedged uid=\(self.audioStartAttemptInputUID ?? "nil") " +
+                            "error=\(error.localizedDescription)"
                     )
-                } else {
-                    await self.directAudioLifecycleController.invalidate(reason: "recording_start_failed")
+                    self.retireWedgedDirectController(
+                        inputUID: self.audioStartAttemptInputUID,
+                        inputName: self.audioStartAttemptInputName
+                    )
+                    throw DirectCaptureInputWedged(
+                        inputUID: self.audioStartAttemptInputUID,
+                        inputName: self.audioStartAttemptInputName
+                    )
                 }
+                await self.directAudioLifecycleController.invalidate(reason: "recording_start_failed")
                 DebugLogger.shared.error(
                     "Direct Core Audio capture failed: \(error.localizedDescription) " +
                         "— falling back to AVAudioEngine for this session",
@@ -1054,7 +1161,7 @@ final class ASRService: ObservableObject {
                 )
                 self.benchmarkLog(
                     "audio_backend_fallback from=direct_core_audio to=av_audio_engine " +
-                        "timedOut=\(timedOut) error=\(error.localizedDescription)"
+                        "error=\(error.localizedDescription)"
                 )
                 do {
                     try await self.startAVAudioEngineCapture(reason: "direct_core_audio_failed")
@@ -1075,10 +1182,12 @@ final class ASRService: ObservableObject {
     }
 
     /// Runs one step of the direct Core Audio start under a deadline. Core Audio
-    /// can block `AudioDeviceStart` for ~14s when the HAL is wedged; the caller
-    /// must not wait that long with the hotkey apparently dead.
+    /// can block `AudioDeviceStart` for minutes when the HAL is wedged; the
+    /// caller must not wait that long with the hotkey apparently dead. A late
+    /// return releases the input's quarantine.
     private func raceDirectCaptureStep<T>(
         _ step: String,
+        inputUID: String,
         _ operation: @escaping () async throws -> T
     ) async throws -> T {
         let deadline = self.audioStartAttemptIsBluetooth
@@ -1087,7 +1196,7 @@ final class ASRService: ObservableObject {
         return try await DeadlineRace.run(
             deadlineNanoseconds: deadline,
             operation: operation
-        ) { result in
+        ) { [weak self] result in
             let outcome: String
             switch result {
             case .success: outcome = "succeeded"
@@ -1098,6 +1207,10 @@ final class ASRService: ObservableObject {
                     "and \(outcome)",
                 source: "ASRService"
             )
+            // The HAL let go of the input; it is worth trying again.
+            Task { @MainActor [weak self] in
+                self?.releaseWedgedDirectInput(uid: inputUID, reason: "late_return_\(step)")
+            }
         }
     }
 
@@ -1874,6 +1987,30 @@ final class ASRService: ObservableObject {
                         excluding: failedInputUIDs,
                         forcingInputUID: forcedInputUID
                     )
+                } catch let wedged as DirectCaptureInputWedged {
+                    // The input is quarantined; move straight to the next
+                    // microphone. Waiting for topology quiet or retrying the same
+                    // input would only re-enter the stuck HAL call.
+                    if let wedgedUID = wedged.inputUID {
+                        failedInputUIDs.insert(wedgedUID)
+                    }
+                    forcedInputUID = nil
+                    fallbackAttempt += 1
+                    guard fallbackAttempt <= maximumStartAttempts,
+                          startGeneration == self.audioCaptureStartGeneration,
+                          self.isTerminating == false
+                    else {
+                        throw wedged
+                    }
+                    readinessAttemptID = try await self.prepareAudioCaptureStartRetry(
+                        sessionID: captureSessionID,
+                        startGeneration: startGeneration,
+                        completedAttempt: startAttempt,
+                        reason: "input_wedged",
+                        waitForTopologyQuiet: false
+                    )
+                    startAttempt += 1
+                    continue
                 } catch {
                     guard let failedUID = self.audioStartAttemptInputUID else { throw error }
                     let now = ProcessInfo.processInfo.systemUptime
@@ -2131,8 +2268,18 @@ final class ASRService: ObservableObject {
             // Provide user-friendly error feedback
             let nsError = error as NSError
             let noUsableMicrophone = nsError.domain == "ASRService" && nsError.code == -4
+            let microphoneNotResponding =
+                error is DirectCaptureInputWedged ||
+                (nsError.domain == "ASRService" && nsError.code == -5)
             let errorMessage: String
-            if nsError.domain == "ASRService" {
+            if microphoneNotResponding {
+                let names = (nsError.userInfo["wedgedInputNames"] as? [String])
+                    ?? [(error as? DirectCaptureInputWedged)?.inputName].compactMap { $0 }
+                let subject = names.isEmpty ? "The microphone" : names.joined(separator: ", ")
+                errorMessage = "\(subject) is not responding. macOS audio is still recovering " +
+                    "(this can happen for a few minutes after a restart). Try again shortly, " +
+                    "or connect another microphone."
+            } else if nsError.domain == "ASRService" {
                 if noUsableMicrophone {
                     errorMessage = "No usable microphone is available. Open your MacBook or connect a microphone, then try again."
                 } else if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
@@ -2149,7 +2296,9 @@ final class ASRService: ObservableObject {
                 errorMessage = "Failed to start audio recording: \(error.localizedDescription)"
             }
 
-            self.errorTitle = noUsableMicrophone ? "Microphone Unavailable" : "Recording Error"
+            self.errorTitle = noUsableMicrophone || microphoneNotResponding
+                ? "Microphone Unavailable"
+                : "Recording Error"
             self.errorMessage = errorMessage
             self.showError = true
 

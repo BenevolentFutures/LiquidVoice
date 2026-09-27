@@ -50,11 +50,6 @@ extension SettingsStore {
     }
 
     var commandModeReadinessIssue: String? {
-        let sourceProviderID = self.commandModeLinkedToGlobal ? self.selectedProviderID : self.commandModeSelectedProviderID
-        if self.isPrivateAIProviderID(sourceProviderID) {
-            return "\(PrivateAIProviderFeature.displayName) for Command Mode is coming soon. Choose a verified chat provider or turn Sync off."
-        }
-
         let providerID = self.effectiveCommandModeProviderID
         guard !providerID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return "Command Mode needs a verified chat provider."
@@ -90,12 +85,10 @@ extension SettingsStore {
     private func supportedCommandModeProviderID(_ providerID: String) -> String? {
         let trimmed = providerID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        guard !self.isPrivateAIProviderID(trimmed) else { return nil }
         return trimmed
     }
 
     func isCommandModeProviderVerified(_ providerID: String) -> Bool {
-        guard !self.isPrivateAIProviderID(providerID) else { return false }
         let key = ModelRepository.shared.providerKey(for: providerID)
         guard let stored = self.verifiedProviderFingerprints[key] else { return false }
 
@@ -123,16 +116,8 @@ extension SettingsStore {
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 
-    private func isPrivateAIProviderID(_ providerID: String) -> Bool {
-        PrivateFeatures.privateAIProvider &&
-            providerID.trimmingCharacters(in: .whitespacesAndNewlines) == PrivateAIProviderFeature.shared.providerID
-    }
-
     private func isUnsupportedCommandModeModel(_ model: String) -> Bool {
         let value = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if PrivateAIIntegrationService.shouldHandleDictation(model: value) {
-            return true
-        }
         if value.contains("embedding") || value.contains("rerank") || value.contains("moderation") {
             return true
         }

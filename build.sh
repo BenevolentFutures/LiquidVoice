@@ -1,13 +1,11 @@
 #!/bin/bash
 
-# FluidVoice Build Profile Router
-# Defaults to the public OSS build, which skips private Fluid Intelligence.
+# Liquid Voice Build Profile Router
 #
 # Usage:
-#   ./build.sh                    # signed public OSS build (Debug)
-#   ./build.sh public             # signed public OSS build (Debug)
-#   ./build.sh unsigned           # unsigned public OSS build (CI/fallback)
-#   ./build.sh fi                 # private FI build
+#   ./build.sh                    # signed Debug build
+#   ./build.sh public             # signed Debug build
+#   ./build.sh unsigned           # unsigned Debug build (CI/fallback)
 #   ./build.sh release            # signed Release build -> "Liquid Voice.app"
 #   ./build.sh install            # Release build, then install to /Applications
 
@@ -15,7 +13,6 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROFILE="${1:-${BUILD_PROFILE:-public}}"
-PRIVATE_FI_BUILD_SCRIPT="${PROJECT_DIR}/build_with_FI_incremental.sh"
 DERIVED_DATA_PATH="${FLUIDVOICE_DERIVED_DATA_PATH:-${PROJECT_DIR}/DerivedData}"
 
 resolve_development_team() {
@@ -50,7 +47,7 @@ run_public_build() {
     cd "${PROJECT_DIR}"
 
     if [ "${signing_mode}" = "unsigned" ]; then
-        echo "Running unsigned public FluidVoice build..."
+        echo "Running unsigned Liquid Voice Debug build..."
         echo "Accessibility permission may need to be granted again after rebuilding."
         exec xcodebuild "${build_args[@]}" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
     fi
@@ -83,8 +80,8 @@ EOF
         exit 1
     fi
 
-    echo "Running signed public FluidVoice build..."
-    echo "Build product: ${DERIVED_DATA_PATH}/Build/Products/Debug/FluidVoice Debug.app"
+    echo "Running signed Liquid Voice Debug build..."
+    echo "Build product: ${DERIVED_DATA_PATH}/Build/Products/Debug/Liquid Voice Debug.app"
     exec xcodebuild "${build_args[@]}" DEVELOPMENT_TEAM="${development_team}"
 }
 
@@ -190,18 +187,9 @@ case "${PROFILE}" in
     install)
         run_release_build install
         ;;
-    fi|private|dev|full)
-        if [ ! -x "${PRIVATE_FI_BUILD_SCRIPT}" ]; then
-            echo "Private Fluid Intelligence build script is missing:"
-            echo "  ${PRIVATE_FI_BUILD_SCRIPT}"
-            echo "Restore the private FI build setup, then run: sh build_with_FI_incremental.sh"
-            exit 1
-        fi
-        exec "${PRIVATE_FI_BUILD_SCRIPT}"
-        ;;
     *)
         echo "Unknown build profile: ${PROFILE}"
-        echo "Valid profiles: public/oss/incremental/fast, unsigned/ci, release, install, fi/private/dev/full"
+        echo "Valid profiles: public/oss/incremental/fast, unsigned/ci, release, install"
         exit 1
         ;;
 esac

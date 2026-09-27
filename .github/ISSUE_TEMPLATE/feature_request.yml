@@ -1,17 +1,8 @@
 name: Feature Request
-description: Suggest an idea for FluidVoice.
+description: Suggest an idea for Liquid Voice.
 title: "[FEATURE] "
 labels: ["enhancement"]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Feature ideas should start in Discussions so maintainers and users can shape the request before it becomes tracked work.
-
-        Open a feature idea Discussion here:
-        https://github.com/altic-dev/FluidVoice/discussions/new?category=ideas
-
-        Use this issue form only for features that already have maintainer acceptance, roadmap priority, or a linked Discussion that has been accepted.
   - type: textarea
     id: problem
     attributes:

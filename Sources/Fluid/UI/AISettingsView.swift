@@ -18,24 +18,17 @@ enum PromptEditorMode: Identifiable, Equatable {
     case defaultPrompt(mode: SettingsStore.PromptMode)
     case newPrompt(prefillMode: SettingsStore.PromptMode)
     case edit(promptID: String)
-    case privateAI
 
     var id: String {
         switch self {
         case let .defaultPrompt(mode): return "default:\(mode.rawValue)"
         case let .newPrompt(prefillMode): return "new:\(prefillMode.rawValue)"
         case let .edit(promptID): return "edit:\(promptID)"
-        case .privateAI: return "privateAI"
         }
     }
 
     var isDefault: Bool {
         if case .defaultPrompt = self { return true }
-        return false
-    }
-
-    var isPrivateAI: Bool {
-        if case .privateAI = self { return true }
         return false
     }
 
@@ -54,7 +47,6 @@ enum PromptEditorMode: Identifiable, Equatable {
         case let .defaultPrompt(mode): return mode
         case let .newPrompt(prefillMode): return prefillMode
         case .edit: return nil
-        case .privateAI: return .dictate
         }
     }
 }

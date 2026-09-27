@@ -1856,18 +1856,10 @@ struct OnboardingFlowView: View {
 
     private var aiEnhancementStep: some View {
         OnboardingAIEnhancementStepView(
-            finalText: Binding(
-                get: { self.asr.finalText },
-                set: { self.asr.finalText = $0 }
-            ),
             progressValue: self.compactProgressValue,
             glowCenter: self.landingGlowCenter,
-            language: self.selectedOnboardingLanguage,
-            shortcutDisplay: self.onboardingShortcutDisplay,
-            isTestReady: self.isPlaygroundReady,
             isRunning: self.asr.isRunning,
             isRecordingShortcut: self.isRecordingPrimaryShortcut,
-            shortcutRecordingMessage: self.isRecordingPrimaryShortcut ? self.shortcutRecordingMessage : nil,
             onGlowMove: self.updateLandingGlow(location:in:),
             onGlowExit: self.resetLandingGlow,
             onBack: self.goBack,
@@ -1886,15 +1878,6 @@ struct OnboardingFlowView: View {
                 self.openAIEnhancementSettingsFromOnboarding()
                 self.completeCurrentStep(
                     outcome: .openedSettings,
-                    origin: origin,
-                    completesFlow: self.settings.onboardingCompleted
-                )
-            },
-            onFinishSetup: {
-                let origin = self.settings.analyticsOnboardingOrigin
-                self.finishOnboardingAtGettingStarted()
-                self.completeCurrentStep(
-                    outcome: .completed,
                     origin: origin,
                     completesFlow: self.settings.onboardingCompleted
                 )

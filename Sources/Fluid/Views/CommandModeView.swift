@@ -497,7 +497,6 @@ struct CommandModeView: View {
                             get: { self.settings.effectiveCommandModeProviderID },
                             set: { newValue in
                                 guard !self.settings.commandModeLinkedToGlobal else { return }
-                                guard !self.isPrivateAIProviderID(newValue) else { return }
                                 self.settings.commandModeSelectedProviderID = newValue
                                 self.updateAvailableModels()
                             }
@@ -623,7 +622,7 @@ struct CommandModeView: View {
     }
 
     private var builtInProvidersList: [(id: String, name: String)] {
-        ModelRepository.shared.builtInProvidersList().filter { !self.isPrivateAIProviderID($0.id) }
+        ModelRepository.shared.builtInProvidersList()
     }
 
     private var verifiedBuiltInProvidersList: [(id: String, name: String)] {
@@ -632,11 +631,6 @@ struct CommandModeView: View {
 
     private var verifiedSavedProviders: [SettingsStore.SavedProvider] {
         self.settings.savedProviders.filter { self.settings.isCommandModeProviderVerified($0.id) }
-    }
-
-    private func isPrivateAIProviderID(_ providerID: String) -> Bool {
-        PrivateFeatures.privateAIProvider &&
-            providerID.trimmingCharacters(in: .whitespacesAndNewlines) == PrivateAIProviderFeature.shared.providerID
     }
 }
 

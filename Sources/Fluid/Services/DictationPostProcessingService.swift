@@ -28,6 +28,11 @@ struct DictationProviderRoute: Equatable {
             let configuration = settings.dictationPromptConfiguration(for: selection)
             let providerID = configuration.providerID.trimmingCharacters(in: .whitespacesAndNewlines)
             let model = configuration.modelName.trimmingCharacters(in: .whitespacesAndNewlines)
+            // A prompt pinned to a retired provider fails closed (raw text). It must never fall
+            // back to the main provider, which may be a cloud service the user never chose for it.
+            if SettingsStore.isRetiredProviderID(providerID) {
+                return Self(providerID: "", providerKey: "", baseURL: "", model: "", apiKey: "")
+            }
             if !providerID.isEmpty, !model.isEmpty {
                 selectedProviderID = providerID
                 configuredModel = model
@@ -38,6 +43,10 @@ struct DictationProviderRoute: Equatable {
         } else {
             selectedProviderID = settings.selectedProviderID
             configuredModel = nil
+        }
+
+        guard !SettingsStore.isRetiredProviderID(selectedProviderID) else {
+            return Self(providerID: "", providerKey: "", baseURL: "", model: "", apiKey: "")
         }
 
         let selectedModels = settings.selectedModelByProvider

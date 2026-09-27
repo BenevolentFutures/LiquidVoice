@@ -1493,6 +1493,8 @@ final class DictationE2ETests: XCTestCase {
     func testRetiredAppleIntelligenceStateIsPurgedWithoutSelectingAFallbackProvider() {
         self.withRestoredDefaults(
             keys: [
+                self.dictationPromptOffKey,
+                self.selectedDictationPromptIDKey,
                 self.selectedProviderIDKey,
                 self.selectedAIModelKey,
                 self.availableModelsByProviderKey,
@@ -1536,10 +1538,17 @@ final class DictationE2ETests: XCTestCase {
             XCTAssertNil(settings.availableModelsByProvider["apple-intelligence"])
             XCTAssertNil(settings.selectedModelByProvider["apple-intelligence"])
             XCTAssertNil(settings.verifiedProviderFingerprints["apple-intelligence"])
+            // The prompt keeps its retired provider so it fails closed instead of using the main provider.
             XCTAssertEqual(settings.dictationPromptConfigurations["__default__"]?.shortcut, shortcut)
-            XCTAssertEqual(settings.dictationPromptConfigurations["__default__"]?.providerID, "")
-            XCTAssertEqual(settings.dictationPromptConfigurations["__default__"]?.modelName, "")
+            XCTAssertEqual(settings.dictationPromptConfigurations["__default__"]?.providerID, "apple-intelligence")
             XCTAssertFalse(DictationAIPostProcessingGate.isProviderConfigured())
+
+            settings.selectedProviderID = "openai"
+            settings.setDictationPromptSelection(.default, for: .primary)
+            XCTAssertEqual(
+                DictationProviderRoute.resolve(settings: settings, dictationSlot: .primary),
+                DictationProviderRoute(providerID: "", providerKey: "", baseURL: "", model: "", apiKey: "")
+            )
         }
     }
 
@@ -1598,8 +1607,9 @@ final class DictationE2ETests: XCTestCase {
             XCTAssertEqual(settings.selectedModelByProvider, ["openai": "gpt-4.1"])
             XCTAssertEqual(settings.verifiedProviderFingerprints, ["openai": "verified"])
             XCTAssertNil(settings.dictationPromptConfigurations["__privateAI__"])
+            // Prompts pinned to FI keep that provider, so they fail closed rather than fall back.
             XCTAssertEqual(settings.dictationPromptConfigurations["__default__"]?.shortcut, shortcut)
-            XCTAssertEqual(settings.dictationPromptConfigurations["__default__"]?.providerID, "")
+            XCTAssertEqual(settings.dictationPromptConfigurations["__default__"]?.providerID, "fluid-1")
             XCTAssertEqual(settings.dictationPromptConfigurations["profile:\(custom.id)"]?.providerID, "openai")
             XCTAssertNil(defaults.object(forKey: "FluidIntelligenceBackendPreference"))
             XCTAssertNil(defaults.object(forKey: "PrivateAIProviderBoostEnabled"))
@@ -1622,6 +1632,61 @@ final class DictationE2ETests: XCTestCase {
             XCTAssertEqual(settings.dictationPromptSelection(for: .primary), .off)
             XCTAssertEqual(settings.dictationPromptSelection(for: .secondary), .off)
             XCTAssertEqual(settings.selectedProviderID, "")
+        }
+    }
+
+    /// Main provider is OpenAI; a prompt that used Fluid Intelligence is reached through an app
+    /// override or its own shortcut. It must produce raw text, never a call to OpenAI.
+    func testPromptPinnedToFluidIntelligenceFailsClosedInsteadOfUsingTheMainProvider() {
+        self.withRestoredDefaults(
+            keys: self.retiredFluidIntelligenceTestKeys + [self.appPromptBindingsKey, self.dictationPromptRoutingScopeKey]
+        ) {
+            let settings = SettingsStore.shared
+            let defaults = UserDefaults.standard
+            let appBundleID = "com.example.editor"
+            let fiPrompt = SettingsStore.DictationPromptProfile(name: "Polish", prompt: "Polish it", mode: .dictate)
+            settings.dictationPromptProfiles = [fiPrompt]
+            settings.appPromptBindings = [
+                SettingsStore.AppPromptBinding(
+                    mode: .dictate,
+                    appBundleID: appBundleID,
+                    appName: "Editor",
+                    promptID: fiPrompt.id
+                ),
+            ]
+            settings.dictationPromptRoutingScope = .allApps
+            settings.dictationPromptConfigurations = [
+                "profile:\(fiPrompt.id)": SettingsStore.DictationPromptConfiguration(
+                    providerID: "fluid-1",
+                    modelName: "fluid-1"
+                ),
+            ]
+            settings.selectedProviderID = "openai"
+            settings.selectedModelByProvider = ["openai": "gpt-4.1"]
+            settings.setDictationPromptSelection(.default, for: .primary)
+            defaults.set(true, forKey: self.secondaryDictationPromptOffKey)
+
+            settings.purgeRetiredFluidIntelligenceState()
+
+            // Control: outside the bound app, Default still routes to the main provider.
+            XCTAssertEqual(settings.dictationPromptSelection(for: .primary), .default)
+            XCTAssertEqual(
+                DictationProviderRoute.resolve(settings: settings, dictationSlot: .primary, appBundleID: "com.example.other").providerID,
+                "openai"
+            )
+
+            // App override reaches the FI prompt: empty route, no AI, raw text.
+            let emptyRoute = DictationProviderRoute(providerID: "", providerKey: "", baseURL: "", model: "", apiKey: "")
+            XCTAssertEqual(
+                DictationProviderRoute.resolve(settings: settings, dictationSlot: .primary, appBundleID: appBundleID),
+                emptyRoute
+            )
+            XCTAssertFalse(DictationAIPostProcessingGate.isConfigured(for: .primary, appBundleID: appBundleID))
+
+            // The prompt's own shortcut (selected directly on a slot) fails closed too.
+            settings.setDictationPromptSelection(.profile(fiPrompt.id), for: .secondary)
+            XCTAssertEqual(DictationProviderRoute.resolve(settings: settings, dictationSlot: .secondary), emptyRoute)
+            XCTAssertFalse(DictationAIPostProcessingGate.isConfigured(for: .secondary))
         }
     }
 

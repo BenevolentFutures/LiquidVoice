@@ -1430,8 +1430,25 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    /// Provider IDs of the retired Apple Intelligence provider.
+    static let retiredAppleIntelligenceProviderIDs: Set<String> = ["apple-intelligence", "apple-intelligence-disabled"]
+
+    /// True for any retired provider (Apple Intelligence, Fluid Intelligence), bare or `custom:`-prefixed.
+    /// A prompt still pinned to one fails closed in `DictationProviderRoute.resolve`: raw text, never a
+    /// fallback to the main provider.
+    static func isRetiredProviderID(_ providerID: String) -> Bool {
+        var trimmed = providerID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("custom:") {
+            trimmed = String(trimmed.dropFirst("custom:".count))
+        }
+        return self.retiredAppleIntelligenceProviderIDs.contains(trimmed) ||
+            self.retiredFluidIntelligenceProviderIDs.contains(trimmed)
+    }
+
+    /// Prompt configurations pinned to Apple Intelligence are left in place on purpose: blanking their
+    /// provider would make them fall back to the main (possibly cloud) provider.
     func purgeRetiredAppleIntelligenceState() {
-        let retiredProviderIDs = Set(["apple-intelligence", "apple-intelligence-disabled"])
+        let retiredProviderIDs = Self.retiredAppleIntelligenceProviderIDs
         let rawSelectedProviderID = self.defaults.string(forKey: Keys.selectedProviderID)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -1469,16 +1486,6 @@ final class SettingsStore: ObservableObject {
         if selectedModels != self.selectedModelByProvider {
             self.selectedModelByProvider = selectedModels
         }
-
-        let configurations = self.dictationPromptConfigurations.compactMapValues { configuration in
-            let providerID = configuration.providerID.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard retiredProviderIDs.contains(providerID) else { return configuration }
-            guard configuration.shortcut != nil else { return nil }
-            return DictationPromptConfiguration(shortcut: configuration.shortcut)
-        }
-        if configurations != self.dictationPromptConfigurations {
-            self.dictationPromptConfigurations = configurations
-        }
     }
 
     // MARK: - Retired Fluid Intelligence
@@ -1501,6 +1508,7 @@ final class SettingsStore: ObservableObject {
     /// Defaults keys that only the Fluid Intelligence runtime read.
     static let retiredFluidIntelligenceDefaultsKeys = [
         "FluidIntelligenceBackendPreference",
+        "FluidIntelligencePrefixKVCacheEnabled",
         "FluidIntelligenceSelectedModelID",
         "FluidIntelligenceLocalModelPath",
         "FluidIntelligenceMLXUpgrade163OfferHandled",
@@ -1526,8 +1534,9 @@ final class SettingsStore: ObservableObject {
 
     /// Liquid Voice has no Fluid Intelligence. Settings carried over from an upstream FluidVoice
     /// install that pointed at it are retired to plain dictation: any dictation slot that routed
-    /// to Fluid Intelligence is turned Off (never silently re-routed to a cloud provider), and
-    /// every FI provider entry, verification, model list and runtime key is dropped.
+    /// to Fluid Intelligence is turned Off, and every FI provider entry, verification, model list
+    /// and runtime key is dropped. Prompts pinned to FI keep that provider on purpose, so they fail
+    /// closed in `DictationProviderRoute.resolve` instead of falling back to the main provider.
     func purgeRetiredFluidIntelligenceState() {
         let rawSelectedProviderID = self.defaults.string(forKey: Keys.selectedProviderID) ?? ""
         let globalProviderIsRetired = Self.isRetiredFluidIntelligenceProviderID(rawSelectedProviderID)
@@ -1577,12 +1586,8 @@ final class SettingsStore: ObservableObject {
             self.selectedModelByProvider = selectedModels
         }
 
+        // The FI prompt itself no longer exists, so its shortcut entry has nothing to select.
         configurations.removeValue(forKey: Self.retiredFluidIntelligencePromptConfigurationKey)
-        configurations = configurations.compactMapValues { configuration in
-            guard Self.isRetiredFluidIntelligenceProviderID(configuration.providerID) else { return configuration }
-            guard configuration.shortcut != nil else { return nil }
-            return DictationPromptConfiguration(shortcut: configuration.shortcut)
-        }
         if configurations != self.dictationPromptConfigurations {
             self.dictationPromptConfigurations = configurations
         }

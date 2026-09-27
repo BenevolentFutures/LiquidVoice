@@ -802,6 +802,20 @@ extension AIEnhancementSettingsView {
     ) -> PromptCardModelPicker? {
         let configuration = self.settings.dictationPromptConfiguration(for: selection)
         let configuredProviderID = configuration.providerID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if SettingsStore.isRetiredProviderID(configuredProviderID) {
+            // Pinned to a removed provider: dictation with this prompt stays raw until one is chosen.
+            return PromptCardModelPicker(
+                summary: "Provider removed, choose another",
+                selectedModel: "",
+                models: [],
+                providerName: "",
+                onSelectModel: { _ in },
+                onOpenProviders: {
+                    self.selectedConfigurationSection = .providers
+                    self.expandedProviderID = nil
+                }
+            )
+        }
         let providerID = configuredProviderID.isEmpty
             ? self.viewModel.selectedProviderID.trimmingCharacters(in: .whitespacesAndNewlines)
             : configuredProviderID

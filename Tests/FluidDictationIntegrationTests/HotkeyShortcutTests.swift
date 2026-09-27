@@ -96,6 +96,30 @@ final class HotkeyShortcutTests: XCTestCase {
         )
     }
 
+    func testKeyboardTapPassesOnlyOurOwnPostedKeyEventsWithoutMainThread() throws {
+        let ownPID: Int64 = 4242
+        let event = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: true))
+
+        event.setIntegerValueField(.eventSourceUnixProcessID, value: ownPID)
+        for type in [CGEventType.keyDown, .keyUp, .flagsChanged] {
+            XCTAssertTrue(
+                GlobalHotkeyManager.isSelfPostedKeyboardEvent(type: type, event: event, ownProcessID: ownPID),
+                "our own synthesized \(type) must bypass the main-thread hop"
+            )
+        }
+        for type in [CGEventType.tapDisabledByTimeout, .tapDisabledByUserInput] {
+            XCTAssertFalse(
+                GlobalHotkeyManager.isSelfPostedKeyboardEvent(type: type, event: event, ownProcessID: ownPID),
+                "tap-disabled notices must always reach the handler so the tap is re-enabled"
+            )
+        }
+
+        event.setIntegerValueField(.eventSourceUnixProcessID, value: 0)
+        XCTAssertFalse(GlobalHotkeyManager.isSelfPostedKeyboardEvent(type: .keyDown, event: event, ownProcessID: ownPID))
+        event.setIntegerValueField(.eventSourceUnixProcessID, value: ownPID + 1)
+        XCTAssertFalse(GlobalHotkeyManager.isSelfPostedKeyboardEvent(type: .keyDown, event: event, ownProcessID: ownPID))
+    }
+
     func testKeyboardEventMaskExcludesMouseEvents() {
         let mask = GlobalHotkeyManager.keyboardEventMask()
         for type in [CGEventType.keyDown, .keyUp, .flagsChanged] {

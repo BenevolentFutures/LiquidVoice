@@ -52,7 +52,8 @@ enum DeliveryDebugTriggers {
                 DeliveryFailureOverlayController.shared.show(DeliveryFailureReport(
                     failure: failure,
                     transcript: "The quick brown fox jumps over the lazy dog and keeps going for a while, long enough to need a second line.",
-                    keptOnClipboard: true
+                    clipboard: .copied,
+                    inHistory: false
                 ))
             }
         })

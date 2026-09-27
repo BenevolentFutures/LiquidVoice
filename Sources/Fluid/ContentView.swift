@@ -1657,7 +1657,16 @@ struct ContentView: View {
         let focusedPID = TypingService.captureSystemFocusedPID()
             ?? NSWorkspace.shared.frontmostApplication?.processIdentifier
         NotchContentState.shared.recordingTargetPID = focusedPID
-        self.recordingStartTarget = focusedPID == nil ? nil : TypingService.lastCapturedDictationTarget()
+        // When the focused field can't be read, keep the app itself as the starting target.
+        let capturedStart = TypingService.lastCapturedDictationTarget()
+        self.recordingStartTarget = capturedStart?.pid == focusedPID ? capturedStart : focusedPID.map {
+            DictationTarget(
+                pid: $0,
+                bundleIdentifier: NSRunningApplication(processIdentifier: $0)?.bundleIdentifier,
+                window: nil,
+                element: nil
+            )
+        }
 
         let info = self.getCurrentAppInfo()
         self.recordingAppInfo = info
@@ -2410,17 +2419,19 @@ struct ContentView: View {
             self.appBench(
                 "text_ready_to_type_request elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - finalTextReadyAt) * 1000).rounded()))"
             )
+            let isInHistory = shouldPersistOutputs && SettingsStore.shared.saveTranscriptionHistory
             if isTargetReady {
                 self.asr.typeOutputPlanToActiveField(
                     finalOutputPlan,
                     preferredTargetPID: typingTargetPID,
                     textReadyAt: finalTextReadyAt,
-                    tracksDictionaryCorrections: true
+                    tracksDictionaryCorrections: true,
+                    transcriptInHistory: isInHistory
                 )
             } else {
                 // The field chosen at stop could not be brought back. Typing into whatever
                 // has focus now could land the text in the wrong place, so keep it instead.
-                TypingService.reportDeliveryFailure(.targetRestoreFailed, transcript: finalText)
+                TypingService.reportDeliveryFailure(.targetRestoreFailed, transcript: finalText, inHistory: isInHistory)
             }
             didTypeExternally = true
             if !shouldShowAIProcessingFailure, !didRequestOverlayHideOnStop {
@@ -2628,7 +2639,7 @@ struct ContentView: View {
                 bundleID: appInfo.bundleId,
                 windowTitle: appInfo.windowTitle
             )
-            self.asr.typeOutputPlanToActiveField(outputPlan, preferredTargetPID: typingTarget.pid)
+            self.asr.typeOutputPlanToActiveField(outputPlan, preferredTargetPID: typingTarget.pid, transcriptInHistory: true)
             DebugLogger.shared.info("Actions: Pasted latest transcription into focused field", source: "ContentView")
         }
     }
@@ -2724,7 +2735,8 @@ struct ContentView: View {
         let isFluidFrontmost = frontmostApp?.bundleIdentifier == Bundle.main.bundleIdentifier
 
         if SettingsStore.shared.copyTranscriptionToClipboard, !isFluidFrontmost {
-            ClipboardService.copyToClipboard(finalText)
+            // Through the paste session, so a clipboard restore still in flight cannot undo it.
+            ClipboardPasteSession.shared.keepTranscript(finalText)
         }
 
         let focusedPID = TypingService.captureSystemFocusedPID()
@@ -2739,7 +2751,9 @@ struct ContentView: View {
             }
             self.asr.typeOutputPlanToActiveField(
                 outputPlan,
-                preferredTargetPID: typingTarget.pid
+                preferredTargetPID: typingTarget.pid,
+                // The text comes from a history entry.
+                transcriptInHistory: true
             )
         }
     }
@@ -2837,7 +2851,8 @@ struct ContentView: View {
         }
 
         if SettingsStore.shared.copyTranscriptionToClipboard {
-            ClipboardService.copyToClipboard(finalText)
+            // Through the paste session, so a clipboard restore still in flight cannot undo it.
+            ClipboardPasteSession.shared.keepTranscript(finalText)
         }
 
         let focusedPID = TypingService.captureSystemFocusedPID()
@@ -2854,7 +2869,8 @@ struct ContentView: View {
             }
             self.asr.typeOutputPlanToActiveField(
                 outputPlan,
-                preferredTargetPID: typingTarget.pid
+                preferredTargetPID: typingTarget.pid,
+                transcriptInHistory: SettingsStore.shared.saveTranscriptionHistory
             )
         }
 
@@ -2889,7 +2905,8 @@ struct ContentView: View {
 
             // Copy to clipboard as backup
             if SettingsStore.shared.copyTranscriptionToClipboard {
-                ClipboardService.copyToClipboard(self.rewriteModeService.rewrittenText)
+                // Through the paste session, so a clipboard restore still in flight cannot undo it.
+                ClipboardPasteSession.shared.keepTranscript(self.rewriteModeService.rewrittenText)
             }
 
             // Type the rewritten text

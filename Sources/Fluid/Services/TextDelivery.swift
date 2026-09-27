@@ -74,10 +74,26 @@ nonisolated enum DeliveryLog {
     }
 }
 
-/// What the failure card shows: the failure, the transcript, and whether the transcript is on
-/// the clipboard (it is not when the user copied something newer in the meantime).
+/// What happened when a transcript was put on the clipboard after a failed delivery.
+nonisolated enum TranscriptBackupOutcome: String, Equatable, Sendable {
+    case copied
+    case alreadyOnClipboard = "already_on_clipboard"
+    case emptyText = "empty_text"
+    /// The user copied something after the failure; that copy is never replaced.
+    case newerClipboardCopy = "newer_clipboard_copy"
+    case writeFailed = "write_failed"
+
+    var isOnClipboard: Bool {
+        self == .copied || self == .alreadyOnClipboard
+    }
+}
+
+/// What the failure card shows: the failure, the transcript, where the transcript is now.
 nonisolated struct DeliveryFailureReport: Equatable, Sendable {
     let failure: TextDeliveryFailure
     let transcript: String
-    let keptOnClipboard: Bool
+    let clipboard: TranscriptBackupOutcome
+    /// The transcript is in transcription history (dictation with history on, paste-last).
+    /// Rewrite output and debug deliveries are not.
+    let inHistory: Bool
 }

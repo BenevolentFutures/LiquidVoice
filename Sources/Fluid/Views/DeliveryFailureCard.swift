@@ -48,10 +48,7 @@ final class DeliveryFailureOverlayController {
         let rootView = DeliveryFailureCardView(
             title: title,
             transcript: transcript,
-            detail: Self.detailText(
-                keptOnClipboard: report.keptOnClipboard,
-                savesHistory: SettingsStore.shared.saveTranscriptionHistory
-            ),
+            detail: Self.detailText(clipboard: report.clipboard, inHistory: report.inHistory),
             offersAccessibilitySettings: failure == .accessibilityNotTrusted,
             onCopy: { [weak self] in
                 ClipboardService.copyToClipboard(transcript)
@@ -125,14 +122,17 @@ final class DeliveryFailureOverlayController {
         }
     }
 
-    /// The card's third line: where the transcript is now. It is not on the clipboard when the
-    /// user copied something newer in the meantime; that copy is never replaced.
-    static func detailText(keptOnClipboard: Bool, savesHistory: Bool) -> String {
-        switch (keptOnClipboard, savesHistory) {
-        case (true, true): "Kept on your clipboard and in history."
-        case (true, false): "Kept on your clipboard."
-        case (false, true): "In history. Your newer clipboard was left alone."
-        case (false, false): "Your newer clipboard was left alone. Use Copy."
+    /// The card's third line: where the transcript is now, and why it is not on the clipboard
+    /// when it is not (a newer copy of the user's is never replaced).
+    static func detailText(clipboard: TranscriptBackupOutcome, inHistory: Bool) -> String {
+        switch (clipboard, inHistory) {
+        case (.copied, true), (.alreadyOnClipboard, true): "Kept on your clipboard and in history."
+        case (.copied, false), (.alreadyOnClipboard, false): "Kept on your clipboard."
+        case (.newerClipboardCopy, true): "In history. Your newer clipboard was left alone."
+        case (.newerClipboardCopy, false): "Your newer clipboard was left alone. Use Copy."
+        case (.writeFailed, true): "In history. The clipboard couldn't be written."
+        case (.writeFailed, false): "The clipboard couldn't be written. Use Copy."
+        case (.emptyText, _): "Nothing was captured."
         }
     }
 

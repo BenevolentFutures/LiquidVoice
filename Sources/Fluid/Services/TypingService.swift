@@ -230,13 +230,13 @@ final class TypingService {
     /// Activation options used to restore focus to the external target app after dictation.
     /// `.activateAllWindows` is intentionally omitted: raising every window of a multi-window
     /// app (e.g. WebStorm) destroys the user's window layout on each dictation (issue #748).
-    static let focusRestoreActivationOptions: NSApplication.ActivationOptions = [
+    nonisolated static let focusRestoreActivationOptions: NSApplication.ActivationOptions = [
         .activateIgnoringOtherApps,
     ]
 
     /// Best-effort: activates the app with the given PID, unless it's Fluid itself.
     @discardableResult
-    static func activateApp(pid: pid_t) -> Bool {
+    nonisolated static func activateApp(pid: pid_t) -> Bool {
         guard pid > 0 else { return false }
         guard let app = NSRunningApplication(processIdentifier: pid) else { return false }
 
@@ -261,6 +261,8 @@ final class TypingService {
 
     enum FocusPreparationResult: String, Sendable {
         case alreadyFocused = "already_focused"
+        /// The app is in front, but its exact field could not be confirmed; still ready.
+        case appInFrontFieldUnconfirmed = "app_in_front_field_unconfirmed"
         case restoredExactTarget = "restored_exact_target"
         case activatedForRecovery = "activated_for_recovery"
         case failed
@@ -343,54 +345,126 @@ final class TypingService {
         return Self.isCurrentlyFocusedElement(element, expectedPID: target.pid)
     }
 
-    /// The most the focus preparation may take before delivery goes ahead or gives up.
-    nonisolated static let focusPreparationDeadline: TimeInterval = 1.5
+    /// The most the focus preparation may take before delivery goes ahead or gives up. Every
+    /// step checks it before starting; one bounded AX call in flight can overrun it by at most
+    /// `axMessagingTimeoutSeconds`.
+    nonisolated static let focusPreparationDeadline: TimeInterval = 2.0
+    /// How long to wait for an app brought back to actually come to the front.
+    nonisolated static let frontmostWaitLimit: TimeInterval = 1.0
 
     /// Puts focus back on the captured target before delivery. Runs off the main thread.
-    /// Returns `.failed` only when the target app cannot be brought back, or a non-terminal
-    /// target's field cannot be re-focused, within `focusPreparationDeadline`.
+    ///
+    /// Refuses (`.failed`) only on positive evidence: the target app is not in front after
+    /// recovery. When the app is in front but its exact field cannot be confirmed (the element
+    /// is recreated per AX query, or its role is not one we recognise as text: Word, Excel,
+    /// Zed, Warp, kitty), delivery goes ahead and the "certainly not a text field" check
+    /// decides.
     @concurrent
     nonisolated static func prepareTargetForDelivery(_ target: DictationTarget) async -> FocusPreparationResult {
-        let deadline = ProcessInfo.processInfo.systemUptime + self.focusPreparationDeadline
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        let deadline = startedAt + self.focusPreparationDeadline
         let isTerminal = Self.isGhosttyFamily(bundleIdentifier: target.bundleIdentifier)
-        if target.pid == self.currentFocusedPID(),
-           target.element == nil || isTerminal || self.isTargetStillFocused(target)
-        {
-            return .alreadyFocused
-        }
+        let hasField = target.element != nil && !isTerminal
 
-        if target.element != nil, await self.restoreExactTarget(target, deadline: deadline) {
-            return .restoredExactTarget
+        let result: FocusPreparationResult
+        if self.isAppInFront(pid: target.pid) {
+            // The app never lost the front. Nothing to recover unless the field moved.
+            var fieldConfirmed = !hasField || self.isTargetStillFocused(target)
+            if !fieldConfirmed {
+                fieldConfirmed = await self.restoreExactTarget(target, deadline: deadline)
+            }
+            result = self.preparationVerdict(appInFront: true, broughtBack: false, fieldConfirmed: fieldConfirmed)
+        } else {
+            var fieldConfirmed = false
+            if target.element != nil {
+                // Raising the target window and focusing its field often brings the app back.
+                fieldConfirmed = await self.restoreExactTarget(target, deadline: deadline)
+            }
+            if !fieldConfirmed || !self.isAppInFront(pid: target.pid) {
+                _ = self.bringToFront(pid: target.pid)
+            }
+            let wait = await self.waitUntilAppInFront(
+                pid: target.pid,
+                limit: max(0, min(self.frontmostWaitLimit, deadline - ProcessInfo.processInfo.systemUptime))
+            )
+            Self.logFrontmostCheck(stage: "prepare", target: target.pid, waitedMs: wait.waitedMs, inFront: wait.inFront)
+            if wait.inFront, hasField, !fieldConfirmed {
+                fieldConfirmed = self.isTargetStillFocused(target)
+                if !fieldConfirmed {
+                    fieldConfirmed = await self.restoreExactTarget(target, deadline: deadline)
+                }
+            }
+            result = self.preparationVerdict(appInFront: wait.inFront, broughtBack: true, fieldConfirmed: !hasField || fieldConfirmed)
         }
-
-        let activated = await MainActor.run { Self.activateApp(pid: target.pid) }
-        let appFocused = activated
-            ? await self.waitUntilAppFocused(pid: target.pid, deadline: min(deadline, ProcessInfo.processInfo.systemUptime + 0.5))
-            : false
-        if isTerminal || target.element == nil {
-            return self.appRecoveryResult(isTerminal: isTerminal, activated: activated, appFocused: appFocused)
-        }
-        guard appFocused else { return .failed }
-        if self.isTargetStillFocused(target) { return .activatedForRecovery }
-        return await self.restoreExactTarget(target, deadline: deadline) ? .activatedForRecovery : .failed
+        DeliveryLog.bench(
+            "prepare_target app=\(target.bundleIdentifier ?? "pid\(target.pid)") terminal=\(isTerminal) " +
+                "result=\(result.rawValue) elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))"
+        )
+        return result
     }
 
-    /// Recovery verdict when the app itself is the destination (a terminal, or a target whose
-    /// field AX could not read). A terminal is ready once the system accepted its activation:
-    /// the paste is posted straight to its PID, after one more activation if needed.
-    nonisolated static func appRecoveryResult(isTerminal: Bool, activated: Bool, appFocused: Bool) -> FocusPreparationResult {
-        if appFocused { return .activatedForRecovery }
-        return isTerminal && activated ? .activatedForRecovery : .failed
+    /// The preparation verdict. Delivery is ready exactly when the target app is in front;
+    /// whether its field could be confirmed only changes how the outcome is logged.
+    nonisolated static func preparationVerdict(appInFront: Bool, broughtBack: Bool, fieldConfirmed: Bool) -> FocusPreparationResult {
+        guard appInFront else { return .failed }
+        switch (broughtBack, fieldConfirmed) {
+        case (false, true): return .alreadyFocused
+        case (false, false): return .appInFrontFieldUnconfirmed
+        case (true, true): return .restoredExactTarget
+        case (true, false): return .activatedForRecovery
+        }
     }
 
-    private nonisolated static func waitUntilAppFocused(pid: pid_t, deadline: TimeInterval) async -> Bool {
+    /// Whether `pid` is the app the user is in: the frontmost app, or the owner of the focused
+    /// element.
+    nonisolated static func isAppInFront(pid: pid_t) -> Bool {
+        NSWorkspace.shared.frontmostApplication?.processIdentifier == pid || self.currentFocusedPID() == pid
+    }
+
+    /// Asks for `pid` to come to the front: an activation request plus the Accessibility
+    /// frontmost flag, which still works where macOS declines a background app's request.
+    nonisolated static func bringToFront(pid: pid_t) -> Bool {
+        let requested = self.activateApp(pid: pid)
+        guard AXIsProcessTrusted(), pid != ProcessInfo.processInfo.processIdentifier else { return requested }
+        let appElement = self.boundedAXElement(AXUIElementCreateApplication(pid))
+        let frontmost = AXUIElementSetAttributeValue(appElement, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
+        return requested || frontmost == .success
+    }
+
+    private nonisolated static func waitUntilAppInFront(pid: pid_t, limit: TimeInterval) async -> (inFront: Bool, waitedMs: Int) {
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        let deadline = startedAt + limit
         repeat {
-            if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid || self.currentFocusedPID() == pid {
-                return true
+            if self.isAppInFront(pid: pid) {
+                return (true, Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))
             }
             try? await Task.sleep(nanoseconds: 25_000_000)
         } while ProcessInfo.processInfo.systemUptime < deadline
-        return false
+        let inFront = self.isAppInFront(pid: pid)
+        return (inFront, Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))
+    }
+
+    /// The same wait for the typing worker, which may block.
+    nonisolated static func waitUntilAppInFrontBlocking(pid: pid_t, limit: TimeInterval) -> (inFront: Bool, waitedMs: Int) {
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        let deadline = startedAt + limit
+        while !self.isAppInFront(pid: pid) {
+            if ProcessInfo.processInfo.systemUptime >= deadline {
+                return (false, Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))
+            }
+            usleep(25_000)
+        }
+        return (true, Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))
+    }
+
+    /// One log line per frontmost check, so a missing paste can be diagnosed from the log.
+    nonisolated static func logFrontmostCheck(stage: String, target pid: pid_t, waitedMs: Int, inFront: Bool) {
+        let targetApp = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? "pid\(pid)"
+        let frontApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "none"
+        DeliveryLog.bench(
+            "frontmost_check stage=\(stage) app=\(targetApp) waitedMs=\(waitedMs) " +
+                "result=\(inFront ? "in_front" : "not_in_front") frontmost=\(frontApp)"
+        )
     }
 
     private nonisolated static func restoreExactTarget(_ target: DictationTarget, deadline: TimeInterval) async -> Bool {
@@ -419,8 +493,12 @@ final class TypingService {
             }
         }
 
+        guard ProcessInfo.processInfo.systemUptime < deadline else {
+            DeliveryLog.bench("restore_exact_target result=deadline")
+            return false
+        }
         let isFocused = Self.isCurrentlyFocusedElement(element, expectedPID: target.pid)
-        DeliveryLog.bench("restore_exact_target result=\(isFocused ? "restored" : "failed")")
+        DeliveryLog.bench("restore_exact_target result=\(isFocused ? "restored" : "unconfirmed")")
         return isFocused
     }
 
@@ -439,15 +517,16 @@ final class TypingService {
     nonisolated static func reportDeliveryFailure(
         _ failure: TextDeliveryFailure,
         transcript: String,
+        inHistory: Bool,
         since revision: Int? = nil,
         pasteSession: ClipboardPasteSession = .shared
     ) {
         DeliveryLog.bench("delivery_failed reason=\(failure.rawValue) chars=\(transcript.count)")
         DeliveryLog.warning("Text delivery failed reason=\(failure.rawValue) chars=\(transcript.count)")
         guard failure.isUserVisible, !transcript.isEmpty else { return }
-        pasteSession.keepTranscript(transcript, since: revision) { kept in
-            DeliveryLog.bench("delivery_failure_transcript_kept onClipboard=\(kept)")
-            let report = DeliveryFailureReport(failure: failure, transcript: transcript, keptOnClipboard: kept)
+        pasteSession.keepTranscript(transcript, since: revision) { outcome in
+            DeliveryLog.bench("delivery_failure_transcript_kept clipboard=\(outcome.rawValue) inHistory=\(inHistory)")
+            let report = DeliveryFailureReport(failure: failure, transcript: transcript, clipboard: outcome, inHistory: inHistory)
             Task { @MainActor in
                 TypingService.deliveryFailureHandler(report)
             }
@@ -480,6 +559,8 @@ final class TypingService {
     ///     Check) after a clipboard paste. Pass `false` when a send key follows the paste: the
     ///     field empties right after it and the read-back would report a false miss
     ///     (ported from altic-dev/FluidVoice@98b5a278).
+    ///   - transcriptInHistory: whether the text is already in transcription history, so the
+    ///     failure card can say where it is kept.
     ///   - completion: called on the main actor once the attempt finishes. A failure has
     ///     already been reported to the user (card + transcript kept) by then.
     func typeOutputPlanInstantly(
@@ -488,6 +569,7 @@ final class TypingService {
         textReadyAt: TimeInterval?,
         tracksDictionaryCorrections: Bool = false,
         verifiesLanding: Bool = true,
+        transcriptInHistory: Bool = false,
         completion: ((TextDeliveryResult) -> Void)? = nil
     ) {
         let requestedAt = ProcessInfo.processInfo.systemUptime
@@ -517,7 +599,7 @@ final class TypingService {
         guard AXIsProcessTrusted() else {
             self.bench("request_return reason=accessibility_not_trusted")
             self.log("[TypingService] ERROR: Accessibility permissions required for text injection")
-            Self.reportDeliveryFailure(.accessibilityNotTrusted, transcript: text, pasteSession: self.pasteSession)
+            Self.reportDeliveryFailure(.accessibilityNotTrusted, transcript: text, inHistory: transcriptInHistory, pasteSession: self.pasteSession)
             completion?(.recoverableFailure(.accessibilityNotTrusted))
             return
         }
@@ -569,12 +651,17 @@ final class TypingService {
 
             let insertStartedAt = ProcessInfo.processInfo.systemUptime
             self.bench("insert_call")
-            result = self.deliver(text, preferredTargetPID: preferredTargetPID, verifiesLanding: verifiesLanding)
+            result = self.deliver(
+                text,
+                preferredTargetPID: preferredTargetPID,
+                verifiesLanding: verifiesLanding,
+                transcriptInHistory: transcriptInHistory
+            )
             self.bench(
                 "insert_return result=\(Self.describe(result)) elapsedMs=\(Self.elapsedMs(since: insertStartedAt)) totalMs=\(Self.elapsedMs(since: requestedAt))"
             )
             if case let .recoverableFailure(failure) = result {
-                Self.reportDeliveryFailure(failure, transcript: text, pasteSession: self.pasteSession)
+                Self.reportDeliveryFailure(failure, transcript: text, inHistory: transcriptInHistory, pasteSession: self.pasteSession)
             } else if tracksDictionaryCorrections {
                 Task { @MainActor in
                     AutomaticDictionaryCorrectionTracker.shared.beginObservingInsertion(
@@ -654,13 +741,28 @@ final class TypingService {
 
     /// One delivery on the typing worker: refuse a target that certainly cannot take text,
     /// insert, then (opt-in) read the field back after a clipboard paste.
-    private func deliver(_ text: String, preferredTargetPID: pid_t?, verifiesLanding: Bool) -> TextDeliveryResult {
+    private func deliver(
+        _ text: String,
+        preferredTargetPID: pid_t?,
+        verifiesLanding: Bool,
+        transcriptInHistory: Bool
+    ) -> TextDeliveryResult {
         let terminalPID = self.ghosttyTargetPID(preferredTargetPID: preferredTargetPID)
+        let route = DeliveryRoute.decide(
+            isTerminal: terminalPID != nil,
+            mode: self.textInsertionMode,
+            pasteCheckEnabled: SettingsStore.shared.showPasteCheckAlerts,
+            sendKeyFollows: !verifiesLanding
+        )
+        self.bench(
+            "delivery_route terminal=\(terminalPID != nil) refusesNonEditable=\(route.refusesNonEditableFocus) " +
+                "pastesFirst=\(route.pastesFirst) directFallback=\(route.fallsBackToDirectTyping) readBack=\(route.readsPasteBack)"
+        )
 
         // Ported from altic-dev/FluidVoice@51e62364 / @a1a65772: refuse only when the focused
         // element certainly cannot take text (a button, a menu, static text). Terminals are
         // never refused: c11 and Ghostty draw their own surface and always take Cmd+V.
-        if terminalPID == nil {
+        if route.refusesNonEditableFocus {
             let assessStartedAt = ProcessInfo.processInfo.systemUptime
             let assessment = DeliveryTargetAssessment.assessFocusedElement(messagingTimeout: Self.axMessagingTimeoutSeconds)
             self.bench("focus_assess \(assessment.logDescription) elapsedMs=\(Self.elapsedMs(since: assessStartedAt))")
@@ -672,15 +774,16 @@ final class TypingService {
         }
 
         // The read-back baseline costs AX reads, so it is taken only when the opt-in check
-        // will run: clipboard paths, not terminals (no readable field text).
-        let checksLanding = verifiesLanding && terminalPID == nil && SettingsStore.shared.showPasteCheckAlerts
+        // will run, and inside the paste session (after earlier queued pastes have landed),
+        // just before this paste is sent.
         var verificationBaseline: PasteVerifier.Snapshot?
         let outcome = self.insertTextInstantly(
             text,
             preferredTargetPID: preferredTargetPID,
             terminalPID: terminalPID,
-            beforeClipboardPaste: {
-                if checksLanding, verificationBaseline == nil {
+            route: route,
+            beforeClipboardDispatch: {
+                if route.readsPasteBack {
                     verificationBaseline = PasteVerifier.capture()
                 }
             }
@@ -697,6 +800,7 @@ final class TypingService {
                     before: verificationBaseline,
                     pastedAt: ProcessInfo.processInfo.systemUptime,
                     pasteRevision: self.pasteSession.changeCount,
+                    transcriptInHistory: transcriptInHistory,
                     pasteSession: self.pasteSession
                 )
             }
@@ -709,6 +813,43 @@ final class TypingService {
         case failed(TextDeliveryFailure)
     }
 
+    /// Which delivery steps run for a target. Pure, so the c11/Ghostty guarantees are tested.
+    struct DeliveryRoute: Equatable {
+        /// Refuse when focus is certainly not a text field (a button, a menu, static text).
+        let refusesNonEditableFocus: Bool
+        /// Try the clipboard paths before direct typing.
+        let pastesFirst: Bool
+        /// Fall back to direct typing when every clipboard path fails.
+        let fallsBackToDirectTyping: Bool
+        /// Run the opt-in read-back after a clipboard paste.
+        let readsPasteBack: Bool
+
+        static func decide(
+            isTerminal: Bool,
+            mode: SettingsStore.TextInsertionMode,
+            pasteCheckEnabled: Bool,
+            sendKeyFollows: Bool
+        ) -> DeliveryRoute {
+            if isTerminal {
+                // c11 and Ghostty: always the clipboard paste to the terminal's PID, never
+                // refused (their surface takes Cmd+V whatever AX reports), never direct typing
+                // (it silently drops text there), and no read-back (no readable field text).
+                return DeliveryRoute(
+                    refusesNonEditableFocus: false,
+                    pastesFirst: true,
+                    fallsBackToDirectTyping: false,
+                    readsPasteBack: false
+                )
+            }
+            return DeliveryRoute(
+                refusesNonEditableFocus: true,
+                pastesFirst: mode == .reliablePaste,
+                fallsBackToDirectTyping: true,
+                readsPasteBack: pasteCheckEnabled && !sendKeyFollows
+            )
+        }
+    }
+
     /// Off-worker read-back after a paste. Logs every verdict; only a certain `notLanded`
     /// reaches the user. Ported from altic-dev/FluidVoice@fadaed91 / @788d04b6.
     private nonisolated static func verifyPasteLanded(
@@ -716,6 +857,7 @@ final class TypingService {
         before: PasteVerifier.Snapshot,
         pastedAt: TimeInterval,
         pasteRevision: Int,
+        transcriptInHistory: Bool,
         pasteSession: ClipboardPasteSession
     ) {
         Task.detached(priority: .utility) {
@@ -735,7 +877,13 @@ final class TypingService {
             guard case .notLanded = verdict else { return }
             // Only clipboard changes since the paste that were our own (its restore) may be
             // replaced by the backup; anything the user copied in the meantime stays.
-            TypingService.reportDeliveryFailure(.pasteNotLanded, transcript: text, since: pasteRevision, pasteSession: pasteSession)
+            TypingService.reportDeliveryFailure(
+                .pasteNotLanded,
+                transcript: text,
+                inHistory: transcriptInHistory,
+                since: pasteRevision,
+                pasteSession: pasteSession
+            )
         }
     }
 
@@ -743,36 +891,33 @@ final class TypingService {
         _ text: String,
         preferredTargetPID: pid_t?,
         terminalPID: pid_t?,
-        beforeClipboardPaste: () -> Void
+        route: DeliveryRoute,
+        beforeClipboardDispatch: () -> Void
     ) -> InsertionOutcome {
         self.log("[TypingService] insertTextInstantly called with \(text.count) characters")
         self.log("[TypingService] Attempting to type text: \"\(text.prefix(50))\(text.count > 50 ? "..." : "")\"")
 
-        if let terminalPID {
+        if route.pastesFirst {
             // c11 and Ghostty silently drop direct CGEvent text, so a terminal never falls back
             // to it: when every clipboard path fails, the failure is reported and the transcript
             // kept instead of typing into the void.
-            self.log("[TypingService] Ghostty-family target (PID \(terminalPID)); forcing Reliable Paste path")
+            let pastePID = terminalPID ?? preferredTargetPID
+            self.log("[TypingService] Clipboard paste first (terminal=\(terminalPID != nil), PID \(pastePID.map { String($0) } ?? "nil"))")
             let attempt = self.tryReliablePasteInsertion(
                 text,
-                preferredTargetPID: self.textInsertionMode == .standard ? terminalPID : (preferredTargetPID ?? terminalPID),
-                beforeClipboardPaste: beforeClipboardPaste
+                preferredTargetPID: pastePID,
+                allowsGlobalFallback: terminalPID == nil,
+                beforeDispatch: beforeClipboardDispatch
             )
             if let path = attempt.path {
-                self.log("[TypingService] SUCCESS: Ghostty Reliable Paste path completed")
+                self.log("[TypingService] SUCCESS: Reliable Paste completed via \(path.rawValue)")
                 return .dispatched(path)
             }
-            self.log("[TypingService] Ghostty Reliable Paste path failed; not falling back to direct typing")
-            return .failed(attempt.failure ?? .pasteCommandFailed)
-        }
-
-        if self.textInsertionMode == .reliablePaste {
-            self.log("[TypingService] Reliable Paste mode enabled")
-            if let path = self.tryReliablePasteInsertion(text, preferredTargetPID: preferredTargetPID, beforeClipboardPaste: beforeClipboardPaste).path {
-                self.log("[TypingService] SUCCESS: Reliable Paste mode completed")
-                return .dispatched(path)
+            guard route.fallsBackToDirectTyping else {
+                self.log("[TypingService] Reliable Paste failed; this target never falls back to direct typing")
+                return .failed(attempt.failure ?? .pasteCommandFailed)
             }
-            self.log("[TypingService] Reliable Paste mode fell through to direct-typing fallbacks")
+            self.log("[TypingService] Reliable Paste fell through to direct-typing fallbacks")
         } else if let preferredTargetPID, preferredTargetPID > 0 {
             self.log("[TypingService] Experimental Direct Typing mode: trying preferred PID unicode insertion first")
             if self.insertTextBulkInstant(text, targetPID: preferredTargetPID) {
@@ -833,8 +978,7 @@ final class TypingService {
 
         // Fallback: Use clipboard-based insertion (more reliable)
         self.log("[TypingService] CGEvent failed, trying clipboard fallback")
-        beforeClipboardPaste()
-        if self.insertTextViaClipboard(text) == nil {
+        if self.insertTextViaClipboard(text, beforeDispatch: beforeClipboardDispatch) == nil {
             self.log("[TypingService] SUCCESS: Clipboard insertion completed")
             return .dispatched(.clipboardGlobal)
         }
@@ -856,29 +1000,33 @@ final class TypingService {
     private func tryReliablePasteInsertion(
         _ text: String,
         preferredTargetPID: pid_t?,
-        beforeClipboardPaste: () -> Void
+        allowsGlobalFallback: Bool = true,
+        beforeDispatch: () -> Void
     ) -> (path: InsertionPath?, failure: TextDeliveryFailure?) {
         var lastFailure: TextDeliveryFailure?
         if let preferredTargetPID, preferredTargetPID > 0 {
             self.log("[TypingService] Trying clipboard-to-PID insertion first")
-            beforeClipboardPaste()
-            lastFailure = self.insertTextViaClipboardToPid(text, targetPID: preferredTargetPID)
+            lastFailure = self.insertTextViaClipboardToPid(text, targetPID: preferredTargetPID, beforeDispatch: beforeDispatch)
             if lastFailure == nil {
                 self.log("[TypingService] Reliable Paste dispatched via clipboard-to-PID")
                 return (.clipboardToPID, nil)
             }
+            // A terminal that is not in front must not get a global Cmd+V either: it would go
+            // to whatever app is in front instead.
+            if lastFailure == .targetRestoreFailed || !allowsGlobalFallback {
+                return (nil, lastFailure)
+            }
         }
 
         self.log("[TypingService] Trying global clipboard insertion")
-        beforeClipboardPaste()
-        lastFailure = self.insertTextViaClipboard(text)
+        lastFailure = self.insertTextViaClipboard(text, beforeDispatch: beforeDispatch)
         if lastFailure == nil {
             self.log("[TypingService] Reliable Paste dispatched via global clipboard paste")
             return (.clipboardGlobal, nil)
         }
 
         self.log("[TypingService] Global clipboard insertion failed, trying menu paste")
-        lastFailure = self.insertTextViaMenuPaste(text)
+        lastFailure = self.insertTextViaMenuPaste(text, beforeDispatch: beforeDispatch)
         if lastFailure == nil {
             self.log("[TypingService] Reliable Paste dispatched via menu paste")
             return (.menuPaste, nil)
@@ -994,7 +1142,12 @@ final class TypingService {
 
     /// Clipboard-paste insertion targeted at a specific PID.
     /// Uses postToPid for Cmd+V while preserving the full previous pasteboard payload.
-    private func insertTextViaClipboardToPid(_ text: String, targetPID: pid_t, activateTargetFirst: Bool = true) -> TextDeliveryFailure? {
+    private func insertTextViaClipboardToPid(
+        _ text: String,
+        targetPID: pid_t,
+        activateTargetFirst: Bool = true,
+        beforeDispatch: () -> Void = {}
+    ) -> TextDeliveryFailure? {
         self.log("[TypingService] Starting clipboard-to-PID insertion to PID \(targetPID)")
 
         guard targetPID > 0 else {
@@ -1002,18 +1155,35 @@ final class TypingService {
             return .targetUnavailable
         }
 
-        if activateTargetFirst, NSWorkspace.shared.frontmostApplication?.processIdentifier != targetPID {
-            _ = Self.activateApp(pid: targetPID)
-            usleep(80_000)
-        }
-
         // Terminals consume a paste within ~100ms and expose no verifiable AX text, so
         // holding the pasteboard session for the full 5s verification window only stalls
         // (and previously dropped) back-to-back dictations.
         let isTerminalTarget = self.isGhosttyApplication(pid: targetPID)
+
+        if isTerminalTarget {
+            // A Cmd+V posted to a terminal that is not in front is dropped without a trace, so
+            // the terminal must really be in front before the paste, not merely asked to come.
+            if activateTargetFirst, !Self.isAppInFront(pid: targetPID) {
+                _ = Self.bringToFront(pid: targetPID)
+            }
+            let wait = Self.waitUntilAppInFrontBlocking(pid: targetPID, limit: Self.frontmostWaitLimit)
+            Self.logFrontmostCheck(stage: "before_paste", target: targetPID, waitedMs: wait.waitedMs, inFront: wait.inFront)
+            guard wait.inFront else { return .targetRestoreFailed }
+        } else if activateTargetFirst, NSWorkspace.shared.frontmostApplication?.processIdentifier != targetPID {
+            _ = Self.activateApp(pid: targetPID)
+            usleep(80_000)
+        }
+
+        var terminalLeftFront = false
         let failure = self.pasteSession.paste(
             text,
             dispatch: {
+                if isTerminalTarget, !Self.isAppInFront(pid: targetPID) {
+                    // Last look, with the transcript already on the clipboard: never send blind.
+                    terminalLeftFront = true
+                    Self.logFrontmostCheck(stage: "at_dispatch", target: targetPID, waitedMs: 0, inFront: false)
+                    return false
+                }
                 let events = PasteCommandEvents.makeTargetedPasteEvents(pasteKeyCode: Self.pasteVirtualKeyCode)
                 guard events.count == 2 else {
                     self.log("[TypingService] ERROR: Failed to create Cmd+V events for PID insertion")
@@ -1025,12 +1195,16 @@ final class TypingService {
                 self.log("[TypingService] Cmd+V posted to PID \(targetPID)")
                 return true
             },
-            makeConsumptionWait: { self.pasteConsumptionWait(isTerminalTarget: isTerminalTarget, expectedText: text) }
+            makeConsumptionWait: {
+                beforeDispatch()
+                return self.pasteConsumptionWait(isTerminalTarget: isTerminalTarget, expectedText: text)
+            }
         )
         if let failure {
-            self.bench("clipboard_pid_failed reason=\(failure.rawValue)")
+            self.bench("clipboard_pid_failed reason=\(failure.rawValue) terminalLeftFront=\(terminalLeftFront)")
+            return terminalLeftFront ? .targetRestoreFailed : failure
         }
-        return failure
+        return nil
     }
 
     private func insertTextBulkInstant(_ text: String, targetPID: pid_t) -> Bool {
@@ -1131,7 +1305,7 @@ final class TypingService {
 
     /// Clipboard-based text insertion as fallback
     /// More reliable but slightly slower - copies text to clipboard then pastes
-    private func insertTextViaClipboard(_ text: String) -> TextDeliveryFailure? {
+    private func insertTextViaClipboard(_ text: String, beforeDispatch: () -> Void = {}) -> TextDeliveryFailure? {
         self.log("[TypingService] Starting clipboard-based insertion")
         let failure = self.pasteSession.paste(
             text,
@@ -1148,7 +1322,10 @@ final class TypingService {
                 self.log("[TypingService] Cmd+V sent via clipboard insertion")
                 return true
             },
-            makeConsumptionWait: { self.pasteConsumptionWait(isTerminalTarget: false, expectedText: text) }
+            makeConsumptionWait: {
+                beforeDispatch()
+                return self.pasteConsumptionWait(isTerminalTarget: false, expectedText: text)
+            }
         )
         if let failure {
             self.bench("clipboard_global_failed reason=\(failure.rawValue)")
@@ -1156,7 +1333,7 @@ final class TypingService {
         return failure
     }
 
-    private func insertTextViaMenuPaste(_ text: String) -> TextDeliveryFailure? {
+    private func insertTextViaMenuPaste(_ text: String, beforeDispatch: () -> Void = {}) -> TextDeliveryFailure? {
         self.log("[TypingService] Starting menu-based paste insertion")
         guard let appName = NSWorkspace.shared.frontmostApplication?.localizedName, !appName.isEmpty else {
             self.log("[TypingService] ERROR: No frontmost app name available for menu paste")
@@ -1190,7 +1367,10 @@ final class TypingService {
                 self.log("[TypingService] Menu paste executed for app \(appName), result: \(result.stringValue ?? "ok")")
                 return true
             },
-            makeConsumptionWait: { self.pasteConsumptionWait(isTerminalTarget: false, expectedText: text) }
+            makeConsumptionWait: {
+                beforeDispatch()
+                return self.pasteConsumptionWait(isTerminalTarget: false, expectedText: text)
+            }
         )
         if let failure {
             self.bench("menu_paste_failed reason=\(failure.rawValue)")

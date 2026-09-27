@@ -195,7 +195,12 @@ nonisolated final class SystemPasteboardManager: PasteboardManaging, @unchecked 
                 }
                 guard !representations.isEmpty else { continue }
                 let item = PasteboardSnapshot.Item(representations: representations)
-                let portableImage = skippedOversizedRepresentation ? nil : Self.portableImageRepresentation(for: item)
+                // Portable images share one budget across every item, so copying many image files
+                // at once cannot balloon the snapshot.
+                let imageBudget = Self.maximumRepresentationBytes - totalPortableImageBytes
+                let portableImage = skippedOversizedRepresentation || imageBudget <= 0
+                    ? nil
+                    : Self.portableImageRepresentation(for: item, budget: imageBudget)
                 totalPortableImageBytes += portableImage?.data.count ?? 0
                 items.append(.init(representations: representations, portableImage: portableImage))
             }
@@ -268,26 +273,32 @@ nonisolated final class SystemPasteboardManager: PasteboardManaging, @unchecked 
             self.pasteboard.string(forType: Self.sessionType) == sessionID
     }
 
-    func restoreTemporarySnapshot(_ snapshot: PasteboardSnapshot, sessionID: String, expectedText _: String) -> Bool {
+    func restoreTemporarySnapshot(_ snapshot: PasteboardSnapshot, sessionID: String, expectedText: String) -> Bool {
         guard let temporaryWrite, temporaryWrite.sessionID == sessionID else { return false }
-        return self.restore(snapshot, ifUnchangedSince: temporaryWrite.changeCount)
+        return self.restore(snapshot, ifUnchangedSince: temporaryWrite.changeCount, leftoverText: expectedText)
     }
 
     func restore(_ snapshot: PasteboardSnapshot) -> Bool {
-        self.restore(snapshot, ifUnchangedSince: nil)
+        self.restore(snapshot, ifUnchangedSince: nil, leftoverText: nil)
     }
 
-    private func restore(_ snapshot: PasteboardSnapshot, ifUnchangedSince changeCount: Int?) -> Bool {
+    private func restore(_ snapshot: PasteboardSnapshot, ifUnchangedSince changeCount: Int?, leftoverText: String?) -> Bool {
         guard !snapshot.items.isEmpty else {
+            if let changeCount, self.pasteboard.changeCount != changeCount { return false }
             if snapshot.wasEmpty {
                 // The clipboard was empty before the paste; put it back that way.
-                if let changeCount, self.pasteboard.changeCount != changeCount { return false }
                 self.clearOwnedContents()
                 self.log("clipboard_restore_verified items=0 reason=originally_empty")
                 return true
             }
-            // Every representation was too large to keep; leave the transcript on the
-            // clipboard rather than clearing it.
+            // Every representation was too large to keep. Rather than clearing the clipboard,
+            // leave the transcript on it, as an ordinary copy the user can see and paste (the
+            // temporary entry is hidden from clipboard managers).
+            if let leftoverText, !leftoverText.isEmpty {
+                let rewritten = self.writeIntentionalText(leftoverText)
+                self.log("clipboard_restore_skipped reason=nothing_captured transcriptLeftVisible=\(rewritten)")
+                return rewritten
+            }
             self.log("clipboard_restore_skipped reason=nothing_captured")
             return true
         }
@@ -393,7 +404,8 @@ nonisolated final class SystemPasteboardManager: PasteboardManaging, @unchecked 
     }
 
     private static func portableImageRepresentation(
-        for item: PasteboardSnapshot.Item
+        for item: PasteboardSnapshot.Item,
+        budget: Int
     ) -> PasteboardSnapshot.Item.Representation? {
         let sourceTypes = Set(item.representations.map(\.type))
         guard !sourceTypes.contains(.png),
@@ -410,7 +422,7 @@ nonisolated final class SystemPasteboardManager: PasteboardManaging, @unchecked 
             if let fileURL = Self.fileURL(in: item),
                let fileType = UTType(filenameExtension: fileURL.pathExtension),
                fileType.conforms(to: .image),
-               Self.isReadableLocalFile(fileURL),
+               Self.isReadableLocalFile(fileURL, maximumBytes: budget),
                let imageData = try? Data(contentsOf: fileURL, options: .mappedIfSafe)
             {
                 return .init(
@@ -423,7 +435,8 @@ nonisolated final class SystemPasteboardManager: PasteboardManaging, @unchecked 
         for representation in item.representations {
             guard UTType(representation.type.rawValue)?.conforms(to: .image) == true,
                   representation.data.count <= Self.maximumPortableImageSourceBytes,
-                  let pngData = Self.pngData(from: representation.data)
+                  let pngData = Self.pngData(from: representation.data),
+                  pngData.count <= budget
             else {
                 continue
             }
@@ -434,10 +447,10 @@ nonisolated final class SystemPasteboardManager: PasteboardManaging, @unchecked 
 
     /// Only local, already-downloaded files under the size cap are read on the paste path: an
     /// iCloud placeholder or a network volume could otherwise stall the paste.
-    private static func isReadableLocalFile(_ url: URL) -> Bool {
+    private static func isReadableLocalFile(_ url: URL, maximumBytes: Int) -> Bool {
         let keys: Set<URLResourceKey> = [.fileSizeKey, .volumeIsLocalKey, .isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey]
         guard url.isFileURL, let values = try? url.resourceValues(forKeys: keys) else { return false }
-        guard let size = values.fileSize, size <= self.maximumRepresentationBytes else { return false }
+        guard let size = values.fileSize, size <= min(maximumBytes, self.maximumRepresentationBytes) else { return false }
         if values.volumeIsLocal == false { return false }
         if values.isUbiquitousItem == true, values.ubiquitousItemDownloadingStatus != .current { return false }
         return true
@@ -604,10 +617,14 @@ nonisolated final class ClipboardPasteSession: @unchecked Sendable {
     /// (a paste, a restore, an earlier backup): anything the user copied since is never replaced.
     /// `revision` defaults to the clipboard as it is now; pass the revision seen when the problem
     /// started (for example right after the paste a read-back later found missing).
-    /// `completion` reports whether the transcript is on the clipboard afterwards.
-    func keepTranscript(_ text: String, since revision: Int? = nil, completion: (@Sendable (Bool) -> Void)? = nil) {
+    /// `completion` reports what happened.
+    func keepTranscript(
+        _ text: String,
+        since revision: Int? = nil,
+        completion: (@Sendable (TranscriptBackupOutcome) -> Void)? = nil
+    ) {
         guard !text.isEmpty else {
-            completion?(false)
+            completion?(.emptyText)
             return
         }
         let observedChangeCount = revision ?? self.pasteboard.changeCount
@@ -617,17 +634,17 @@ nonisolated final class ClipboardPasteSession: @unchecked Sendable {
             let current = self.pasteboard.changeCount
             guard Self.onlyOwnChanges(since: observedChangeCount, through: current, pasteboard: self.pasteboard) else {
                 self.log("transcript_backup_skipped reason=newer_clipboard_copy")
-                completion?(false)
+                completion?(.newerClipboardCopy)
                 return
             }
             if self.pasteboard.holdsIntentionalText(text) {
                 self.log("transcript_backup_skipped reason=already_on_clipboard")
-                completion?(true)
+                completion?(.alreadyOnClipboard)
                 return
             }
             let copied = self.pasteboard.writeIntentionalText(text)
             self.log("transcript_backup success=\(copied) chars=\(text.count)")
-            completion?(copied)
+            completion?(copied ? .copied : .writeFailed)
         }
     }
 

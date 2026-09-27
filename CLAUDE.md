@@ -8,7 +8,7 @@ Atin dictates into Claude Code in c11 all day with the installed app. Text deliv
 
 - Never touch `/Applications/Liquid Voice.app`, quit or relaunch the running Liquid Voice, write `defaults` for `com.FluidApp.app`, or touch `~/Library/Application Support/FluidVoice`. Never run `./build.sh install` without Atin.
 - Debug builds are isolated: bundle ID `com.FluidApp.app.dev` (own UserDefaults) and data folder `FluidVoice-Dev`. Any code that picks an Application Support folder must use `AppStorageLocation.folderName`.
-- Logs from both builds go to `~/Library/Logs/Fluid/Fluid.log`. Read them freely.
+- Logs: the installed app writes `~/Library/Logs/Fluid/Fluid.log`; Debug builds and test runs write `~/Library/Logs/Fluid-Dev/Fluid.log` (`AppStorageLocation.logFolderName`). Read either freely.
 
 ## Build
 

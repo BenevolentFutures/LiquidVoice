@@ -1269,7 +1269,7 @@ struct SettingsView: View {
                             Text("The debug log contains detailed information about app operations and can help with troubleshooting.")
                                 .font(self.theme.typography.bodySmall)
                                 .foregroundStyle(self.settingsSecondaryText)
-                            Text("Crash diagnostics are written to Library/Logs/Fluid/Fluid.log by default.")
+                            Text("Crash diagnostics are written to Library/Logs/\(AppStorageLocation.logFolderName)/Fluid.log by default.")
                                 .font(self.theme.typography.bodySmall)
                                 .foregroundStyle(self.settingsSecondaryText)
                         }

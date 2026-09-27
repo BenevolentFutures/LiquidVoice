@@ -1737,6 +1737,13 @@ final class DictationE2ETests: XCTestCase {
         XCTAssertEqual(LiquidVoiceLinks.issueTitle(forFeedback: String(repeating: "a", count: 200)).count, 80)
     }
 
+    func testDebugBuildLogsToItsOwnFolder() {
+        XCTAssertEqual(AppStorageLocation.logFolderName, "Fluid-Dev")
+        let logURL = FileLogger.shared.currentLogFileURL()
+        XCTAssertEqual(logURL.deletingLastPathComponent().lastPathComponent, "Fluid-Dev")
+        XCTAssertEqual(logURL.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent, "Logs")
+    }
+
     private var retiredFluidIntelligenceTestKeys: [String] {
         [
             self.selectedProviderIDKey,

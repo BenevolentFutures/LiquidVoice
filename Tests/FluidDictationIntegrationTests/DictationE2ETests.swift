@@ -1720,13 +1720,15 @@ final class DictationE2ETests: XCTestCase {
         XCTAssertFalse(url.absoluteString.contains("+"), "a literal + would read as a space on GitHub")
     }
 
-    func testFeedbackIssueURLStaysUnderGitHubsLengthLimit() throws {
+    func testFeedbackIssueURLTruncatesFeedbackButKeepsVersionInfo() throws {
         let body = String(repeating: "long feedback ", count: 2000)
-        let url = LiquidVoiceLinks.prefilledIssueURL(title: "Long", body: body)
+        let footer = "---\nLiquid Voice 1.2.3 (45)\nmacOS 26.0"
+        let url = LiquidVoiceLinks.prefilledIssueURL(title: "Long", body: body, footer: footer)
         XCTAssertLessThanOrEqual(url.absoluteString.count, LiquidVoiceLinks.maxIssueURLLength)
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
         let sentBody = try XCTUnwrap(components.queryItems?.first { $0.name == "body" }?.value)
-        XCTAssertTrue(sentBody.hasSuffix("[truncated]"))
+        XCTAssertTrue(sentBody.hasPrefix("long feedback "))
+        XCTAssertTrue(sentBody.hasSuffix("[truncated]\n\n" + footer))
     }
 
     func testFeedbackIssueTitleUsesFirstLineOfFeedback() {

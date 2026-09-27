@@ -359,30 +359,10 @@ struct OnboardingAIEnhancementStepView: View {
 
             Spacer()
 
-            HStack(spacing: 12) {
-                self.providerChoiceButton
-
-                self.skipButton
-            }
+            self.skipButton
         }
         .padding(.horizontal, 30)
         .padding(.bottom, 24)
-    }
-
-    private var providerChoiceButton: some View {
-        self.pillButton(
-            PillButtonConfiguration(
-                id: "ai-provider",
-                title: "Set up AI provider",
-                systemImage: "arrow.up.right",
-                tone: .secondary,
-                width: 280,
-                height: 48,
-                fontSize: 15,
-                isEnabled: self.canNavigateOrMutate
-            ),
-            action: self.onUseAIProvider
-        )
     }
 
     private var skipButton: some View {

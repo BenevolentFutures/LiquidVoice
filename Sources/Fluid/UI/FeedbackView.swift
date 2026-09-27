@@ -164,13 +164,10 @@ struct FeedbackView: View {
         let feedback = self.trimmedFeedback
         guard !feedback.isEmpty else { return }
 
-        var body = feedback
-        if self.includeSystemInfo {
-            body += "\n\n---\n" + Self.systemInfo()
-        }
         let url = LiquidVoiceLinks.prefilledIssueURL(
             title: LiquidVoiceLinks.issueTitle(forFeedback: feedback),
-            body: body
+            body: feedback,
+            footer: self.includeSystemInfo ? "---\n" + Self.systemInfo() : ""
         )
         DebugLogger.shared.info("Opening prefilled feedback issue on GitHub", source: "FeedbackView")
         NSWorkspace.shared.open(url)

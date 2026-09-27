@@ -220,7 +220,6 @@ struct TranscriptionHistoryView: View {
                 }
             }
 
-
             Divider()
 
             Button(role: .destructive) {

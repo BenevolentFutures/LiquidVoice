@@ -4,7 +4,6 @@ import Foundation
 /// upstream links are deliberate credit to FluidVoice by altic-dev, which Liquid Voice is built on.
 /// Nothing here is fetched: these URLs are only ever opened in the user's browser.
 enum LiquidVoiceLinks {
-    static let repository = URL(string: "https://github.com/BenevolentFutures/LiquidVoice")!
     static let newIssue = URL(string: "https://github.com/BenevolentFutures/LiquidVoice/issues/new")!
 
     /// Upstream credit: the project Liquid Voice is forked from, and its maintainer's sponsor page.
@@ -15,13 +14,17 @@ enum LiquidVoiceLinks {
     static let maxIssueURLLength = 7500
 
     /// A new-issue URL on Liquid Voice's GitHub with the title and body prefilled. Opening it
-    /// sends nothing: the user reviews the draft and submits it on GitHub themselves.
-    static func prefilledIssueURL(title: String, body: String) -> URL {
+    /// sends nothing: the user reviews the draft and submits it on GitHub themselves. When the
+    /// URL would be too long, `body` is shortened; `footer` (such as version info) is always kept.
+    static func prefilledIssueURL(title: String, body: String, footer: String = "") -> URL {
         var keptCharacters = body.count
         while true {
-            let draftBody = keptCharacters == body.count
+            var draftBody = keptCharacters == body.count
                 ? body
                 : String(body.prefix(keptCharacters)) + "\n\n[truncated]"
+            if !footer.isEmpty {
+                draftBody += "\n\n" + footer
+            }
             var components = URLComponents(url: self.newIssue, resolvingAgainstBaseURL: false)!
             components.percentEncodedQueryItems = [
                 URLQueryItem(name: "title", value: self.encodeQueryValue(title)),

@@ -25,7 +25,7 @@ xcodebuild -project Fluid.xcodeproj -scheme Fluid -configuration Debug -destinat
 
 - Same command with `test`. Iterate with `-only-testing:FluidDictationIntegrationTests/<Suite>`, then run the full suite before a PR.
 - The test host is `Liquid Voice Debug.app`, which launches briefly. Never click through or dismiss a system permission prompt; report it.
-- Known flaky: `DirectAudioReliabilityTests.testReadinessGateRearmingCancelsExistingWaiter`. Re-run it alone before calling it a regression.
+- `DirectAudioReliabilityTests.testReadinessGateRearmingCancelsExistingWaiter` was flaky (a test race) until `4474074e`. If it fails again, re-run it alone before calling it a regression.
 - App sources are a synchronized folder; test files are listed in `project.pbxproj` by hand. A new test file needs a project entry, so prefer adding to an existing test file.
 - swiftlint and swiftformat are not installed. Follow `.swiftlint.yml`, `.swiftformat` and the surrounding code.
 

@@ -251,7 +251,7 @@ final class MicrophoneChangeOverlayController {
     private init() {}
 
     func show(_ notice: MicrophoneChangeNotice) {
-        guard Bundle.main.bundleIdentifier == "com.FluidApp.app",
+        guard AppStorageLocation.appBundleIdentifiers.contains(Bundle.main.bundleIdentifier ?? ""),
               SettingsStore.shared.showMicrophoneChangeAlerts
         else { return }
         self.generation &+= 1

@@ -198,6 +198,32 @@ struct ModifierOnlyShortcutFlagsDecision: Equatable {
     }
 }
 
+/// Remembers which mouse button's down a one-shot shortcut (paste last, reprocess last) consumed,
+/// so only its paired up is swallowed. Any doubt clears it: an orphaned up reaching an app is
+/// harmless, but swallowing a real up leaves the app thinking the button is still held (it drags).
+nonisolated struct OneShotMouseUpSwallow: Equatable {
+    private(set) var button: Int?
+
+    mutating func consumedDown(button: Int) {
+        self.button = button
+    }
+
+    /// Any down on the pending button proves its earlier up was missed (tap outage, capture).
+    mutating func observedDown(button: Int) {
+        if self.button == button { self.button = nil }
+    }
+
+    mutating func shouldSwallowUp(button: Int) -> Bool {
+        guard self.button == button else { return false }
+        self.button = nil
+        return true
+    }
+
+    mutating func reset() {
+        self.button = nil
+    }
+}
+
 private final nonisolated class HotkeyState: @unchecked Sendable {
     private let lock = NSLock()
     var isKeyPressed = false
@@ -218,7 +244,7 @@ private final nonisolated class HotkeyState: @unchecked Sendable {
     var automaticPressWasTargetActive: [HotkeyHoldModeType: Bool] = [:]
     var automaticPressStartedTypes: Set<HotkeyHoldModeType> = []
     var activePrimaryShortcutPress: ActivePrimaryShortcutPress?
-    var consumedOneShotMouseButton: Int?
+    var oneShotMouseUpSwallow = OneShotMouseUpSwallow()
 
     func withLock<T>(_ block: () -> T) -> T {
         self.lock.lock()
@@ -687,6 +713,19 @@ final class GlobalHotkeyManager: NSObject {
                 }
                 let manager = Unmanaged<GlobalHotkeyManager>.fromOpaque(refcon)
                     .takeUnretainedValue()
+                if !Thread.isMainThread, GlobalHotkeyManager.isTapDisabledNotice(type) {
+                    // Re-enable here so hotkeys come back even while main is stalled (a stall is
+                    // what usually trips the timeout). The tracking reset, and a rebuild if this
+                    // did not take, follow on main; the serial main queue runs that before any
+                    // key event queued behind it.
+                    manager.reenableKeyboardTapOnTapThread()
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated {
+                            manager.recoverFromKeyboardTapDisable(type: type)
+                        }
+                    }
+                    return Unmanaged.passUnretained(event)
+                }
                 if Thread.isMainThread {
                     return MainActor.assumeIsolated {
                         manager.handleKeyEvent(proxy: proxy, type: type, event: event)
@@ -1064,6 +1103,8 @@ final class GlobalHotkeyManager: NSObject {
 
     private func handleMouseShortcutEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            // Mouse events were lost while the tap was off; a pending one-shot up may be among them.
+            self.state.withLock { self.state.oneShotMouseUpSwallow.reset() }
             self.finishInterruptedMouseShortcutPress(reason: "mouse shortcut tap disabled")
             self.reenableMouseTap(self.mouseShortcutTap, label: "Mouse shortcut") {
                 self.setupMouseShortcutTap(mouseButtons: self.configuredMouseButtons())
@@ -1072,6 +1113,8 @@ final class GlobalHotkeyManager: NSObject {
         }
 
         if self.isShortcutCaptureActiveProvider?() ?? false {
+            // Capture sees the raw clicks, so no paired up will be swallowed while it is active.
+            self.state.withLock { self.state.oneShotMouseUpSwallow.reset() }
             return Unmanaged.passUnretained(event)
         }
 
@@ -1115,7 +1158,7 @@ final class GlobalHotkeyManager: NSObject {
 
     private nonisolated func clearPrimaryShortcutPressState(mouseOnly: Bool = false) {
         let task = self.state.withLock { () -> Task<Void, Never>? in
-            self.state.consumedOneShotMouseButton = nil
+            self.state.oneShotMouseUpSwallow.reset()
             if mouseOnly {
                 guard case .mouse? = self.state.activePrimaryShortcutPress else { return nil }
             } else {
@@ -1152,8 +1195,12 @@ final class GlobalHotkeyManager: NSObject {
         }
     }
 
-    private func finishInterruptedMouseShortcutPress(reason: String) {
-        guard case .mouse? = self.activePrimaryShortcutPress else { return }
+    /// Ends an active primary mouse press whose mouse-up can no longer be trusted to arrive, and
+    /// stops the recording it holds (hold and automatic modes), including one still starting.
+    /// Returns true when there was a mouse press to finish.
+    @discardableResult
+    private func finishInterruptedMouseShortcutPress(reason: String) -> Bool {
+        guard case .mouse? = self.activePrimaryShortcutPress else { return false }
 
         self.clearPrimaryShortcutPressState(mouseOnly: true)
 
@@ -1162,16 +1209,20 @@ final class GlobalHotkeyManager: NSObject {
             source: "GlobalHotkeyManager"
         )
 
-        guard Self.shouldForceStopInterruptedPrimaryPress(activationMode: self.hotkeyMode) else { return }
+        guard Self.shouldForceStopInterruptedPrimaryPress(activationMode: self.hotkeyMode) else { return true }
         if self.asrService.isRunningOrStarting {
             self.stopRecordingIfNeeded()
         } else {
+            // The start task has not reached ASR yet. Stop it as soon as it is starting, since a
+            // direct Core Audio start can take seconds (DeadlineRace) before it is running.
             self.stopRecordingAfterRelease(
                 for: .transcription,
                 label: "Interrupted mouse shortcut",
-                requireTargetMode: false
+                requireTargetMode: false,
+                cancelsPendingStart: true
             )
         }
+        return true
     }
 
     nonisolated static func shouldForceStopInterruptedPrimaryPress(activationMode: HotkeyActivationMode) -> Bool {
@@ -1611,19 +1662,32 @@ final class GlobalHotkeyManager: NSObject {
         return Unmanaged.passUnretained(event)
     }
 
-    private func handleTapDisableEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
-        // macOS can temporarily disable event taps (e.g. timeouts, user input protection).
-        // If we don't immediately re-enable here, hotkeys will silently stop working until our
-        // periodic health check kicks in, and the OS may handle the key (e.g. system dictation).
-        guard type == .tapDisabledByTimeout || type == .tapDisabledByUserInput else {
-            return nil
-        }
+    nonisolated static func isTapDisabledNotice(_ type: CGEventType) -> Bool {
+        type == .tapDisabledByTimeout || type == .tapDisabledByUserInput
+    }
 
+    /// Called on the keyboard tap thread when macOS disables the tap.
+    private nonisolated func reenableKeyboardTapOnTapThread() {
+        guard let tap = self.eventTap else { return }
+        CGEvent.tapEnable(tap: tap, enable: true)
+    }
+
+    private func handleTapDisableEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        guard Self.isTapDisabledNotice(type) else { return nil }
+        self.recoverFromKeyboardTapDisable(type: type)
+        return Unmanaged.passUnretained(event)
+    }
+
+    private func recoverFromKeyboardTapDisable(type: CGEventType) {
+        // macOS can temporarily disable event taps (e.g. timeouts, user input protection).
+        // If we don't immediately re-enable, hotkeys silently stop working until the periodic
+        // health check kicks in, and the OS may handle the key (e.g. system dictation). The tap
+        // thread normally re-enabled it already; key-ups may have been lost while it was off.
         let reason = (type == .tapDisabledByTimeout) ? "timeout" : "user input"
-        DebugLogger.shared.warning("Event tap disabled by \(reason) — attempting immediate re-enable", source: "GlobalHotkeyManager")
+        DebugLogger.shared.warning("Event tap disabled by \(reason) — re-enabling and resetting tracking", source: "GlobalHotkeyManager")
         self.resetModifierOnlyShortcutTracking(reason: .tapDisabled)
 
-        if let tap = self.eventTap {
+        if let tap = self.eventTap, !self.isEventTapEnabled() {
             CGEvent.tapEnable(tap: tap, enable: true)
         }
 
@@ -1631,8 +1695,6 @@ final class GlobalHotkeyManager: NSObject {
             DebugLogger.shared.warning("Event tap re-enable failed — recreating tap", source: "GlobalHotkeyManager")
             self.setupGlobalHotkeyWithRetry()
         }
-
-        return Unmanaged.passUnretained(event)
     }
 
     private func synchronizedPressedModifierKeyCodes(
@@ -1831,7 +1893,8 @@ final class GlobalHotkeyManager: NSObject {
     private func stopRecordingAfterRelease(
         for type: HotkeyHoldModeType,
         label: String,
-        requireTargetMode: Bool = true
+        requireTargetMode: Bool = true,
+        cancelsPendingStart: Bool = false
     ) {
         if self.asrService.isRunning {
             self.cancelPendingReleaseStop(for: type)
@@ -1851,7 +1914,7 @@ final class GlobalHotkeyManager: NSObject {
                 guard let self = self else { return }
                 guard self.isPendingReleaseStopCurrent(for: type, token: token) else { return }
 
-                if self.asrService.isRunning {
+                if self.asrService.isRunning || (cancelsPendingStart && self.asrService.isStarting) {
                     guard !requireTargetMode || self.isRecordingTargetActive(for: type) else {
                         DebugLogger.shared.debug("\(label) deferred stop skipped - active mode changed", source: "GlobalHotkeyManager")
                         self.clearPendingReleaseStop(for: type, token: token)
@@ -1958,9 +2021,17 @@ final class GlobalHotkeyManager: NSObject {
     }
 
     func resetModifierOnlyShortcutTracking(reason: ModifierTrackingResetReason = .shortcutCapture) {
-        let shouldStopActiveHold = self.hotkeyMode != .toggle
-            && self.asrService.isRunning
-            && (self.isKeyPressed || self.isPromptModeKeyPressed || self.isCommandModeKeyPressed || self.isRewriteKeyPressed || self.isPromptAssignmentKeyPressed)
+        // An active mouse hold loses its press record below, so its mouse-up could no longer stop
+        // it. End it first through the interrupted-press path, which also stops a still-starting
+        // recording. (A keyboard-tap outage alone would not lose the mouse-up; stopping there is the
+        // conservative choice and matches what a mouse-tap outage does.)
+        let finishedMousePress = self.finishInterruptedMouseShortcutPress(reason: "shortcut tracking reset (\(reason))")
+        let shouldStopActiveHold = !finishedMousePress && Self.shouldStopHeldRecordingOnTrackingReset(
+            activationMode: self.hotkeyMode,
+            isRunningOrStarting: self.asrService.isRunningOrStarting,
+            isAnyHoldKeyPressed: self.isKeyPressed || self.isPromptModeKeyPressed || self.isCommandModeKeyPressed
+                || self.isRewriteKeyPressed || self.isPromptAssignmentKeyPressed
+        )
 
         self.pressedModifierKeyCodes = []
         self.modifierOnlyKeyDown = false
@@ -1986,6 +2057,16 @@ final class GlobalHotkeyManager: NSObject {
             }
             self.stopRecordingIfNeeded()
         }
+    }
+
+    /// A hold or automatic press that is reset mid-flight must stop its recording, and "recording"
+    /// includes a start still in flight: a direct Core Audio start can take seconds.
+    nonisolated static func shouldStopHeldRecordingOnTrackingReset(
+        activationMode: HotkeyActivationMode,
+        isRunningOrStarting: Bool,
+        isAnyHoldKeyPressed: Bool
+    ) -> Bool {
+        activationMode != .toggle && isRunningOrStarting && isAnyHoldKeyPressed
     }
 
     private func handlePromptModeKeyDown(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
@@ -2224,12 +2305,14 @@ final class GlobalHotkeyManager: NSObject {
     /// begins a press here and ends it on mouse-up.
     private func handleMouseShortcutDown(_ event: CGEvent, modifiers eventModifiers: NSEvent.ModifierFlags) -> Bool {
         let mouseButton = self.mouseButton(from: event)
+        // A new down on a button still waiting for its swallowed up proves that up was missed.
+        self.state.withLock { self.state.oneShotMouseUpSwallow.observedDown(button: mouseButton) }
 
         if SettingsStore.shared.pasteLastTranscriptionShortcutEnabled,
            let pasteShortcut = SettingsStore.shared.pasteLastTranscriptionHotkeyShortcut,
            pasteShortcut.matchesMouse(button: mouseButton, modifiers: eventModifiers)
         {
-            self.state.withLock { self.state.consumedOneShotMouseButton = mouseButton }
+            self.state.withLock { self.state.oneShotMouseUpSwallow.consumedDown(button: mouseButton) }
             self.triggerPasteLastTranscription(isAutorepeat: false)
             return true
         }
@@ -2238,7 +2321,7 @@ final class GlobalHotkeyManager: NSObject {
            let reprocessShortcut = SettingsStore.shared.reprocessLastDictationHotkeyShortcut,
            reprocessShortcut.matchesMouse(button: mouseButton, modifiers: eventModifiers)
         {
-            self.state.withLock { self.state.consumedOneShotMouseButton = mouseButton }
+            self.state.withLock { self.state.oneShotMouseUpSwallow.consumedDown(button: mouseButton) }
             self.triggerReprocessLastDictation(isAutorepeat: false)
             return true
         }
@@ -2256,10 +2339,8 @@ final class GlobalHotkeyManager: NSObject {
     private func handleMouseShortcutUp(_ event: CGEvent) -> Bool {
         let mouseButton = self.mouseButton(from: event)
 
-        let consumedOneShotDown = self.state.withLock { () -> Bool in
-            guard self.state.consumedOneShotMouseButton == mouseButton else { return false }
-            self.state.consumedOneShotMouseButton = nil
-            return true
+        let consumedOneShotDown = self.state.withLock {
+            self.state.oneShotMouseUpSwallow.shouldSwallowUp(button: mouseButton)
         }
         if consumedOneShotDown {
             return true

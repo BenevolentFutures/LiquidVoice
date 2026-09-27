@@ -120,6 +120,65 @@ final class HotkeyShortcutTests: XCTestCase {
         XCTAssertFalse(GlobalHotkeyManager.isSelfPostedKeyboardEvent(type: .keyDown, event: event, ownProcessID: ownPID))
     }
 
+    func testOneShotMouseUpSwallowOnlyTakesThePairedUp() {
+        var swallow = OneShotMouseUpSwallow()
+        XCTAssertFalse(swallow.shouldSwallowUp(button: 0), "nothing consumed, nothing swallowed")
+
+        swallow.consumedDown(button: 0)
+        XCTAssertFalse(swallow.shouldSwallowUp(button: 1), "another button's up is not the pair")
+        XCTAssertTrue(swallow.shouldSwallowUp(button: 0))
+        XCTAssertFalse(swallow.shouldSwallowUp(button: 0), "swallows exactly one up")
+    }
+
+    func testOneShotMouseUpSwallowClearsWhenThePairedUpWasMissed() {
+        // Reprocess on Option+Left Click; the tap times out before the up, so the up is lost.
+        var swallow = OneShotMouseUpSwallow()
+        swallow.consumedDown(button: 0)
+        swallow.observedDown(button: 0) // the next plain left click
+        XCTAssertFalse(swallow.shouldSwallowUp(button: 0), "a plain click's up must reach the app, or it drags")
+
+        // A down on a different button proves nothing about the pending one.
+        swallow.consumedDown(button: 0)
+        swallow.observedDown(button: 1)
+        XCTAssertTrue(swallow.shouldSwallowUp(button: 0))
+
+        // Tap outage or shortcut capture clears it outright.
+        swallow.consumedDown(button: 3)
+        swallow.reset()
+        XCTAssertFalse(swallow.shouldSwallowUp(button: 3))
+    }
+
+    func testTrackingResetStopsAHeldRecordingThatIsStillStarting() {
+        for mode in [HotkeyActivationMode.hold, .automatic] {
+            XCTAssertTrue(
+                GlobalHotkeyManager.shouldStopHeldRecordingOnTrackingReset(
+                    activationMode: mode, isRunningOrStarting: true, isAnyHoldKeyPressed: true
+                ),
+                "\(mode): a start in flight (DeadlineRace can take seconds) must be stopped, not orphaned"
+            )
+            XCTAssertFalse(GlobalHotkeyManager.shouldStopHeldRecordingOnTrackingReset(
+                activationMode: mode, isRunningOrStarting: true, isAnyHoldKeyPressed: false
+            ))
+            XCTAssertFalse(GlobalHotkeyManager.shouldStopHeldRecordingOnTrackingReset(
+                activationMode: mode, isRunningOrStarting: false, isAnyHoldKeyPressed: true
+            ))
+        }
+        XCTAssertFalse(
+            GlobalHotkeyManager.shouldStopHeldRecordingOnTrackingReset(
+                activationMode: .toggle, isRunningOrStarting: true, isAnyHoldKeyPressed: true
+            ),
+            "toggle recordings are not held, so a reset never stops them"
+        )
+    }
+
+    func testTapDisabledNoticesAreRecognizedForImmediateReenable() {
+        XCTAssertTrue(GlobalHotkeyManager.isTapDisabledNotice(.tapDisabledByTimeout))
+        XCTAssertTrue(GlobalHotkeyManager.isTapDisabledNotice(.tapDisabledByUserInput))
+        for type in [CGEventType.keyDown, .keyUp, .flagsChanged, .leftMouseDown] {
+            XCTAssertFalse(GlobalHotkeyManager.isTapDisabledNotice(type))
+        }
+    }
+
     func testKeyboardEventMaskExcludesMouseEvents() {
         let mask = GlobalHotkeyManager.keyboardEventMask()
         for type in [CGEventType.keyDown, .keyUp, .flagsChanged] {
@@ -1911,7 +1970,7 @@ final class HotkeyShortcutTests: XCTestCase {
                 .init(uid: builtIn.uid, name: builtIn.name),
                 .init(uid: usb.uid, name: usb.name),
             ]
-            SettingsStore.shared.removeMicrophoneFromPriority(uid: builtIn.uid, isConnected: true)
+            SettingsStore.shared.removeMicrophoneFromPriority(uid: builtIn.uid)
 
             let devices = FakeAudioDeviceManager(inputs: [builtIn, usb], defaultInputUID: builtIn.uid)
             let coordinator = MicrophonePreferenceCoordinator(settings: .shared, devices: devices)
@@ -1927,6 +1986,38 @@ final class HotkeyShortcutTests: XCTestCase {
             SettingsStore.shared.reconcileMicrophonePriority(with: [builtIn, usb])
             XCTAssertEqual(SettingsStore.shared.microphonePriority.map(\.uid), [usb.uid])
             XCTAssertEqual(coordinator.inputDeviceForCapture(), usb)
+        }
+    }
+
+    @MainActor
+    func testMicrophoneRemovedWhileDisconnectedStaysRemovedUntilRestored() throws {
+        try self.withRestoredDefaults(keys: [
+            self.preferredInputDeviceUIDKey,
+            self.microphonePriorityKey,
+            self.suppressedMicrophoneUIDsKey,
+        ]) {
+            let builtIn = Self.device(uid: "internal", name: "MacBook Pro Microphone")
+            let usb = Self.device(uid: "usb", name: "USB Microphone")
+            SettingsStore.shared.suppressedMicrophoneUIDs = []
+            SettingsStore.shared.microphonePriority = [
+                .init(uid: builtIn.uid, name: builtIn.name),
+                .init(uid: usb.uid, name: usb.name),
+            ]
+
+            // The USB mic is unplugged when the user removes it from the list.
+            SettingsStore.shared.removeMicrophoneFromPriority(uid: usb.uid)
+            XCTAssertTrue(SettingsStore.shared.suppressedMicrophoneUIDs.contains(usb.uid))
+            SettingsStore.shared.reconcileMicrophonePriority(with: [builtIn])
+            XCTAssertEqual(SettingsStore.shared.microphonePriority.map(\.uid), [builtIn.uid])
+
+            // Plugging it back in must not bring it back.
+            SettingsStore.shared.reconcileMicrophonePriority(with: [builtIn, usb])
+            XCTAssertEqual(SettingsStore.shared.microphonePriority.map(\.uid), [builtIn.uid])
+
+            // Restore Removed does.
+            SettingsStore.shared.restoreRemovedMicrophones(with: [builtIn, usb])
+            XCTAssertTrue(SettingsStore.shared.suppressedMicrophoneUIDs.isEmpty)
+            XCTAssertEqual(Set(SettingsStore.shared.microphonePriority.map(\.uid)), [builtIn.uid, usb.uid])
         }
     }
 

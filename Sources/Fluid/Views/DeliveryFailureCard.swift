@@ -35,7 +35,9 @@ final class DeliveryFailureOverlayController {
         self.panel?.isVisible == true
     }
 
-    func show(failure: TextDeliveryFailure, transcript: String) {
+    func show(_ report: DeliveryFailureReport) {
+        let failure = report.failure
+        let transcript = report.transcript
         guard let title = failure.userFacingTitle else { return }
         self.generation &+= 1
         self.dismissTask?.cancel()
@@ -46,7 +48,10 @@ final class DeliveryFailureOverlayController {
         let rootView = DeliveryFailureCardView(
             title: title,
             transcript: transcript,
-            detail: Self.detailText(),
+            detail: Self.detailText(
+                keptOnClipboard: report.keptOnClipboard,
+                savesHistory: SettingsStore.shared.saveTranscriptionHistory
+            ),
             offersAccessibilitySettings: failure == .accessibilityNotTrusted,
             onCopy: { [weak self] in
                 ClipboardService.copyToClipboard(transcript)
@@ -59,12 +64,17 @@ final class DeliveryFailureOverlayController {
             onDismiss: { [weak self] in self?.hide() },
             onHoverChanged: { [weak self] hovering in self?.hoverChanged(hovering) }
         )
-        if let hostingView = self.hostingView {
-            hostingView.rootView = rootView
-        } else {
-            self.createPanel(rootView: rootView)
+        // A fresh hosting view per card: the view's own state (Copied, hover) must never carry
+        // over from the previous card.
+        if self.panel == nil {
+            self.createPanel()
         }
         guard let panel = self.panel else { return }
+        let hostingView = NSHostingView(rootView: rootView)
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = .clear
+        panel.contentView = hostingView
+        self.hostingView = hostingView
         self.positionPanel()
         panel.orderFrontRegardless()
         DebugLogger.shared.info("Delivery failure card shown failure=\(failure.rawValue) chars=\(transcript.count)", source: "DeliveryFailureCard")
@@ -115,13 +125,18 @@ final class DeliveryFailureOverlayController {
         }
     }
 
-    private static func detailText() -> String {
-        SettingsStore.shared.saveTranscriptionHistory
-            ? "Kept on your clipboard and in history."
-            : "Kept on your clipboard."
+    /// The card's third line: where the transcript is now. It is not on the clipboard when the
+    /// user copied something newer in the meantime; that copy is never replaced.
+    static func detailText(keptOnClipboard: Bool, savesHistory: Bool) -> String {
+        switch (keptOnClipboard, savesHistory) {
+        case (true, true): "Kept on your clipboard and in history."
+        case (true, false): "Kept on your clipboard."
+        case (false, true): "In history. Your newer clipboard was left alone."
+        case (false, false): "Your newer clipboard was left alone. Use Copy."
+        }
     }
 
-    private func createPanel(rootView: DeliveryFailureCardView) {
+    private func createPanel() {
         let panel = NSPanel(
             contentRect: .zero,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -137,13 +152,7 @@ final class DeliveryFailureOverlayController {
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none
         panel.isMovableByWindowBackground = false
-
-        let hostingView = NSHostingView(rootView: rootView)
-        hostingView.wantsLayer = true
-        hostingView.layer?.backgroundColor = .clear
-        panel.contentView = hostingView
         self.panel = panel
-        self.hostingView = hostingView
     }
 
     private func positionPanel() {

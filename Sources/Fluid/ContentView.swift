@@ -1692,20 +1692,29 @@ struct ContentView: View {
         self.captureRecordingFormattingContextIfNeeded()
     }
 
-    /// The dictation destination, chosen when dictation stops (see `DictationTargetPolicy`).
-    private func captureDictationStopTarget() -> DictationTarget? {
-        let startedAt = ProcessInfo.processInfo.systemUptime
-        let target = DictationTargetPolicy.selectStopTarget(
-            current: TypingService.captureDictationTarget(),
-            original: self.recordingStartTarget,
-            returnToStartingField: self.settings.returnDictationToStartingField,
-            ownPID: ProcessInfo.processInfo.processIdentifier
-        )
-        self.appBench(
-            "stop_target_capture pid=\(target.map { String($0.pid) } ?? "nil") " +
-                "element=\(target?.element != nil) elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))"
-        )
-        return target
+    /// Starts capturing the dictation destination as dictation stops (see
+    /// `DictationTargetPolicy`). The settings and the starting target are read now; only the
+    /// Accessibility read of the focused field runs in the background.
+    private func beginDictationStopTargetCapture() -> Task<DictationTarget?, Never> {
+        let original = self.recordingStartTarget
+        let returnToStartingField = self.settings.returnDictationToStartingField
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        let ownFocusIsOverlay = NSApp.keyWindow == nil || NSApp.keyWindow is NSPanel
+        return Task.detached(priority: .userInitiated) {
+            let startedAt = ProcessInfo.processInfo.systemUptime
+            let target = DictationTargetPolicy.selectStopTarget(
+                current: TypingService.captureDictationTarget(),
+                original: original,
+                returnToStartingField: returnToStartingField,
+                ownPID: ownPID,
+                ownFocusIsOverlay: ownFocusIsOverlay
+            )
+            DeliveryLog.bench(
+                "stop_target_capture pid=\(target.map { String($0.pid) } ?? "nil") element=\(target?.element != nil) " +
+                    "elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))"
+            )
+            return target
+        }
     }
 
     private func resolveTypingTargetPID() -> (pid: pid_t?, shouldRestoreOriginalFocus: Bool) {
@@ -2103,8 +2112,9 @@ struct ContentView: View {
         var didRequestOverlayHideOnStop = false
         // Where the text lands is decided now, before transcription finishes, so switching
         // apps while it completes cannot redirect it (ported from altic-dev/FluidVoice@5a67d658).
-        let stopTarget: DictationTarget? = route == .normal && !wasRewriteMode && !wasCommandMode && !promptTest.isActive
-            ? self.captureDictationStopTarget()
+        // The Accessibility read runs off the main thread and never delays the stop.
+        let stopTargetCapture: Task<DictationTarget?, Never>? = route == .normal && !wasRewriteMode && !wasCommandMode && !promptTest.isActive
+            ? self.beginDictationStopTargetCapture()
             : nil
         DebugLogger.shared.info(
             "Routing decision snapshot | activeMode=\(modeAtStop.rawValue) | rewrite=\(wasRewriteMode) | command=\(wasCommandMode) | overlay=\(NotchContentState.shared.mode.rawValue)",
@@ -2379,7 +2389,11 @@ struct ContentView: View {
 
         let frontmostApp = NSWorkspace.shared.frontmostApplication
         let frontmostName = frontmostApp?.localizedName ?? "Unknown"
-        let isFluidFrontmost = frontmostApp?.bundleIdentifier == Bundle.main.bundleIdentifier
+        let stopTarget = await stopTargetCapture?.value
+        // With a destination chosen at stop, clicking into Liquid Voice while it transcribes
+        // must not swallow the text: the stop target decides, not the app in front now.
+        let isFluidFrontmost = stopTarget.map { $0.pid == ProcessInfo.processInfo.processIdentifier }
+            ?? (frontmostApp?.bundleIdentifier == Bundle.main.bundleIdentifier)
 
         // Save to transcription history (transcription mode only, if enabled)
         if shouldPersistOutputs, SettingsStore.shared.saveTranscriptionHistory {
@@ -2410,7 +2424,8 @@ struct ContentView: View {
             SettingsStore.shared.copyTranscriptionToClipboard
 
         if shouldCopyToClipboard {
-            ClipboardService.copyToClipboard(finalText)
+            // Through the paste session, so a clipboard restore still in flight cannot undo it.
+            ClipboardPasteSession.shared.keepTranscript(finalText)
         }
 
         var didTypeExternally = false

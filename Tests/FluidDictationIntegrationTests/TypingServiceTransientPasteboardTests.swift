@@ -519,7 +519,7 @@ final class ClipboardPasteSessionTests: XCTestCase {
                 textAtDispatch = self.pasteboard.string(forType: .string)
                 return true
             },
-            holdUntilConsumed: {}
+            makeConsumptionWait: { {} }
         )
         XCTAssertNil(failure)
         XCTAssertEqual(textAtDispatch, "dictated words")
@@ -537,7 +537,7 @@ final class ClipboardPasteSessionTests: XCTestCase {
         item.setData(imageData, forType: .png)
         XCTAssertTrue(self.pasteboard.writeObjects([item]))
 
-        XCTAssertNil(self.session.paste("dictated words", dispatch: { true }, holdUntilConsumed: {}))
+        XCTAssertNil(self.session.paste("dictated words", dispatch: { true }, makeConsumptionWait: { {} }))
         self.session.waitUntilIdle()
 
         XCTAssertEqual(self.pasteboard.data(forType: .png), imageData)
@@ -548,7 +548,7 @@ final class ClipboardPasteSessionTests: XCTestCase {
         self.pasteboard.setString("before", forType: .string)
         let release = DispatchSemaphore(value: 0)
 
-        XCTAssertNil(self.session.paste("dictated words", dispatch: { true }, holdUntilConsumed: { release.wait() }))
+        XCTAssertNil(self.session.paste("dictated words", dispatch: { true }, makeConsumptionWait: { { release.wait() } }))
         XCTAssertEqual(self.pasteboard.string(forType: .string), "dictated words", "restoring early would paste the old clipboard")
 
         release.signal()
@@ -559,9 +559,11 @@ final class ClipboardPasteSessionTests: XCTestCase {
     func testUserCopyDuringThePasteIsNeverOverwritten() {
         self.pasteboard.setString("before", forType: .string)
 
-        XCTAssertNil(self.session.paste("dictated words", dispatch: { true }, holdUntilConsumed: {
-            self.pasteboard.clearContents()
-            self.pasteboard.setString("user copy", forType: .string)
+        XCTAssertNil(self.session.paste("dictated words", dispatch: { true }, makeConsumptionWait: {
+            {
+                self.pasteboard.clearContents()
+                self.pasteboard.setString("user copy", forType: .string)
+            }
         }))
         self.session.waitUntilIdle()
 
@@ -571,8 +573,8 @@ final class ClipboardPasteSessionTests: XCTestCase {
     func testFailedPasteCommandRestoresTheClipboardAtOnce() {
         self.pasteboard.setString("before", forType: .string)
 
-        let failure = self.session.paste("dictated words", dispatch: { false }, holdUntilConsumed: {
-            XCTFail("a paste that was never sent has nothing to wait for")
+        let failure = self.session.paste("dictated words", dispatch: { false }, makeConsumptionWait: {
+            { XCTFail("a paste that was never sent has nothing to wait for") }
         })
 
         XCTAssertEqual(failure, .pasteCommandFailed)
@@ -596,7 +598,7 @@ final class ClipboardPasteSessionTests: XCTestCase {
                         lock.withLock { seen[text] = onBoard }
                         return true
                     },
-                    holdUntilConsumed: { usleep(20_000) }
+                    makeConsumptionWait: { { usleep(20_000) } }
                 )
                 XCTAssertNil(failure)
                 group.leave()
@@ -630,7 +632,7 @@ final class ClipboardPasteSessionTests: XCTestCase {
     func testKeepTranscriptWaitsForAPendingRestoreAndWins() {
         self.pasteboard.setString("before", forType: .string)
         let release = DispatchSemaphore(value: 0)
-        XCTAssertNil(self.session.paste("first dictation", dispatch: { true }, holdUntilConsumed: { release.wait() }))
+        XCTAssertNil(self.session.paste("first dictation", dispatch: { true }, makeConsumptionWait: { { release.wait() } }))
 
         let copied = self.expectation(description: "backup written")
         self.session.keepTranscript("second dictation") { success in
@@ -647,10 +649,12 @@ final class ClipboardPasteSessionTests: XCTestCase {
     func testKeepTranscriptNeverClobbersANewerUserCopy() {
         self.pasteboard.setString("before", forType: .string)
         let release = DispatchSemaphore(value: 0)
-        XCTAssertNil(self.session.paste("first dictation", dispatch: { true }, holdUntilConsumed: {
-            release.wait()
-            self.pasteboard.clearContents()
-            self.pasteboard.setString("user copy", forType: .string)
+        XCTAssertNil(self.session.paste("first dictation", dispatch: { true }, makeConsumptionWait: {
+            {
+                release.wait()
+                self.pasteboard.clearContents()
+                self.pasteboard.setString("user copy", forType: .string)
+            }
         }))
 
         let finished = self.expectation(description: "backup decided")
@@ -662,6 +666,97 @@ final class ClipboardPasteSessionTests: XCTestCase {
         self.wait(for: [finished], timeout: 5)
 
         XCTAssertEqual(self.pasteboard.string(forType: .string), "user copy")
+    }
+
+    func testTheConsumptionWaitIsBuiltAfterEarlierPastesAndWithTheTranscriptOnTheBoard() {
+        self.pasteboard.setString("before", forType: .string)
+        let release = DispatchSemaphore(value: 0)
+        XCTAssertNil(self.session.paste("first", dispatch: { true }, makeConsumptionWait: { { release.wait() } }))
+
+        let secondDone = self.expectation(description: "second paste dispatched")
+        var boardWhenBuilt: String?
+        DispatchQueue.global().async {
+            XCTAssertNil(self.session.paste("second", dispatch: { true }, makeConsumptionWait: {
+                boardWhenBuilt = self.pasteboard.string(forType: .string)
+                return {}
+            }))
+            secondDone.fulfill()
+        }
+        usleep(50_000)
+        XCTAssertNil(boardWhenBuilt, "the second paste must wait for the first to finish")
+        release.signal()
+        self.wait(for: [secondDone], timeout: 5)
+        XCTAssertEqual(boardWhenBuilt, "second")
+    }
+
+    func testAReadBackMissNeverReplacesACopyMadeAfterThePaste() {
+        self.pasteboard.setString("before", forType: .string)
+        XCTAssertNil(self.session.paste("dictated", dispatch: { true }, makeConsumptionWait: { {} }))
+        let revisionAtPaste = self.session.changeCount
+        self.session.waitUntilIdle()
+        // The user copies something while the read-back is still deciding.
+        self.pasteboard.clearContents()
+        self.pasteboard.setString("user copy", forType: .string)
+
+        let decided = self.expectation(description: "backup decided")
+        self.session.keepTranscript("dictated", since: revisionAtPaste) { kept in
+            XCTAssertFalse(kept)
+            decided.fulfill()
+        }
+        self.wait(for: [decided], timeout: 5)
+        XCTAssertEqual(self.pasteboard.string(forType: .string), "user copy")
+    }
+
+    func testAReadBackMissReplacesOnlyTheRestoredClipboard() {
+        self.pasteboard.setString("before", forType: .string)
+        XCTAssertNil(self.session.paste("dictated", dispatch: { true }, makeConsumptionWait: { {} }))
+        let revisionAtPaste = self.session.changeCount
+        self.session.waitUntilIdle()
+        XCTAssertEqual(self.pasteboard.string(forType: .string), "before")
+
+        let decided = self.expectation(description: "backup decided")
+        self.session.keepTranscript("dictated", since: revisionAtPaste) { kept in
+            XCTAssertTrue(kept)
+            decided.fulfill()
+        }
+        self.wait(for: [decided], timeout: 5)
+        XCTAssertEqual(self.pasteboard.string(forType: .string), "dictated")
+    }
+
+    func testABackupNeverReplacesAUserCopyThatAnotherPasteRestored() {
+        self.pasteboard.setString("before", forType: .string)
+        let revisionAtFailure = self.session.changeCount
+        // After the failure the user copies something, then a queued dictation pastes and
+        // restores that copy. The restore is ours, but what it put back is the user's.
+        self.pasteboard.clearContents()
+        self.pasteboard.setString("user copy", forType: .string)
+        XCTAssertNil(self.session.paste("next dictation", dispatch: { true }, makeConsumptionWait: { {} }))
+        self.session.waitUntilIdle()
+        XCTAssertEqual(self.pasteboard.string(forType: .string), "user copy")
+
+        let decided = self.expectation(description: "backup decided")
+        self.session.keepTranscript("failed dictation", since: revisionAtFailure) { kept in
+            XCTAssertFalse(kept)
+            decided.fulfill()
+        }
+        self.wait(for: [decided], timeout: 5)
+        XCTAssertEqual(self.pasteboard.string(forType: .string), "user copy")
+    }
+
+    func testTheSameTranscriptIsNotCopiedTwice() {
+        self.pasteboard.setString("before", forType: .string)
+        let first = self.expectation(description: "first backup")
+        self.session.keepTranscript("kept words") { _ in first.fulfill() }
+        self.wait(for: [first], timeout: 5)
+        let afterFirst = self.session.changeCount
+
+        let second = self.expectation(description: "second backup")
+        self.session.keepTranscript("kept words") { kept in
+            XCTAssertTrue(kept)
+            second.fulfill()
+        }
+        self.wait(for: [second], timeout: 5)
+        XCTAssertEqual(self.session.changeCount, afterFirst, "a second identical copy would show twice in clipboard history")
     }
 }
 
@@ -895,6 +990,24 @@ final class DictationTargetPolicyTests: XCTestCase {
         XCTAssertNil(DictationTargetPolicy.selectStopTarget(current: nil, original: nil, returnToStartingField: true, ownPID: self.ownPID))
     }
 
+    func testLiquidVoicesOwnMainWindowIsARealDestination() {
+        let result = DictationTargetPolicy.selectStopTarget(
+            current: self.target(self.ownPID), original: self.target(100), returnToStartingField: false,
+            ownPID: self.ownPID, ownFocusIsOverlay: false
+        )
+        XCTAssertEqual(result?.pid, self.ownPID)
+    }
+
+    @MainActor
+    func testATerminalIsReadyOnceItsActivationIsAccepted() {
+        // c11 pastes go to its PID after one more activation, so a slow focus change is fine.
+        XCTAssertEqual(TypingService.appRecoveryResult(isTerminal: true, activated: true, appFocused: false), .activatedForRecovery)
+        XCTAssertEqual(TypingService.appRecoveryResult(isTerminal: true, activated: false, appFocused: false), .failed)
+        // Anything else must actually be in front before text is sent to it.
+        XCTAssertEqual(TypingService.appRecoveryResult(isTerminal: false, activated: true, appFocused: false), .failed)
+        XCTAssertEqual(TypingService.appRecoveryResult(isTerminal: false, activated: true, appFocused: true), .activatedForRecovery)
+    }
+
     func testReturnToStartingFieldWithoutAStartTargetUsesTheCursor() {
         let result = DictationTargetPolicy.selectStopTarget(
             current: self.target(200), original: nil, returnToStartingField: true, ownPID: self.ownPID
@@ -909,8 +1022,8 @@ final class DictationTargetPolicyTests: XCTestCase {
 final class DeliveryFailureReportingTests: XCTestCase {
     private var pasteboard: NSPasteboard!
     private var session: ClipboardPasteSession!
-    private var originalHandler: ((TextDeliveryFailure, String) -> Void)!
-    private var reported: [(TextDeliveryFailure, String)] = []
+    private var originalHandler: ((DeliveryFailureReport) -> Void)!
+    private var reported: [DeliveryFailureReport] = []
 
     override func setUp() async throws {
         try await super.setUp()
@@ -918,8 +1031,8 @@ final class DeliveryFailureReportingTests: XCTestCase {
         self.pasteboard.setString("before", forType: .string)
         self.session = ClipboardPasteSession(pasteboard: SystemPasteboardManager(pasteboard: self.pasteboard), label: "DeliveryFailureReportingTests")
         self.originalHandler = TypingService.deliveryFailureHandler
-        TypingService.deliveryFailureHandler = { [weak self] failure, transcript in
-            self?.reported.append((failure, transcript))
+        TypingService.deliveryFailureHandler = { [weak self] report in
+            self?.reported.append(report)
         }
     }
 
@@ -944,9 +1057,28 @@ final class DeliveryFailureReportingTests: XCTestCase {
         await self.waitForReports(1)
         self.session.waitUntilIdle()
 
-        XCTAssertEqual(self.reported.first?.0, .noEditableTarget)
-        XCTAssertEqual(self.reported.first?.1, "lost words")
+        XCTAssertEqual(self.reported.first, DeliveryFailureReport(failure: .noEditableTarget, transcript: "lost words", keptOnClipboard: true))
         XCTAssertEqual(self.pasteboard.string(forType: .string), "lost words")
+    }
+
+    func testTheCardSaysSoWhenANewerCopyKeptTheTranscriptOffTheClipboard() async {
+        let revisionAtFailure = self.session.changeCount
+        self.pasteboard.clearContents()
+        self.pasteboard.setString("user copy", forType: .string)
+
+        TypingService.reportDeliveryFailure(.pasteNotLanded, transcript: "lost words", since: revisionAtFailure, pasteSession: self.session)
+        await self.waitForReports(1)
+
+        XCTAssertEqual(self.reported.first?.keptOnClipboard, false)
+        XCTAssertEqual(self.pasteboard.string(forType: .string), "user copy")
+        XCTAssertEqual(
+            DeliveryFailureOverlayController.detailText(keptOnClipboard: false, savesHistory: true),
+            "In history. Your newer clipboard was left alone."
+        )
+        XCTAssertEqual(
+            DeliveryFailureOverlayController.detailText(keptOnClipboard: true, savesHistory: true),
+            "Kept on your clipboard and in history."
+        )
     }
 
     func testAnEmptyTranscriptIsNeitherShownNorCopied() async {
@@ -968,7 +1100,8 @@ final class DeliveryFailureReportingTests: XCTestCase {
         self.session.waitUntilIdle()
 
         XCTAssertEqual(result, .recoverableFailure(.accessibilityNotTrusted))
-        XCTAssertEqual(self.reported.first?.0, .accessibilityNotTrusted)
+        XCTAssertEqual(self.reported.first?.failure, .accessibilityNotTrusted)
+        XCTAssertEqual(self.reported.first?.keptOnClipboard, true)
         XCTAssertEqual(self.pasteboard.string(forType: .string), "dictated words")
     }
 

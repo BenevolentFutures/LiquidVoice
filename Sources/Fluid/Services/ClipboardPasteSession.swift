@@ -62,6 +62,11 @@ nonisolated protocol PasteboardManaging: AnyObject {
     func isOwned(sessionID: String, expectedText: String) -> Bool
     func restore(_ snapshot: PasteboardSnapshot) -> Bool
     func restoreTemporarySnapshot(_ snapshot: PasteboardSnapshot, sessionID: String, expectedText: String) -> Bool
+    /// Whether `changeCount` is a clipboard revision this manager produced (a temporary write,
+    /// a restore or an intentional copy), as opposed to one the user or another app made.
+    func producedRevision(_ changeCount: Int) -> Bool
+    /// Whether the clipboard already holds exactly `text` as an ordinary, visible copy.
+    func holdsIntentionalText(_ text: String) -> Bool
 }
 
 nonisolated final class SystemPasteboardManager: PasteboardManaging, @unchecked Sendable {
@@ -91,6 +96,8 @@ nonisolated final class SystemPasteboardManager: PasteboardManaging, @unchecked 
 
     private let pasteboard: NSPasteboard
     private var temporaryWrite: (sessionID: String, changeCount: Int)?
+    /// Recent clipboard revisions this manager produced, newest last.
+    private var ownRevisions: [Int] = []
 
     init(pasteboard: NSPasteboard = .general) {
         self.pasteboard = pasteboard
@@ -98,6 +105,36 @@ nonisolated final class SystemPasteboardManager: PasteboardManaging, @unchecked 
 
     var changeCount: Int {
         self.pasteboard.changeCount
+    }
+
+    func producedRevision(_ changeCount: Int) -> Bool {
+        self.ownRevisions.contains(changeCount)
+    }
+
+    func holdsIntentionalText(_ text: String) -> Bool {
+        guard let item = self.pasteboard.pasteboardItems?.first, self.pasteboard.pasteboardItems?.count == 1 else {
+            return false
+        }
+        return item.string(forType: .string) == text &&
+            !item.types.contains(Self.transientType) &&
+            !item.types.contains(Self.sessionType)
+    }
+
+    /// Clears the pasteboard and records the revisions that produces, so a later check can
+    /// tell our writes from the user's.
+    @discardableResult
+    private func clearOwnedContents() -> Int {
+        let changeCount = self.pasteboard.clearContents()
+        self.recordOwnRevision(changeCount)
+        return changeCount
+    }
+
+    private func recordOwnRevision(_ changeCount: Int) {
+        guard self.ownRevisions.last != changeCount else { return }
+        self.ownRevisions.append(changeCount)
+        if self.ownRevisions.count > 64 {
+            self.ownRevisions.removeFirst(self.ownRevisions.count - 64)
+        }
     }
 
     func captureSnapshot() -> PasteboardSnapshot? {
@@ -197,9 +234,10 @@ nonisolated final class SystemPasteboardManager: PasteboardManaging, @unchecked 
             return false
         }
 
-        let clearedChangeCount = self.pasteboard.clearContents()
+        let clearedChangeCount = self.clearOwnedContents()
         self.temporaryWrite = (sessionID, clearedChangeCount)
         let didWrite = self.pasteboard.writeObjects([item])
+        self.recordOwnRevision(self.pasteboard.changeCount)
         if self.hasTemporaryText(sessionID: sessionID, expectedText: text) {
             self.temporaryWrite = (sessionID, self.pasteboard.changeCount)
             return didWrite
@@ -211,8 +249,10 @@ nonisolated final class SystemPasteboardManager: PasteboardManaging, @unchecked 
     func writeIntentionalText(_ text: String) -> Bool {
         let item = NSPasteboardItem()
         guard item.setString(text, forType: .string) else { return false }
-        self.pasteboard.clearContents()
-        return self.pasteboard.writeObjects([item]) && self.pasteboard.string(forType: .string) == text
+        self.clearOwnedContents()
+        let didWrite = self.pasteboard.writeObjects([item])
+        self.recordOwnRevision(self.pasteboard.changeCount)
+        return didWrite && self.pasteboard.string(forType: .string) == text
     }
 
     func isOwned(sessionID: String, expectedText: String) -> Bool {
@@ -242,7 +282,7 @@ nonisolated final class SystemPasteboardManager: PasteboardManaging, @unchecked 
             if snapshot.wasEmpty {
                 // The clipboard was empty before the paste; put it back that way.
                 if let changeCount, self.pasteboard.changeCount != changeCount { return false }
-                self.pasteboard.clearContents()
+                self.clearOwnedContents()
                 self.log("clipboard_restore_verified items=0 reason=originally_empty")
                 return true
             }
@@ -285,9 +325,14 @@ nonisolated final class SystemPasteboardManager: PasteboardManaging, @unchecked 
         }
 
         // Recheck after preparing representations; a newer external copy wins.
-        if let changeCount, self.pasteboard.changeCount != changeCount { return false }
-        self.pasteboard.clearContents()
-        guard self.pasteboard.writeObjects(items) else {
+        if let changeCount, self.pasteboard.changeCount != changeCount {
+            self.log("clipboard_restore_skipped reason=clipboard_changed_since_paste")
+            return false
+        }
+        self.clearOwnedContents()
+        let didWrite = self.pasteboard.writeObjects(items)
+        self.recordOwnRevision(self.pasteboard.changeCount)
+        guard didWrite else {
             self.log("clipboard_restore_failed reason=pasteboard_write_failed")
             return false
         }
@@ -365,8 +410,8 @@ nonisolated final class SystemPasteboardManager: PasteboardManaging, @unchecked 
             if let fileURL = Self.fileURL(in: item),
                let fileType = UTType(filenameExtension: fileURL.pathExtension),
                fileType.conforms(to: .image),
-               let imageData = try? Data(contentsOf: fileURL, options: .mappedIfSafe),
-               imageData.count <= Self.maximumRepresentationBytes
+               Self.isReadableLocalFile(fileURL),
+               let imageData = try? Data(contentsOf: fileURL, options: .mappedIfSafe)
             {
                 return .init(
                     type: NSPasteboard.PasteboardType(fileType.identifier),
@@ -385,6 +430,17 @@ nonisolated final class SystemPasteboardManager: PasteboardManaging, @unchecked 
             return .init(type: .png, data: pngData)
         }
         return nil
+    }
+
+    /// Only local, already-downloaded files under the size cap are read on the paste path: an
+    /// iCloud placeholder or a network volume could otherwise stall the paste.
+    private static func isReadableLocalFile(_ url: URL) -> Bool {
+        let keys: Set<URLResourceKey> = [.fileSizeKey, .volumeIsLocalKey, .isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey]
+        guard url.isFileURL, let values = try? url.resourceValues(forKeys: keys) else { return false }
+        guard let size = values.fileSize, size <= self.maximumRepresentationBytes else { return false }
+        if values.volumeIsLocal == false { return false }
+        if values.isUbiquitousItem == true, values.ubiquitousItemDownloadingStatus != .current { return false }
+        return true
     }
 
     private static func fileItemContainsImage(_ item: PasteboardSnapshot.Item) -> Bool {
@@ -478,8 +534,6 @@ nonisolated final class ClipboardPasteSession: @unchecked Sendable {
     private let gate = DispatchSemaphore(value: 1)
     private let restoreQueue: DispatchQueue
     private let backupQueue: DispatchQueue
-    private let lock = NSLock()
-    private var lastWrittenChangeCount: Int?
 
     init(pasteboard: PasteboardManaging, label: String = "ClipboardPasteSession") {
         self.pasteboard = pasteboard
@@ -492,14 +546,19 @@ nonisolated final class ClipboardPasteSession: @unchecked Sendable {
     }
 
     /// Runs one paste. Blocks while an earlier session still owns the pasteboard, so call it
-    /// off the main thread. `dispatch` posts the paste command and reports whether it did.
-    /// `holdUntilConsumed` runs on the restore queue and returns once the target has had its
-    /// chance to read the clipboard; the original contents are restored after it.
-    /// Returns nil when the paste command was dispatched.
+    /// off the main thread.
+    ///
+    /// - Parameters:
+    ///   - dispatch: posts the paste command and reports whether it did.
+    ///   - makeConsumptionWait: called while this session owns the pasteboard, after the
+    ///     transcript is on it and just before `dispatch`, so any baseline it reads (the field's
+    ///     text, say) is taken after earlier pastes have landed. It returns the wait that runs on
+    ///     the restore queue; the original clipboard comes back once that wait returns.
+    /// - Returns: nil when the paste command was dispatched.
     func paste(
         _ text: String,
         dispatch: () -> Bool,
-        holdUntilConsumed: @escaping () -> Void
+        makeConsumptionWait: () -> () -> Void
     ) -> TextDeliveryFailure? {
         self.gate.wait()
         var releasesGateOnReturn = true
@@ -516,18 +575,14 @@ nonisolated final class ClipboardPasteSession: @unchecked Sendable {
         guard self.pasteboard.writeTemporaryText(text, sessionID: sessionID) else {
             // A partial write may have cleared the board without installing our text. Restore
             // that revision if it is still ours; a newer copy is left alone.
-            if self.pasteboard.restoreTemporarySnapshot(snapshot, sessionID: sessionID, expectedText: text) {
-                self.noteOwnWrite()
-            }
+            _ = self.pasteboard.restoreTemporarySnapshot(snapshot, sessionID: sessionID, expectedText: text)
             self.log("paste_session_failed reason=clipboard_write_failed")
             return .clipboardWriteFailed
         }
-        self.noteOwnWrite()
 
+        let consumptionWait = makeConsumptionWait()
         guard dispatch() else {
-            if self.pasteboard.restoreTemporarySnapshot(snapshot, sessionID: sessionID, expectedText: text) {
-                self.noteOwnWrite()
-            }
+            _ = self.pasteboard.restoreTemporarySnapshot(snapshot, sessionID: sessionID, expectedText: text)
             self.log("paste_session_failed reason=paste_command_failed")
             return .pasteCommandFailed
         }
@@ -535,41 +590,52 @@ nonisolated final class ClipboardPasteSession: @unchecked Sendable {
         releasesGateOnReturn = false
         self.restoreQueue.async {
             defer { self.gate.signal() }
-            holdUntilConsumed()
-            if self.pasteboard.restoreTemporarySnapshot(snapshot, sessionID: sessionID, expectedText: text) {
-                self.noteOwnWrite()
-                self.log("paste_session_restored")
-            } else {
-                self.log("paste_session_restore_skipped reason=clipboard_changed_externally")
-            }
+            consumptionWait()
+            let restored = self.pasteboard.restoreTemporarySnapshot(snapshot, sessionID: sessionID, expectedText: text)
+            self.log(restored ? "paste_session_restored" : "paste_session_not_restored")
         }
         return nil
     }
 
     /// Puts the transcript on the clipboard as an ordinary copy (visible in clipboard history)
-    /// after a failed or unconfirmed delivery. Waits for any paste still holding the
-    /// pasteboard, then writes unless the user copied something newer than the failure.
-    func keepTranscript(_ text: String, completion: (@Sendable (Bool) -> Void)? = nil) {
+    /// after a failed or unconfirmed delivery. Waits for any paste still holding the pasteboard.
+    ///
+    /// The write only happens when every clipboard change since `revision` was Liquid Voice's own
+    /// (a paste, a restore, an earlier backup): anything the user copied since is never replaced.
+    /// `revision` defaults to the clipboard as it is now; pass the revision seen when the problem
+    /// started (for example right after the paste a read-back later found missing).
+    /// `completion` reports whether the transcript is on the clipboard afterwards.
+    func keepTranscript(_ text: String, since revision: Int? = nil, completion: (@Sendable (Bool) -> Void)? = nil) {
         guard !text.isEmpty else {
             completion?(false)
             return
         }
-        let observedChangeCount = self.pasteboard.changeCount
+        let observedChangeCount = revision ?? self.pasteboard.changeCount
         self.backupQueue.async {
             self.gate.wait()
             defer { self.gate.signal() }
             let current = self.pasteboard.changeCount
-            let lastOwnWrite = self.lock.withLock { self.lastWrittenChangeCount }
-            guard current == observedChangeCount || current == lastOwnWrite else {
+            guard Self.onlyOwnChanges(since: observedChangeCount, through: current, pasteboard: self.pasteboard) else {
                 self.log("transcript_backup_skipped reason=newer_clipboard_copy")
                 completion?(false)
                 return
             }
+            if self.pasteboard.holdsIntentionalText(text) {
+                self.log("transcript_backup_skipped reason=already_on_clipboard")
+                completion?(true)
+                return
+            }
             let copied = self.pasteboard.writeIntentionalText(text)
-            if copied { self.noteOwnWrite() }
             self.log("transcript_backup success=\(copied) chars=\(text.count)")
             completion?(copied)
         }
+    }
+
+    private static func onlyOwnChanges(since observed: Int, through current: Int, pasteboard: PasteboardManaging) -> Bool {
+        guard current >= observed else { return false }
+        guard current > observed else { return true }
+        // Each clipboard change bumps the count by one; every step since must be ours.
+        return (observed + 1...current).allSatisfy { pasteboard.producedRevision($0) }
     }
 
     /// Waits until every scheduled restore and backup has finished. For tests.
@@ -578,11 +644,6 @@ nonisolated final class ClipboardPasteSession: @unchecked Sendable {
         self.backupQueue.sync {}
         self.gate.wait()
         self.gate.signal()
-    }
-
-    private func noteOwnWrite() {
-        let changeCount = self.pasteboard.changeCount
-        self.lock.withLock { self.lastWrittenChangeCount = changeCount }
     }
 
     private func log(_ message: @autoclosure () -> String) {

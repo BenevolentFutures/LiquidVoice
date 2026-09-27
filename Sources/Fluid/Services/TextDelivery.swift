@@ -73,3 +73,11 @@ nonisolated enum DeliveryLog {
         }
     }
 }
+
+/// What the failure card shows: the failure, the transcript, and whether the transcript is on
+/// the clipboard (it is not when the user copied something newer in the meantime).
+nonisolated struct DeliveryFailureReport: Equatable, Sendable {
+    let failure: TextDeliveryFailure
+    let transcript: String
+    let keptOnClipboard: Bool
+}

@@ -25,18 +25,18 @@ nonisolated enum DictationTargetPolicy {
     ///
     /// - The field focused at stop wins by default: dictation follows the cursor.
     /// - "Return to Starting Field" (off by default) sends it back to where recording began.
-    /// - When Liquid Voice's own UI holds focus at stop (the overlay or a panel), the text
-    ///   goes back to where recording began rather than into Liquid Voice.
+    /// - When Liquid Voice's overlay or one of its panels holds focus at stop, the text goes
+    ///   back to where recording began. Its main window is a real destination (its editor).
     static func selectStopTarget(
         current: DictationTarget?,
         original: DictationTarget?,
         returnToStartingField: Bool,
-        ownPID: pid_t
+        ownPID: pid_t,
+        ownFocusIsOverlay: Bool = true
     ) -> DictationTarget? {
         if returnToStartingField, let original { return original }
-        guard let current, current.pid > 0, current.pid != ownPID else {
-            return original ?? current
-        }
+        guard let current, current.pid > 0 else { return original }
+        if current.pid == ownPID, ownFocusIsOverlay { return original ?? current }
         return current
     }
 }

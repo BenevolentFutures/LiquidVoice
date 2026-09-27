@@ -49,10 +49,11 @@ enum DeliveryDebugTriggers {
             let failure = (note.object as? String).flatMap(TextDeliveryFailure.init(rawValue:)) ?? .noEditableTarget
             MainActor.assumeIsolated {
                 DebugLogger.shared.info("DEBUG_DELIVERY showDeliveryFailure failure=\(failure.rawValue)", source: "DeliveryDebugTriggers")
-                DeliveryFailureOverlayController.shared.show(
+                DeliveryFailureOverlayController.shared.show(DeliveryFailureReport(
                     failure: failure,
-                    transcript: "The quick brown fox jumps over the lazy dog and keeps going for a while, long enough to need a second line."
-                )
+                    transcript: "The quick brown fox jumps over the lazy dog and keeps going for a while, long enough to need a second line.",
+                    keptOnClipboard: true
+                ))
             }
         })
         DebugLogger.shared.info("Delivery debug triggers enabled", source: "DeliveryDebugTriggers")

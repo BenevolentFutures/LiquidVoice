@@ -714,32 +714,8 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
             return
         }
 
-        // Fallback: perform direct, tolerant check so the menu item always does something
-        Task { @MainActor in
-            do {
-                try await SimpleUpdater.shared.checkAndUpdate(
-                    owner: "altic-dev",
-                    repo: "Fluid-oss",
-                    includePrerelease: SettingsStore.shared.betaReleasesEnabled
-                )
-            } catch SimpleUpdateError.updateAlreadyInProgress {
-                DebugLogger.shared.info("Update installation already in progress", source: "MenuBarManager")
-            } catch {
-                let msg = NSAlert()
-                if let pmkError = error as? PMKError, pmkError.isCancelled {
-                    let isBeta = SettingsStore.shared.betaReleasesEnabled
-                    msg.messageText = isBeta ? "You’re Up To Date (Beta)" : "You’re Up To Date"
-                    msg.informativeText = isBeta
-                        ? "You're already running the latest build available in the beta channel."
-                        : "You're already running the latest version of Liquid Voice."
-                } else {
-                    msg.messageText = "Update Check Failed"
-                    msg.informativeText = "Unable to check for updates. Please try again later.\n\nError: \(error.localizedDescription)"
-                }
-                msg.alertStyle = .informational
-                msg.runModal()
-            }
-        }
+        // No fallback: Liquid Voice never checks upstream FluidVoice releases.
+        DebugLogger.shared.warning("Update check unavailable: AppDelegate not found", source: "MenuBarManager")
     }
 
     @objc private func rollbackToPreviousVersion(_ sender: Any?) {
@@ -749,11 +725,8 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
             msg.messageText = "No rollback backup found"
             msg.informativeText = "No previous version backup is available on this device."
             msg.alertStyle = .informational
-            msg.addButton(withTitle: "Get Previous Builds")
-            msg.addButton(withTitle: "Cancel")
-            if msg.runModal() == .alertFirstButtonReturn {
-                self.openPreviousBuildPicker()
-            }
+            msg.addButton(withTitle: "OK")
+            msg.runModal()
             return
         }
 
@@ -791,59 +764,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
     }
 
     private func openIssueReportingPage() {
-        guard let url = URL(string: "https://github.com/altic-dev/Fluid-oss/issues/new/choose") else { return }
-        NSWorkspace.shared.open(url)
-    }
-
-    private func openPreviousBuildPicker() {
-        Task { @MainActor in
-            do {
-                let options = try await SimpleUpdater.shared.fetchRecentReleaseBuildOptions(
-                    owner: "altic-dev",
-                    repo: "Fluid-oss",
-                    limit: 3,
-                    includePrerelease: SettingsStore.shared.betaReleasesEnabled
-                )
-                self.presentPreviousBuildPicker(options)
-            } catch {
-                self.openAllReleasesPage()
-            }
-        }
-    }
-
-    private func presentPreviousBuildPicker(_ options: [SimpleUpdater.ReleaseBuildOption]) {
-        guard !options.isEmpty else {
-            self.openAllReleasesPage()
-            return
-        }
-
-        let picker = NSAlert()
-        picker.messageText = "Download Previous Build"
-        picker.informativeText = "Choose one of the latest release builds to install manually."
-        picker.alertStyle = .informational
-
-        for option in options {
-            picker.addButton(withTitle: option.version)
-        }
-        picker.addButton(withTitle: "All Releases")
-        picker.addButton(withTitle: "Cancel")
-
-        let response = picker.runModal()
-        let first = NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
-        let index = response.rawValue - first
-
-        if index >= 0, index < options.count {
-            NSWorkspace.shared.open(options[index].url)
-            return
-        }
-        if index == options.count {
-            self.openAllReleasesPage()
-        }
-    }
-
-    private func openAllReleasesPage() {
-        guard let url = URL(string: "https://github.com/altic-dev/Fluid-oss/releases") else { return }
-        NSWorkspace.shared.open(url)
+        NSWorkspace.shared.open(LiquidVoiceLinks.newIssue)
     }
 
     @objc private func openMainWindow() {

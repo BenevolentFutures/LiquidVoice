@@ -1641,6 +1641,35 @@ final class DictationE2ETests: XCTestCase {
         }
     }
 
+    func testFeedbackIssueURLIsAPrefilledIssueOnTheFork() throws {
+        let body = "Dictation dropped text in c11 & Ghostty.\n\nSteps: 1+1=2 #tag"
+        let url = LiquidVoiceLinks.prefilledIssueURL(title: "Dropped text", body: body)
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+
+        XCTAssertEqual(components.scheme, "https")
+        XCTAssertEqual(components.host, "github.com")
+        XCTAssertEqual(components.path, "/BenevolentFutures/LiquidVoice/issues/new")
+        let items = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        XCTAssertEqual(items["title"], "Dropped text")
+        XCTAssertEqual(items["body"], body)
+        XCTAssertFalse(url.absoluteString.contains("+"), "a literal + would read as a space on GitHub")
+    }
+
+    func testFeedbackIssueURLStaysUnderGitHubsLengthLimit() throws {
+        let body = String(repeating: "long feedback ", count: 2000)
+        let url = LiquidVoiceLinks.prefilledIssueURL(title: "Long", body: body)
+        XCTAssertLessThanOrEqual(url.absoluteString.count, LiquidVoiceLinks.maxIssueURLLength)
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let sentBody = try XCTUnwrap(components.queryItems?.first { $0.name == "body" }?.value)
+        XCTAssertTrue(sentBody.hasSuffix("[truncated]"))
+    }
+
+    func testFeedbackIssueTitleUsesFirstLineOfFeedback() {
+        XCTAssertEqual(LiquidVoiceLinks.issueTitle(forFeedback: "Mic switch fails\nmore detail"), "Mic switch fails")
+        XCTAssertEqual(LiquidVoiceLinks.issueTitle(forFeedback: "   "), "Feedback")
+        XCTAssertEqual(LiquidVoiceLinks.issueTitle(forFeedback: String(repeating: "a", count: 200)).count, 80)
+    }
+
     private var retiredFluidIntelligenceTestKeys: [String] {
         [
             self.selectedProviderIDKey,

@@ -84,7 +84,6 @@ enum SidebarItem: Hashable {
     case customDictionary
     case stats
     case history
-    case changelog
     case feedback
     case commandMode
     case rewriteMode
@@ -1175,8 +1174,7 @@ struct ContentView: View {
     }
 
     private func openIssueReportingPage() {
-        guard let url = URL(string: "https://github.com/altic-dev/Fluid-oss/issues/new/choose") else { return }
-        NSWorkspace.shared.open(url)
+        NSWorkspace.shared.open(LiquidVoiceLinks.newIssue)
     }
 
     private var sidebarView: some View {
@@ -1206,7 +1204,6 @@ struct ContentView: View {
 
             Section {
                 self.sidebarNavigationLink(.welcome, title: "Getting Started", systemImage: "house.fill")
-                self.sidebarNavigationLink(.changelog, title: "Change logs", systemImage: "doc.text.magnifyingglass")
                 self.sidebarNavigationLink(.feedback, title: "Feedback", systemImage: "envelope.fill")
             } header: {
                 self.sidebarSectionHeader("Help")
@@ -1298,8 +1295,6 @@ struct ContentView: View {
             return AnyView(self.statsView)
         case .feedback:
             return AnyView(FeedbackView())
-        case .changelog:
-            return AnyView(ChangelogView())
         case .commandMode:
             return AnyView(self.commandModeView)
         case .rewriteMode:

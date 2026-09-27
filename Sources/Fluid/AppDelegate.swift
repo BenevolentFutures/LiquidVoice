@@ -29,6 +29,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         _ = FileLogger.shared
         // Resolve the layout's Cmd+V key before any paste request can arrive.
         TypingService.startKeyboardLayoutTracking()
+        DeliveryDebugTriggers.registerIfEnabled()
         // Must be read during the launch callback - the current Apple Event identifies
         // login-item launches (used to optionally start silently, see issue #369).
         self.wasLaunchedAsLoginItem = Self.detectLoginItemLaunch()

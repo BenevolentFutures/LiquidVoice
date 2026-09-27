@@ -345,9 +345,10 @@ final class TypingService {
         return Self.isCurrentlyFocusedElement(element, expectedPID: target.pid)
     }
 
-    /// The most the focus preparation may take before delivery goes ahead or gives up. Every
-    /// step checks it before starting; one bounded AX call in flight can overrun it by at most
-    /// `axMessagingTimeoutSeconds`.
+    /// The budget for the window raise and field-focus steps of the focus preparation. Every
+    /// such step checks it before starting; one bounded AX call in flight can overrun it by at
+    /// most `axMessagingTimeoutSeconds`. The frontmost wait is not part of it: it always gets
+    /// its own `frontmostWaitLimit`, so slow AX steps can never starve it into a false failure.
     nonisolated static let focusPreparationDeadline: TimeInterval = 2.0
     /// How long to wait for an app brought back to actually come to the front.
     nonisolated static let frontmostWaitLimit: TimeInterval = 1.0
@@ -374,20 +375,35 @@ final class TypingService {
                 fieldConfirmed = await self.restoreExactTarget(target, deadline: deadline)
             }
             result = self.preparationVerdict(appInFront: true, broughtBack: false, fieldConfirmed: fieldConfirmed)
+        } else if isTerminal {
+            // Terminals: raise the stop-time window (c11 can have several), bring the app
+            // forward, and give the frontmost wait its full second. No field focusing: panes
+            // take Cmd+V whatever element AX reports, and the focus attempts could eat the
+            // deadline and turn a slow activation into a false "Text wasn't inserted".
+            if ProcessInfo.processInfo.systemUptime < deadline {
+                await self.raiseWindow(of: target)
+            }
+            let broughtForward = self.bringToFront(pid: target.pid)
+            let wait = await self.waitUntilAppInFront(pid: target.pid, limit: self.frontmostWaitLimit)
+            Self.logFrontmostCheck(
+                stage: "prepare", target: target.pid, waitedMs: wait.waitedMs, inFront: wait.inFront, via: broughtForward.rawValue
+            )
+            result = self.preparationVerdict(appInFront: wait.inFront, broughtBack: true, fieldConfirmed: true)
         } else {
             var fieldConfirmed = false
             if target.element != nil {
                 // Raising the target window and focusing its field often brings the app back.
                 fieldConfirmed = await self.restoreExactTarget(target, deadline: deadline)
             }
+            var broughtForward = BringToFrontOutcome.alreadyInFront
             if !fieldConfirmed || !self.isAppInFront(pid: target.pid) {
-                _ = self.bringToFront(pid: target.pid)
+                broughtForward = self.bringToFront(pid: target.pid)
             }
-            let wait = await self.waitUntilAppInFront(
-                pid: target.pid,
-                limit: max(0, min(self.frontmostWaitLimit, deadline - ProcessInfo.processInfo.systemUptime))
+            // The frontmost wait always gets its full second, however long the field steps took.
+            let wait = await self.waitUntilAppInFront(pid: target.pid, limit: self.frontmostWaitLimit)
+            Self.logFrontmostCheck(
+                stage: "prepare", target: target.pid, waitedMs: wait.waitedMs, inFront: wait.inFront, via: broughtForward.rawValue
             )
-            Self.logFrontmostCheck(stage: "prepare", target: target.pid, waitedMs: wait.waitedMs, inFront: wait.inFront)
             if wait.inFront, hasField, !fieldConfirmed {
                 fieldConfirmed = self.isTargetStillFocused(target)
                 if !fieldConfirmed {
@@ -421,14 +437,45 @@ final class TypingService {
         NSWorkspace.shared.frontmostApplication?.processIdentifier == pid || self.currentFocusedPID() == pid
     }
 
-    /// Asks for `pid` to come to the front: an activation request plus the Accessibility
-    /// frontmost flag, which still works where macOS declines a background app's request.
-    nonisolated static func bringToFront(pid: pid_t) -> Bool {
-        let requested = self.activateApp(pid: pid)
-        guard AXIsProcessTrusted(), pid != ProcessInfo.processInfo.processIdentifier else { return requested }
+    nonisolated enum BringToFrontOutcome: String, Sendable {
+        case alreadyInFront = "already_in_front"
+        case activated
+        /// Plain activation did not take within the grace period; the AX frontmost flag was set.
+        case axFallback = "ax_fallback"
+        case notInFront = "not_in_front"
+    }
+
+    /// How long a plain activation gets before the Accessibility frontmost flag is tried.
+    nonisolated static let axFrontmostFallbackDelay: TimeInterval = 0.25
+
+    /// Asks for `pid` to come to the front. A plain activation first: it raises only the
+    /// app's key window, keeping the "don't activate all windows" choice (upstream #748). Only
+    /// when that has not made the app frontmost within `axFallbackAfter` is the Accessibility
+    /// frontmost flag set: it works where macOS declines a background app's activation
+    /// request, but on AppKit apps it can raise every window. Blocks briefly; call off-main.
+    nonisolated static func bringToFront(
+        pid: pid_t,
+        axFallbackAfter: TimeInterval = TypingService.axFrontmostFallbackDelay,
+        pollInterval: TimeInterval = 0.025,
+        activate: (pid_t) -> Bool = { TypingService.activateApp(pid: $0) },
+        isInFront: (pid_t) -> Bool = { TypingService.isAppInFront(pid: $0) },
+        setAXFrontmost: (pid_t) -> Bool = { TypingService.setAXFrontmostFlag(pid: $0) }
+    ) -> BringToFrontOutcome {
+        if isInFront(pid) { return .alreadyInFront }
+        _ = activate(pid)
+        let fallbackAt = ProcessInfo.processInfo.systemUptime + axFallbackAfter
+        repeat {
+            if isInFront(pid) { return .activated }
+            usleep(useconds_t(max(pollInterval, 0.001) * 1_000_000))
+        } while ProcessInfo.processInfo.systemUptime < fallbackAt
+        if isInFront(pid) { return .activated }
+        return setAXFrontmost(pid) ? .axFallback : .notInFront
+    }
+
+    private nonisolated static func setAXFrontmostFlag(pid: pid_t) -> Bool {
+        guard AXIsProcessTrusted(), pid != ProcessInfo.processInfo.processIdentifier else { return false }
         let appElement = self.boundedAXElement(AXUIElementCreateApplication(pid))
-        let frontmost = AXUIElementSetAttributeValue(appElement, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
-        return requested || frontmost == .success
+        return AXUIElementSetAttributeValue(appElement, kAXFrontmostAttribute as CFString, kCFBooleanTrue) == .success
     }
 
     private nonisolated static func waitUntilAppInFront(pid: pid_t, limit: TimeInterval) async -> (inFront: Bool, waitedMs: Int) {
@@ -444,41 +491,34 @@ final class TypingService {
         return (inFront, Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))
     }
 
-    /// The same wait for the typing worker, which may block.
-    nonisolated static func waitUntilAppInFrontBlocking(pid: pid_t, limit: TimeInterval) -> (inFront: Bool, waitedMs: Int) {
-        let startedAt = ProcessInfo.processInfo.systemUptime
-        let deadline = startedAt + limit
-        while !self.isAppInFront(pid: pid) {
-            if ProcessInfo.processInfo.systemUptime >= deadline {
-                return (false, Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))
-            }
-            usleep(25_000)
-        }
-        return (true, Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))
-    }
-
     /// One log line per frontmost check, so a missing paste can be diagnosed from the log.
-    nonisolated static func logFrontmostCheck(stage: String, target pid: pid_t, waitedMs: Int, inFront: Bool) {
+    nonisolated static func logFrontmostCheck(stage: String, target pid: pid_t, waitedMs: Int, inFront: Bool, via: String? = nil) {
         let targetApp = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? "pid\(pid)"
         let frontApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "none"
         DeliveryLog.bench(
             "frontmost_check stage=\(stage) app=\(targetApp) waitedMs=\(waitedMs) " +
-                "result=\(inFront ? "in_front" : "not_in_front") frontmost=\(frontApp)"
+                "result=\(inFront ? "in_front" : "not_in_front") frontmost=\(frontApp)" +
+                (via.map { " via=\($0)" } ?? "")
         )
+    }
+
+    /// Raises the captured window and makes it the app's main and focused window, so a
+    /// multi-window app comes back on the window the user dictated into.
+    private nonisolated static func raiseWindow(of target: DictationTarget) async {
+        guard AXIsProcessTrusted(), let window = target.window else { return }
+        let appElement = Self.boundedAXElement(AXUIElementCreateApplication(target.pid))
+        Self.boundedAXElement(window)
+        _ = AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+        _ = AXUIElementSetAttributeValue(appElement, kAXMainWindowAttribute as CFString, window)
+        _ = AXUIElementSetAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, window)
+        try? await Task.sleep(nanoseconds: 25_000_000)
     }
 
     private nonisolated static func restoreExactTarget(_ target: DictationTarget, deadline: TimeInterval) async -> Bool {
         guard AXIsProcessTrusted(), let element = target.element else { return false }
         guard ProcessInfo.processInfo.systemUptime < deadline else { return false }
 
-        let appElement = Self.boundedAXElement(AXUIElementCreateApplication(target.pid))
-        if let window = target.window {
-            Self.boundedAXElement(window)
-            _ = AXUIElementPerformAction(window, kAXRaiseAction as CFString)
-            _ = AXUIElementSetAttributeValue(appElement, kAXMainWindowAttribute as CFString, window)
-            _ = AXUIElementSetAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, window)
-            try? await Task.sleep(nanoseconds: 25_000_000)
-        }
+        await self.raiseWindow(of: target)
 
         Self.boundedAXElement(element)
         for attempt in 0..<3 {
@@ -756,7 +796,8 @@ final class TypingService {
         )
         self.bench(
             "delivery_route terminal=\(terminalPID != nil) refusesNonEditable=\(route.refusesNonEditableFocus) " +
-                "pastesFirst=\(route.pastesFirst) directFallback=\(route.fallsBackToDirectTyping) readBack=\(route.readsPasteBack)"
+                "pastesFirst=\(route.pastesFirst) globalFallback=\(route.fallsBackToGlobalPaste) " +
+                "directFallback=\(route.fallsBackToDirectTyping) readBack=\(route.readsPasteBack)"
         )
 
         // Ported from altic-dev/FluidVoice@51e62364 / @a1a65772: refuse only when the focused
@@ -819,6 +860,9 @@ final class TypingService {
         let refusesNonEditableFocus: Bool
         /// Try the clipboard paths before direct typing.
         let pastesFirst: Bool
+        /// After a paste to the target's PID fails, try a global Cmd+V (it goes to whatever
+        /// app is in front).
+        let fallsBackToGlobalPaste: Bool
         /// Fall back to direct typing when every clipboard path fails.
         let fallsBackToDirectTyping: Bool
         /// Run the opt-in read-back after a clipboard paste.
@@ -834,9 +878,12 @@ final class TypingService {
                 // c11 and Ghostty: always the clipboard paste to the terminal's PID, never
                 // refused (their surface takes Cmd+V whatever AX reports), never direct typing
                 // (it silently drops text there), and no read-back (no readable field text).
+                // No global Cmd+V either: if the terminal is not in front it would land in
+                // another app. The terminal paste retries itself once on a clipboard race.
                 return DeliveryRoute(
                     refusesNonEditableFocus: false,
                     pastesFirst: true,
+                    fallsBackToGlobalPaste: false,
                     fallsBackToDirectTyping: false,
                     readsPasteBack: false
                 )
@@ -844,6 +891,7 @@ final class TypingService {
             return DeliveryRoute(
                 refusesNonEditableFocus: true,
                 pastesFirst: mode == .reliablePaste,
+                fallsBackToGlobalPaste: true,
                 fallsBackToDirectTyping: true,
                 readsPasteBack: pasteCheckEnabled && !sendKeyFollows
             )
@@ -906,7 +954,7 @@ final class TypingService {
             let attempt = self.tryReliablePasteInsertion(
                 text,
                 preferredTargetPID: pastePID,
-                allowsGlobalFallback: terminalPID == nil,
+                allowsGlobalFallback: route.fallsBackToGlobalPaste,
                 beforeDispatch: beforeClipboardDispatch
             )
             if let path = attempt.path {
@@ -1161,29 +1209,31 @@ final class TypingService {
         let isTerminalTarget = self.isGhosttyApplication(pid: targetPID)
 
         if isTerminalTarget {
-            // A Cmd+V posted to a terminal that is not in front is dropped without a trace, so
-            // the terminal must really be in front before the paste, not merely asked to come.
-            if activateTargetFirst, !Self.isAppInFront(pid: targetPID) {
-                _ = Self.bringToFront(pid: targetPID)
+            let pasteKeyCode = Self.pasteVirtualKeyCode
+            let paster = TerminalPaster(session: self.pasteSession) { pid in
+                let events = PasteCommandEvents.makeTargetedPasteEvents(pasteKeyCode: pasteKeyCode)
+                guard events.count == 2 else { return false }
+                events[0].postToPid(pid)
+                usleep(10_000)
+                events[1].postToPid(pid)
+                return true
             }
-            let wait = Self.waitUntilAppInFrontBlocking(pid: targetPID, limit: Self.frontmostWaitLimit)
-            Self.logFrontmostCheck(stage: "before_paste", target: targetPID, waitedMs: wait.waitedMs, inFront: wait.inFront)
-            guard wait.inFront else { return .targetRestoreFailed }
-        } else if activateTargetFirst, NSWorkspace.shared.frontmostApplication?.processIdentifier != targetPID {
+            return paster.paste(
+                text,
+                to: targetPID,
+                activateFirst: activateTargetFirst,
+                beforeDispatch: beforeDispatch,
+                makeConsumptionWait: { self.pasteConsumptionWait(isTerminalTarget: true, expectedText: text) }
+            )
+        }
+        if activateTargetFirst, NSWorkspace.shared.frontmostApplication?.processIdentifier != targetPID {
             _ = Self.activateApp(pid: targetPID)
             usleep(80_000)
         }
 
-        var terminalLeftFront = false
         let failure = self.pasteSession.paste(
             text,
             dispatch: {
-                if isTerminalTarget, !Self.isAppInFront(pid: targetPID) {
-                    // Last look, with the transcript already on the clipboard: never send blind.
-                    terminalLeftFront = true
-                    Self.logFrontmostCheck(stage: "at_dispatch", target: targetPID, waitedMs: 0, inFront: false)
-                    return false
-                }
                 let events = PasteCommandEvents.makeTargetedPasteEvents(pasteKeyCode: Self.pasteVirtualKeyCode)
                 guard events.count == 2 else {
                     self.log("[TypingService] ERROR: Failed to create Cmd+V events for PID insertion")
@@ -1197,14 +1247,105 @@ final class TypingService {
             },
             makeConsumptionWait: {
                 beforeDispatch()
-                return self.pasteConsumptionWait(isTerminalTarget: isTerminalTarget, expectedText: text)
+                return self.pasteConsumptionWait(isTerminalTarget: false, expectedText: text)
             }
         )
         if let failure {
-            self.bench("clipboard_pid_failed reason=\(failure.rawValue) terminalLeftFront=\(terminalLeftFront)")
-            return terminalLeftFront ? .targetRestoreFailed : failure
+            self.bench("clipboard_pid_failed reason=\(failure.rawValue)")
         }
-        return nil
+        return failure
+    }
+
+    /// The c11/Ghostty paste: Cmd+V posted straight to the terminal's PID, only while the
+    /// terminal is really in front, through the clipboard session. Dependencies are injectable
+    /// so the guarantees are tested without posting keystrokes.
+    nonisolated struct TerminalPaster {
+        let session: ClipboardPasteSession
+        /// Posts the Cmd+V pair to the PID; reports whether the events were created.
+        let postPaste: (pid_t) -> Bool
+        var isInFront: (pid_t) -> Bool = { TypingService.isAppInFront(pid: $0) }
+        var bringToFront: (pid_t) -> Void = { _ = TypingService.bringToFront(pid: $0) }
+        var frontmostWaitLimit: TimeInterval = TypingService.frontmostWaitLimit
+        var pollInterval: TimeInterval = 0.025
+        var retryDelay: TimeInterval = 0.05
+
+        init(session: ClipboardPasteSession, postPaste: @escaping (pid_t) -> Bool) {
+            self.session = session
+            self.postPaste = postPaste
+        }
+
+        /// Returns nil once the paste is sent. `.targetRestoreFailed` when the terminal is not in
+        /// front (nothing is sent; the clipboard is left or put back as it was). A clipboard
+        /// race (snapshot or write) is retried once; a terminal that is not in front never is.
+        func paste(
+            _ text: String,
+            to pid: pid_t,
+            activateFirst: Bool,
+            beforeDispatch: () -> Void,
+            makeConsumptionWait: () -> () -> Void
+        ) -> TextDeliveryFailure? {
+            let first = self.attempt(text, to: pid, activateFirst: activateFirst, beforeDispatch: beforeDispatch, makeConsumptionWait: makeConsumptionWait)
+            guard let first, Self.isClipboardRace(first) else { return first }
+            DeliveryLog.bench("terminal_paste_retry reason=\(first.rawValue)")
+            usleep(useconds_t(self.retryDelay * 1_000_000))
+            return self.attempt(text, to: pid, activateFirst: activateFirst, beforeDispatch: beforeDispatch, makeConsumptionWait: makeConsumptionWait)
+        }
+
+        static func isClipboardRace(_ failure: TextDeliveryFailure) -> Bool {
+            failure == .clipboardSnapshotFailed || failure == .clipboardWriteFailed
+        }
+
+        private func attempt(
+            _ text: String,
+            to pid: pid_t,
+            activateFirst: Bool,
+            beforeDispatch: () -> Void,
+            makeConsumptionWait: () -> () -> Void
+        ) -> TextDeliveryFailure? {
+            // A Cmd+V posted to a terminal that is not in front is dropped without a trace, so
+            // the terminal must really be in front before the paste, not merely asked to come.
+            if activateFirst, !self.isInFront(pid) {
+                self.bringToFront(pid)
+            }
+            let wait = self.waitUntilInFront(pid)
+            TypingService.logFrontmostCheck(stage: "before_paste", target: pid, waitedMs: wait.waitedMs, inFront: wait.inFront)
+            guard wait.inFront else { return .targetRestoreFailed }
+
+            var leftFront = false
+            let failure = self.session.paste(
+                text,
+                dispatch: {
+                    // Last look, with the transcript already on the clipboard: never send blind.
+                    guard self.isInFront(pid) else {
+                        leftFront = true
+                        TypingService.logFrontmostCheck(stage: "at_dispatch", target: pid, waitedMs: 0, inFront: false)
+                        return false
+                    }
+                    return self.postPaste(pid)
+                },
+                makeConsumptionWait: {
+                    beforeDispatch()
+                    return makeConsumptionWait()
+                }
+            )
+            if leftFront { return .targetRestoreFailed }
+            if let failure {
+                DeliveryLog.bench("terminal_paste_failed reason=\(failure.rawValue)")
+            }
+            return failure
+        }
+
+        private func waitUntilInFront(_ pid: pid_t) -> (inFront: Bool, waitedMs: Int) {
+            let startedAt = ProcessInfo.processInfo.systemUptime
+            let deadline = startedAt + self.frontmostWaitLimit
+            while !self.isInFront(pid) {
+                if ProcessInfo.processInfo.systemUptime >= deadline {
+                    return (false, Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))
+                }
+                usleep(useconds_t(max(self.pollInterval, 0.001) * 1_000_000))
+            }
+            return (true, Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))
+        }
     }
 
     private func insertTextBulkInstant(_ text: String, targetPID: pid_t) -> Bool {

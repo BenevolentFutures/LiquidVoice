@@ -1227,6 +1227,7 @@ final class TerminalRoutingTests: XCTestCase {
                     let label = "mode=\(mode.rawValue) pasteCheck=\(pasteCheck) sendKey=\(sendKeyFollows)"
                     XCTAssertTrue(route.pastesFirst, label)
                     XCTAssertFalse(route.refusesNonEditableFocus, label)
+                    XCTAssertFalse(route.fallsBackToGlobalPaste, label)
                     XCTAssertFalse(route.fallsBackToDirectTyping, label)
                     XCTAssertFalse(route.readsPasteBack, label)
                 }
@@ -1239,12 +1240,19 @@ final class TerminalRoutingTests: XCTestCase {
         let standard = TypingService.DeliveryRoute.decide(isTerminal: false, mode: .standard, pasteCheckEnabled: false, sendKeyFollows: false)
         XCTAssertEqual(
             standard,
-            .init(refusesNonEditableFocus: true, pastesFirst: false, fallsBackToDirectTyping: true, readsPasteBack: false)
+            .init(refusesNonEditableFocus: true, pastesFirst: false, fallsBackToGlobalPaste: true, fallsBackToDirectTyping: true, readsPasteBack: false)
+        )
+        // Standard mode with Paste Check on: direct typing first; the read-back is armed for the
+        // clipboard fallback, the only standard-mode path that pastes.
+        let standardChecked = TypingService.DeliveryRoute.decide(isTerminal: false, mode: .standard, pasteCheckEnabled: true, sendKeyFollows: false)
+        XCTAssertEqual(
+            standardChecked,
+            .init(refusesNonEditableFocus: true, pastesFirst: false, fallsBackToGlobalPaste: true, fallsBackToDirectTyping: true, readsPasteBack: true)
         )
         let reliable = TypingService.DeliveryRoute.decide(isTerminal: false, mode: .reliablePaste, pasteCheckEnabled: true, sendKeyFollows: false)
         XCTAssertEqual(
             reliable,
-            .init(refusesNonEditableFocus: true, pastesFirst: true, fallsBackToDirectTyping: true, readsPasteBack: true)
+            .init(refusesNonEditableFocus: true, pastesFirst: true, fallsBackToGlobalPaste: true, fallsBackToDirectTyping: true, readsPasteBack: true)
         )
         // A send key right after the paste empties the field; the read-back would misreport.
         let sending = TypingService.DeliveryRoute.decide(isTerminal: false, mode: .reliablePaste, pasteCheckEnabled: true, sendKeyFollows: true)
@@ -1258,5 +1266,262 @@ final class TerminalRoutingTests: XCTestCase {
         XCTAssertTrue(TypingService.isGhosttyFamily(bundleIdentifier: "com.mitchellh.ghostty"))
         XCTAssertFalse(TypingService.isGhosttyFamily(bundleIdentifier: "com.apple.TextEdit"))
         XCTAssertFalse(TypingService.isGhosttyFamily(bundleIdentifier: nil))
+    }
+}
+
+// MARK: - Invariant 1: the c11 paste is never sent blind
+
+/// Counts calls from any thread.
+private final class CallCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func increment() { self.lock.withLock { self.value += 1 } }
+    var count: Int { self.lock.withLock { self.value } }
+}
+
+/// A real pasteboard whose snapshot fails a set number of times, like a clipboard that changes
+/// while it is being read.
+private final class FlakySnapshotPasteboard: PasteboardManaging, @unchecked Sendable {
+    let base: SystemPasteboardManager
+    private let lock = NSLock()
+    private var failuresLeft: Int
+    private(set) var snapshotAttempts = 0
+
+    init(_ pasteboard: NSPasteboard, failures: Int) {
+        self.base = SystemPasteboardManager(pasteboard: pasteboard)
+        self.failuresLeft = failures
+    }
+
+    var changeCount: Int { self.base.changeCount }
+    func captureSnapshot() -> PasteboardSnapshot? {
+        let fails = self.lock.withLock { () -> Bool in
+            self.snapshotAttempts += 1
+            guard self.failuresLeft > 0 else { return false }
+            self.failuresLeft -= 1
+            return true
+        }
+        return fails ? nil : self.base.captureSnapshot()
+    }
+    func writeTemporaryText(_ text: String, sessionID: String) -> Bool { self.base.writeTemporaryText(text, sessionID: sessionID) }
+    func writeIntentionalText(_ text: String) -> Bool { self.base.writeIntentionalText(text) }
+    func isOwned(sessionID: String, expectedText: String) -> Bool { self.base.isOwned(sessionID: sessionID, expectedText: expectedText) }
+    func restore(_ snapshot: PasteboardSnapshot) -> Bool { self.base.restore(snapshot) }
+    func restoreTemporarySnapshot(_ snapshot: PasteboardSnapshot, sessionID: String, expectedText: String) -> Bool {
+        self.base.restoreTemporarySnapshot(snapshot, sessionID: sessionID, expectedText: expectedText)
+    }
+    func producedRevision(_ changeCount: Int) -> Bool { self.base.producedRevision(changeCount) }
+    func holdsIntentionalText(_ text: String) -> Bool { self.base.holdsIntentionalText(text) }
+}
+
+final class TerminalPasteTests: XCTestCase {
+    private let terminalPID: pid_t = 4242
+    private var pasteboard: NSPasteboard!
+
+    override func setUp() {
+        super.setUp()
+        self.pasteboard = TypingServiceTransientPasteboardTests.makePasteboard()
+        self.pasteboard.setString("before", forType: .string)
+    }
+
+    override func tearDown() {
+        self.pasteboard.releaseGlobally()
+        super.tearDown()
+    }
+
+    private func makePaster(
+        session: ClipboardPasteSession,
+        posted: CallCounter,
+        broughtForward: CallCounter,
+        isInFront: @escaping (pid_t) -> Bool
+    ) -> TypingService.TerminalPaster {
+        var paster = TypingService.TerminalPaster(session: session) { _ in
+            posted.increment()
+            return true
+        }
+        paster.isInFront = isInFront
+        paster.bringToFront = { _ in broughtForward.increment() }
+        paster.frontmostWaitLimit = 0.1
+        paster.pollInterval = 0.005
+        paster.retryDelay = 0
+        return paster
+    }
+
+    private func paste(with paster: TypingService.TerminalPaster, _ text: String = "dictated") -> TextDeliveryFailure? {
+        paster.paste(text, to: self.terminalPID, activateFirst: true, beforeDispatch: {}, makeConsumptionWait: { {} })
+    }
+
+    func testATerminalThatNeverComesForwardGetsNothingAndTheClipboardIsUntouched() {
+        let session = ClipboardPasteSession(pasteboard: SystemPasteboardManager(pasteboard: self.pasteboard), label: "TerminalPasteTests")
+        let posted = CallCounter()
+        let broughtForward = CallCounter()
+        let paster = self.makePaster(session: session, posted: posted, broughtForward: broughtForward) { _ in false }
+
+        XCTAssertEqual(self.paste(with: paster), .targetRestoreFailed)
+        session.waitUntilIdle()
+
+        XCTAssertEqual(posted.count, 0, "nothing may be sent to a terminal that is not in front")
+        XCTAssertEqual(broughtForward.count, 1, "asked once to come forward, and not retried")
+        XCTAssertEqual(self.pasteboard.string(forType: .string), "before")
+    }
+
+    func testATerminalThatLeavesTheFrontAtDispatchGetsNothingAndTheClipboardComesBack() {
+        let session = ClipboardPasteSession(pasteboard: SystemPasteboardManager(pasteboard: self.pasteboard), label: "TerminalPasteTests")
+        let posted = CallCounter()
+        let broughtForward = CallCounter()
+        // In front until the transcript is on the clipboard, then gone (a Cmd-Tab mid-paste).
+        let paster = self.makePaster(session: session, posted: posted, broughtForward: broughtForward) { _ in
+            self.pasteboard.string(forType: .string) != "dictated"
+        }
+
+        XCTAssertEqual(self.paste(with: paster), .targetRestoreFailed)
+        session.waitUntilIdle()
+
+        XCTAssertEqual(posted.count, 0)
+        XCTAssertEqual(self.pasteboard.string(forType: .string), "before", "the temporary entry must be taken back")
+    }
+
+    func testATerminalInFrontGetsExactlyOnePasteAndTheClipboardComesBack() {
+        let session = ClipboardPasteSession(pasteboard: SystemPasteboardManager(pasteboard: self.pasteboard), label: "TerminalPasteTests")
+        let posted = CallCounter()
+        let broughtForward = CallCounter()
+        let paster = self.makePaster(session: session, posted: posted, broughtForward: broughtForward) { _ in true }
+
+        XCTAssertNil(self.paste(with: paster))
+        session.waitUntilIdle()
+
+        XCTAssertEqual(posted.count, 1)
+        XCTAssertEqual(broughtForward.count, 0, "a terminal already in front is not re-activated")
+        XCTAssertEqual(self.pasteboard.string(forType: .string), "before")
+    }
+
+    func testAClipboardRaceIsRetriedOnceAndThePasteGoesThrough() {
+        let flaky = FlakySnapshotPasteboard(self.pasteboard, failures: 1)
+        let session = ClipboardPasteSession(pasteboard: flaky, label: "TerminalPasteTests")
+        let posted = CallCounter()
+        let paster = self.makePaster(session: session, posted: posted, broughtForward: CallCounter()) { _ in true }
+
+        XCTAssertNil(self.paste(with: paster))
+        session.waitUntilIdle()
+
+        XCTAssertEqual(flaky.snapshotAttempts, 2)
+        XCTAssertEqual(posted.count, 1)
+        XCTAssertEqual(self.pasteboard.string(forType: .string), "before")
+    }
+
+    func testAPersistentClipboardFailureIsRetriedOnlyOnce() {
+        let flaky = FlakySnapshotPasteboard(self.pasteboard, failures: 10)
+        let session = ClipboardPasteSession(pasteboard: flaky, label: "TerminalPasteTests")
+        let posted = CallCounter()
+        let paster = self.makePaster(session: session, posted: posted, broughtForward: CallCounter()) { _ in true }
+
+        XCTAssertEqual(self.paste(with: paster), .clipboardSnapshotFailed)
+        XCTAssertEqual(flaky.snapshotAttempts, 2)
+        XCTAssertEqual(posted.count, 0)
+        XCTAssertEqual(self.pasteboard.string(forType: .string), "before")
+    }
+
+    func testOnlyClipboardRacesAreRetried() {
+        XCTAssertTrue(TypingService.TerminalPaster.isClipboardRace(.clipboardSnapshotFailed))
+        XCTAssertTrue(TypingService.TerminalPaster.isClipboardRace(.clipboardWriteFailed))
+        for failure in TextDeliveryFailure.allCases where failure != .clipboardSnapshotFailed && failure != .clipboardWriteFailed {
+            XCTAssertFalse(TypingService.TerminalPaster.isClipboardRace(failure), failure.rawValue)
+        }
+    }
+}
+
+@MainActor
+final class TerminalNotInFrontReportingTests: XCTestCase {
+    func testTheTranscriptIsKeptAndTheCardShownWhenTheTerminalNeverComesForward() async {
+        let pasteboard = TypingServiceTransientPasteboardTests.makePasteboard()
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.setString("before", forType: .string)
+        let session = ClipboardPasteSession(pasteboard: SystemPasteboardManager(pasteboard: pasteboard), label: "TerminalNotInFrontReportingTests")
+        let originalHandler = TypingService.deliveryFailureHandler
+        defer { TypingService.deliveryFailureHandler = originalHandler }
+        var reports: [DeliveryFailureReport] = []
+        TypingService.deliveryFailureHandler = { reports.append($0) }
+
+        let posted = CallCounter()
+        var paster = TypingService.TerminalPaster(session: session) { _ in
+            posted.increment()
+            return true
+        }
+        paster.isInFront = { _ in false }
+        paster.bringToFront = { _ in }
+        paster.frontmostWaitLimit = 0.05
+        paster.pollInterval = 0.005
+        let failure = await Task.detached {
+            paster.paste("words for c11", to: 4242, activateFirst: true, beforeDispatch: {}, makeConsumptionWait: { {} })
+        }.value
+        XCTAssertEqual(failure, .targetRestoreFailed)
+        XCTAssertEqual(posted.count, 0)
+        XCTAssertEqual(pasteboard.string(forType: .string), "before", "the clipboard is untouched by the refused paste")
+
+        // What the typing worker does with that failure: keep the transcript, show the card.
+        TypingService.reportDeliveryFailure(.targetRestoreFailed, transcript: "words for c11", inHistory: true, pasteSession: session)
+        let deadline = Date().addingTimeInterval(3)
+        while reports.isEmpty, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        session.waitUntilIdle()
+        XCTAssertEqual(
+            reports.first,
+            DeliveryFailureReport(failure: .targetRestoreFailed, transcript: "words for c11", clipboard: .copied, inHistory: true)
+        )
+        XCTAssertEqual(pasteboard.string(forType: .string), "words for c11")
+    }
+}
+
+// MARK: - Bringing an app back: the AX frontmost flag is only a fallback
+
+final class BringToFrontTests: XCTestCase {
+    func testAPlainActivationThatWorksNeverSetsTheAXFrontmostFlag() {
+        let activated = CallCounter()
+        let axCalls = CallCounter()
+        let outcome = TypingService.bringToFront(
+            pid: 4242,
+            axFallbackAfter: 0.2,
+            pollInterval: 0.005,
+            activate: { _ in activated.increment(); return true },
+            isInFront: { _ in activated.count > 0 },
+            setAXFrontmost: { _ in axCalls.increment(); return true }
+        )
+        XCTAssertEqual(outcome, .activated)
+        XCTAssertEqual(axCalls.count, 0, "the AX flag can raise every window of an AppKit app (upstream #748)")
+    }
+
+    func testTheAXFlagIsTriedOnlyAfterTheGracePeriod() {
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        var axCalledAfter: TimeInterval?
+        let outcome = TypingService.bringToFront(
+            pid: 4242,
+            axFallbackAfter: 0.1,
+            pollInterval: 0.005,
+            activate: { _ in true },
+            isInFront: { _ in false },
+            setAXFrontmost: { _ in
+                axCalledAfter = ProcessInfo.processInfo.systemUptime - startedAt
+                return true
+            }
+        )
+        XCTAssertEqual(outcome, .axFallback)
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(axCalledAfter), 0.1)
+    }
+
+    func testAnAppAlreadyInFrontIsLeftAlone() {
+        let calls = CallCounter()
+        let outcome = TypingService.bringToFront(
+            pid: 4242,
+            activate: { _ in calls.increment(); return true },
+            isInFront: { _ in true },
+            setAXFrontmost: { _ in calls.increment(); return true }
+        )
+        XCTAssertEqual(outcome, .alreadyInFront)
+        XCTAssertEqual(calls.count, 0)
+    }
+
+    func testTheDefaultGracePeriodIsAQuarterSecond() {
+        XCTAssertEqual(TypingService.axFrontmostFallbackDelay, 0.25)
+        XCTAssertEqual(TypingService.frontmostWaitLimit, 1.0)
     }
 }

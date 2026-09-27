@@ -247,6 +247,9 @@ struct ContentView: View {
     @State private var previousSidebarItem: SidebarItem? = nil // Track previous for mode transitions
     @State private var playgroundUsed: Bool = SettingsStore.shared.playgroundUsed
     @State private var recordingAppInfo: (name: String, bundleId: String, windowTitle: String)? = nil
+    /// The focused field when recording started; the destination when "Return to Starting
+    /// Field" is on, or when Liquid Voice's own UI holds focus at stop.
+    @State private var recordingStartTarget: DictationTarget? = nil
     @State private var recordingPrecedingText: String = ""
 
     // Command Mode State
@@ -1660,6 +1663,7 @@ struct ContentView: View {
         let focusedPID = TypingService.captureSystemFocusedPID()
             ?? NSWorkspace.shared.frontmostApplication?.processIdentifier
         NotchContentState.shared.recordingTargetPID = focusedPID
+        self.recordingStartTarget = focusedPID == nil ? nil : TypingService.lastCapturedDictationTarget()
 
         let info = self.getCurrentAppInfo()
         self.recordingAppInfo = info
@@ -1686,6 +1690,22 @@ struct ContentView: View {
     private func captureRecordingContext() {
         self.captureRecordingTargetContext()
         self.captureRecordingFormattingContextIfNeeded()
+    }
+
+    /// The dictation destination, chosen when dictation stops (see `DictationTargetPolicy`).
+    private func captureDictationStopTarget() -> DictationTarget? {
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        let target = DictationTargetPolicy.selectStopTarget(
+            current: TypingService.captureDictationTarget(),
+            original: self.recordingStartTarget,
+            returnToStartingField: self.settings.returnDictationToStartingField,
+            ownPID: ProcessInfo.processInfo.processIdentifier
+        )
+        self.appBench(
+            "stop_target_capture pid=\(target.map { String($0.pid) } ?? "nil") " +
+                "element=\(target?.element != nil) elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))"
+        )
+        return target
     }
 
     private func resolveTypingTargetPID() -> (pid: pid_t?, shouldRestoreOriginalFocus: Bool) {
@@ -2081,6 +2101,11 @@ struct ContentView: View {
             !promptTest.isActive &&
             !shouldUseAIOnStop
         var didRequestOverlayHideOnStop = false
+        // Where the text lands is decided now, before transcription finishes, so switching
+        // apps while it completes cannot redirect it (ported from altic-dev/FluidVoice@5a67d658).
+        let stopTarget: DictationTarget? = route == .normal && !wasRewriteMode && !wasCommandMode && !promptTest.isActive
+            ? self.captureDictationStopTarget()
+            : nil
         DebugLogger.shared.info(
             "Routing decision snapshot | activeMode=\(modeAtStop.rawValue) | rewrite=\(wasRewriteMode) | command=\(wasCommandMode) | overlay=\(NotchContentState.shared.mode.rawValue)",
             source: "ContentView"
@@ -2397,21 +2422,37 @@ struct ContentView: View {
         )
 
         if shouldTypeExternally {
-            let typingTarget = self.resolveTypingTargetPID()
             // Dispatch insertion as soon as the destination app is ready; the
             // overlay hides asynchronously after output so it cannot delay paste.
-            if typingTarget.shouldRestoreOriginalFocus {
-                await self.restoreFocusToRecordingTarget()
+            let typingTargetPID: pid_t?
+            var isTargetReady = true
+            if let stopTarget, stopTarget.pid != ProcessInfo.processInfo.processIdentifier {
+                typingTargetPID = stopTarget.pid
+                let preparation = await TypingService.prepareTargetForDelivery(stopTarget)
+                isTargetReady = preparation.isReady
+                self.appBench("stop_target_prepare pid=\(stopTarget.pid) result=\(preparation.rawValue)")
+            } else {
+                let typingTarget = self.resolveTypingTargetPID()
+                typingTargetPID = typingTarget.pid
+                if typingTarget.shouldRestoreOriginalFocus {
+                    await self.restoreFocusToRecordingTarget()
+                }
             }
             self.appBench(
                 "text_ready_to_type_request elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - finalTextReadyAt) * 1000).rounded()))"
             )
-            self.asr.typeOutputPlanToActiveField(
-                finalOutputPlan,
-                preferredTargetPID: typingTarget.pid,
-                textReadyAt: finalTextReadyAt,
-                tracksDictionaryCorrections: true
-            )
+            if isTargetReady {
+                self.asr.typeOutputPlanToActiveField(
+                    finalOutputPlan,
+                    preferredTargetPID: typingTargetPID,
+                    textReadyAt: finalTextReadyAt,
+                    tracksDictionaryCorrections: true
+                )
+            } else {
+                // The field chosen at stop could not be brought back. Typing into whatever
+                // has focus now could land the text in the wrong place, so keep it instead.
+                TypingService.reportDeliveryFailure(.targetRestoreFailed, transcript: finalText)
+            }
             didTypeExternally = true
             if !shouldShowAIProcessingFailure, !didRequestOverlayHideOnStop {
                 self.hideOverlayAfterOutput()

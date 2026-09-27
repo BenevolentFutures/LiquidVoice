@@ -19,6 +19,368 @@ final class HotkeyShortcutTests: XCTestCase {
     private let experimentalDirectAudioCaptureEnabledKey = "ExperimentalDirectAudioCaptureEnabled"
 
     @MainActor
+    func testActiveShortcutSummaryListsEverySourceWithKeyCodes() {
+        let summary = GlobalHotkeyManager.activeShortcutSummary(.init(
+            primary: [HotkeyShortcut(keyCode: 61, modifierFlags: [], modifierKeyCodes: [61])],
+            promptAssignments: [(key: "__default__", shortcut: HotkeyShortcut(keyCode: 55, modifierFlags: [], modifierKeyCodes: [55]))],
+            secondaryPromptMode: HotkeyShortcut(keyCode: 60, modifierFlags: []),
+            secondaryPromptModeEnabled: false,
+            command: nil,
+            commandEnabled: false,
+            edit: HotkeyShortcut(keyCode: 15, modifierFlags: [.option]),
+            editEnabled: true,
+            cancel: HotkeyShortcut(keyCode: 53, modifierFlags: []),
+            pasteLast: HotkeyShortcut(mouseButton: 0, modifierFlags: [.command]),
+            pasteLastEnabled: true,
+            mode: .automatic
+        ))
+
+        XCTAssertTrue(summary.hasPrefix("mode=automatic"))
+        XCTAssertTrue(summary.contains("primary[0]=Right ⌥ [keyCode=61"), summary)
+        XCTAssertTrue(summary.contains("prompt[__default__]=Left ⌘ [keyCode=55"), summary)
+        XCTAssertTrue(summary.contains("secondaryPromptMode=Right ⇧ [keyCode=60 flags=0] enabled=false"), summary)
+        XCTAssertTrue(summary.contains("command=none enabled=false"), summary)
+        XCTAssertTrue(summary.contains("edit=⌥ + R [keyCode=15"), summary)
+        XCTAssertTrue(summary.contains("cancel=Escape [keyCode=53"), summary)
+        XCTAssertTrue(summary.contains("pasteLast=⌘ + Left Click [button=0"), summary)
+    }
+
+    @MainActor
+    func testActiveShortcutSummaryListsReprocessLastDictation() {
+        let summary = GlobalHotkeyManager.activeShortcutSummary(.init(
+            primary: [],
+            promptAssignments: [],
+            secondaryPromptMode: HotkeyShortcut(keyCode: 60, modifierFlags: []),
+            secondaryPromptModeEnabled: false,
+            command: nil,
+            commandEnabled: false,
+            edit: HotkeyShortcut(keyCode: 15, modifierFlags: [.option]),
+            editEnabled: false,
+            cancel: HotkeyShortcut(keyCode: 53, modifierFlags: []),
+            pasteLast: nil,
+            pasteLastEnabled: false,
+            reprocessLast: HotkeyShortcut(mouseButton: 4, modifierFlags: []),
+            reprocessLastEnabled: true,
+            mode: .hold
+        ))
+
+        XCTAssertTrue(summary.contains("reprocessLast="), summary)
+        XCTAssertTrue(summary.contains("[button=4"), summary)
+        XCTAssertTrue(summary.hasSuffix("enabled=true"), summary)
+    }
+
+    @MainActor
+    func testMouseShortcutTapCoversPrimaryAndOneShotMouseButtons() {
+        let keyboardOnly = HotkeyShortcut(keyCode: 61, modifierFlags: [], modifierKeyCodes: [61])
+        XCTAssertEqual(GlobalHotkeyManager.mouseButtons(primary: [keyboardOnly], oneShot: [nil, nil]), [])
+
+        let buttons = GlobalHotkeyManager.mouseButtons(
+            primary: [keyboardOnly, HotkeyShortcut(mouseButton: 2, modifierFlags: [])],
+            oneShot: [
+                HotkeyShortcut(mouseButton: 3, modifierFlags: [.command]),
+                HotkeyShortcut(mouseButton: 4, modifierFlags: []),
+            ]
+        )
+        XCTAssertEqual(buttons, [2, 3, 4], "Reprocess and paste-last mouse buttons must reach the filtering tap")
+
+        let reprocessOnly = GlobalHotkeyManager.mouseButtons(
+            primary: [keyboardOnly],
+            oneShot: [nil, HotkeyShortcut(mouseButton: 0, modifierFlags: [.option])]
+        )
+        XCTAssertEqual(reprocessOnly, [0])
+        XCTAssertNotEqual(
+            GlobalHotkeyManager.mouseShortcutEventMask(mouseButtons: reprocessOnly)
+                & (CGEventMask(1) << CGEventType.leftMouseUp.rawValue),
+            0,
+            "The paired mouse-up must reach the tap so it can be swallowed"
+        )
+    }
+
+    func testKeyboardTapPassesOnlyOurOwnPostedKeyEventsWithoutMainThread() throws {
+        let ownPID: Int64 = 4242
+        let event = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: true))
+
+        event.setIntegerValueField(.eventSourceUnixProcessID, value: ownPID)
+        for type in [CGEventType.keyDown, .keyUp, .flagsChanged] {
+            XCTAssertTrue(
+                GlobalHotkeyManager.isSelfPostedKeyboardEvent(type: type, event: event, ownProcessID: ownPID),
+                "our own synthesized \(type) must bypass the main-thread hop"
+            )
+        }
+        for type in [CGEventType.tapDisabledByTimeout, .tapDisabledByUserInput] {
+            XCTAssertFalse(
+                GlobalHotkeyManager.isSelfPostedKeyboardEvent(type: type, event: event, ownProcessID: ownPID),
+                "tap-disabled notices must always reach the handler so the tap is re-enabled"
+            )
+        }
+
+        event.setIntegerValueField(.eventSourceUnixProcessID, value: 0)
+        XCTAssertFalse(GlobalHotkeyManager.isSelfPostedKeyboardEvent(type: .keyDown, event: event, ownProcessID: ownPID))
+        event.setIntegerValueField(.eventSourceUnixProcessID, value: ownPID + 1)
+        XCTAssertFalse(GlobalHotkeyManager.isSelfPostedKeyboardEvent(type: .keyDown, event: event, ownProcessID: ownPID))
+    }
+
+    func testOneShotMouseUpSwallowOnlyTakesThePairedUp() {
+        var swallow = OneShotMouseUpSwallow()
+        XCTAssertFalse(swallow.shouldSwallowUp(button: 0), "nothing consumed, nothing swallowed")
+
+        swallow.consumedDown(button: 0)
+        XCTAssertFalse(swallow.shouldSwallowUp(button: 1), "another button's up is not the pair")
+        XCTAssertTrue(swallow.shouldSwallowUp(button: 0))
+        XCTAssertFalse(swallow.shouldSwallowUp(button: 0), "swallows exactly one up")
+    }
+
+    func testOneShotMouseUpSwallowClearsWhenThePairedUpWasMissed() {
+        // Reprocess on Option+Left Click; the tap times out before the up, so the up is lost.
+        var swallow = OneShotMouseUpSwallow()
+        swallow.consumedDown(button: 0)
+        swallow.observedDown(button: 0) // the next plain left click
+        XCTAssertFalse(swallow.shouldSwallowUp(button: 0), "a plain click's up must reach the app, or it drags")
+
+        // A down on a different button proves nothing about the pending one.
+        swallow.consumedDown(button: 0)
+        swallow.observedDown(button: 1)
+        XCTAssertTrue(swallow.shouldSwallowUp(button: 0))
+
+        // Tap outage or shortcut capture clears it outright.
+        swallow.consumedDown(button: 3)
+        swallow.reset()
+        XCTAssertFalse(swallow.shouldSwallowUp(button: 3))
+    }
+
+    func testTrackingResetStopsAHeldRecordingThatIsStillStarting() {
+        for mode in [HotkeyActivationMode.hold, .automatic] {
+            XCTAssertTrue(
+                GlobalHotkeyManager.shouldStopHeldRecordingOnTrackingReset(
+                    activationMode: mode, isRunningOrStarting: true, isAnyHoldKeyPressed: true
+                ),
+                "\(mode): a start in flight (DeadlineRace can take seconds) must be stopped, not orphaned"
+            )
+            XCTAssertFalse(GlobalHotkeyManager.shouldStopHeldRecordingOnTrackingReset(
+                activationMode: mode, isRunningOrStarting: true, isAnyHoldKeyPressed: false
+            ))
+            XCTAssertFalse(GlobalHotkeyManager.shouldStopHeldRecordingOnTrackingReset(
+                activationMode: mode, isRunningOrStarting: false, isAnyHoldKeyPressed: true
+            ))
+        }
+        XCTAssertFalse(
+            GlobalHotkeyManager.shouldStopHeldRecordingOnTrackingReset(
+                activationMode: .toggle, isRunningOrStarting: true, isAnyHoldKeyPressed: true
+            ),
+            "toggle recordings are not held, so a reset never stops them"
+        )
+    }
+
+    func testTapDisabledNoticesAreRecognizedForImmediateReenable() {
+        XCTAssertTrue(GlobalHotkeyManager.isTapDisabledNotice(.tapDisabledByTimeout))
+        XCTAssertTrue(GlobalHotkeyManager.isTapDisabledNotice(.tapDisabledByUserInput))
+        for type in [CGEventType.keyDown, .keyUp, .flagsChanged, .leftMouseDown] {
+            XCTAssertFalse(GlobalHotkeyManager.isTapDisabledNotice(type))
+        }
+    }
+
+    @MainActor
+    func testHoldReleaseDuringSlowStartEndsRecordingWhenStartCompletes() {
+        let asr = FakeCaptureStartState()
+        var stops: [HoldReleaseStopLatch.Request] = []
+        let latch = asr.makeLatch { stops.append($0) }
+
+        // Hold pressed: the hotkey dispatches a start, ASR begins a slow direct Core Audio start.
+        latch.startRequested()
+        asr.isStarting = true
+        latch.startRequestSettled()
+
+        // Released while still starting: latched, never cancelled, nothing stopped yet.
+        let release = HoldReleaseStopLatch.Request(type: .transcription, label: "Transcription", requireTargetMode: true)
+        XCTAssertEqual(latch.release(release), .latched)
+        XCTAssertTrue(stops.isEmpty)
+
+        // However long the start takes, the latch waits (there is no timer to expire).
+        latch.captureStartSettled() // spurious notification while still starting
+        XCTAssertTrue(stops.isEmpty)
+        XCTAssertEqual(latch.pending[.transcription], release)
+
+        // The start completes (direct capture or the AVAudioEngine fallback): stop right away.
+        asr.isStarting = false
+        asr.isRunning = true
+        latch.captureStartSettled()
+        XCTAssertEqual(stops, [release])
+        XCTAssertTrue(latch.pending.isEmpty)
+
+        // Honored exactly once.
+        latch.captureStartSettled()
+        XCTAssertEqual(stops.count, 1)
+    }
+
+    @MainActor
+    func testHoldReleaseBeforeStartReachesASRIsStillLatched() {
+        let asr = FakeCaptureStartState()
+        var stops: [HoldReleaseStopLatch.Request] = []
+        let latch = asr.makeLatch { stops.append($0) }
+
+        latch.startRequested() // hotkey action dispatched, ASR has not begun yet
+        let release = HoldReleaseStopLatch.Request(type: .promptMode, label: "Prompt mode", requireTargetMode: true)
+        XCTAssertEqual(latch.release(release), .latched)
+
+        asr.isStarting = true // the callback's start reached ASR
+        latch.startRequestSettled()
+        XCTAssertTrue(stops.isEmpty)
+
+        asr.isStarting = false
+        asr.isRunning = true
+        latch.captureStartSettled()
+        XCTAssertEqual(stops, [release])
+    }
+
+    @MainActor
+    func testFailedStartClearsHoldReleaseLatch() {
+        let asr = FakeCaptureStartState()
+        var stops: [HoldReleaseStopLatch.Request] = []
+        let latch = asr.makeLatch { stops.append($0) }
+
+        latch.startRequested()
+        asr.isStarting = true
+        latch.startRequestSettled()
+        XCTAssertEqual(latch.release(.init(type: .transcription, label: "Transcription", requireTargetMode: true)), .latched)
+
+        // Every backend failed: nothing to stop, and the latch is gone.
+        asr.isStarting = false
+        asr.isRunning = false
+        latch.captureStartSettled()
+        XCTAssertTrue(stops.isEmpty)
+        XCTAssertTrue(latch.pending.isEmpty)
+
+        // A later, unrelated recording is not stopped by the stale release.
+        latch.startRequested()
+        asr.isStarting = true
+        latch.startRequestSettled()
+        asr.isStarting = false
+        asr.isRunning = true
+        latch.captureStartSettled()
+        XCTAssertTrue(stops.isEmpty)
+    }
+
+    @MainActor
+    func testHoldReleaseLatchEdgeCases() {
+        let asr = FakeCaptureStartState()
+        var stops: [HoldReleaseStopLatch.Request] = []
+        let latch = asr.makeLatch { stops.append($0) }
+        let release = HoldReleaseStopLatch.Request(type: .transcription, label: "Transcription", requireTargetMode: true)
+
+        // Nothing running or starting (e.g. the start was refused): nothing to stop, nothing latched.
+        XCTAssertEqual(latch.release(release), .nothingToStop)
+        XCTAssertTrue(latch.pending.isEmpty)
+
+        // A hotkey start whose callback never started capture clears its latch when it settles.
+        latch.startRequested()
+        XCTAssertEqual(latch.release(release), .latched)
+        latch.startRequestSettled()
+        XCTAssertTrue(latch.pending.isEmpty)
+        XCTAssertTrue(stops.isEmpty)
+
+        // Already running: stop immediately.
+        asr.isRunning = true
+        XCTAssertEqual(latch.release(release), .stoppedNow)
+        XCTAssertEqual(stops, [release])
+        stops.removeAll()
+
+        // Pressing the same shortcut again supersedes the earlier release.
+        asr.isRunning = false
+        asr.isStarting = true
+        XCTAssertEqual(latch.release(release), .latched)
+        latch.cancel(.transcription)
+        asr.isStarting = false
+        asr.isRunning = true
+        latch.captureStartSettled()
+        XCTAssertTrue(stops.isEmpty)
+
+        // If another mode took over by the time the start settles, a mode-bound release is skipped.
+        asr.isRunning = false
+        asr.isStarting = true
+        asr.activeTargets = [.promptMode]
+        XCTAssertEqual(latch.release(release), .latched)
+        asr.isStarting = false
+        asr.isRunning = true
+        latch.captureStartSettled()
+        XCTAssertTrue(stops.isEmpty)
+        XCTAssertTrue(latch.pending.isEmpty)
+    }
+
+    func testKeyboardEventMaskExcludesMouseEvents() {
+        let mask = GlobalHotkeyManager.keyboardEventMask()
+        for type in [CGEventType.keyDown, .keyUp, .flagsChanged] {
+            XCTAssertNotEqual(mask & (CGEventMask(1) << type.rawValue), 0, "keyboard mask must include \(type)")
+        }
+        for type in [CGEventType.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp] {
+            XCTAssertEqual(mask & (CGEventMask(1) << type.rawValue), 0, "keyboard mask must not include \(type)")
+        }
+    }
+
+    func testMouseObserverMaskCoversOnlyMouseDowns() {
+        let mask = GlobalHotkeyManager.mouseObserverEventMask()
+        for type in [CGEventType.leftMouseDown, .rightMouseDown, .otherMouseDown] {
+            XCTAssertNotEqual(mask & (CGEventMask(1) << type.rawValue), 0, "observer mask must include \(type)")
+        }
+        for type in [CGEventType.leftMouseUp, .rightMouseUp, .otherMouseUp, .keyDown, .keyUp, .flagsChanged] {
+            XCTAssertEqual(mask & (CGEventMask(1) << type.rawValue), 0, "observer mask must not include \(type)")
+        }
+    }
+
+    func testMouseShortcutMaskMatchesConfiguredButtons() {
+        XCTAssertEqual(GlobalHotkeyManager.mouseShortcutEventMask(mouseButtons: []), 0)
+
+        let leftOnly = GlobalHotkeyManager.mouseShortcutEventMask(mouseButtons: [0])
+        for type in [CGEventType.leftMouseDown, .leftMouseUp] {
+            XCTAssertNotEqual(leftOnly & (CGEventMask(1) << type.rawValue), 0)
+        }
+        for type in [CGEventType.rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp, .keyDown, .flagsChanged] {
+            XCTAssertEqual(leftOnly & (CGEventMask(1) << type.rawValue), 0, "left-only mask must not include \(type)")
+        }
+
+        let sideButton = GlobalHotkeyManager.mouseShortcutEventMask(mouseButtons: [3])
+        for type in [CGEventType.otherMouseDown, .otherMouseUp] {
+            XCTAssertNotEqual(sideButton & (CGEventMask(1) << type.rawValue), 0)
+        }
+        for type in [CGEventType.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp] {
+            XCTAssertEqual(sideButton & (CGEventMask(1) << type.rawValue), 0, "side-button mask must not include \(type)")
+        }
+    }
+
+    func testModifierOnlyShortcutIgnoresTapAfterMouseClick() {
+        let replay = ModifierOnlyFlagsReplay(
+            shortcut: HotkeyShortcut(keyCode: 58, modifierFlags: .option, modifierKeyCodes: [58])
+        )
+
+        replay.flagsChanged(keyCode: 58, modifiers: .option, nextPressed: [58])
+        XCTAssertEqual(replay.activeModifierOnlyType, .transcription)
+
+        replay.mouseDown()
+        replay.flagsChanged(keyCode: 58, modifiers: [], nextPressed: [])
+
+        XCTAssertEqual(replay.cleanFinishCount, 0, "Option+click must not read as an Option tap")
+        XCTAssertNil(replay.activeModifierOnlyType)
+    }
+
+    func testMicrophoneChangeAlertsSupportProductionAndDebugAppsOnly() {
+        XCTAssertTrue(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.FluidApp.app"))
+        XCTAssertTrue(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.FluidApp.app.dev"))
+        XCTAssertFalse(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.example.tests"))
+        XCTAssertFalse(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: nil))
+    }
+
+    func testInterruptedMousePressForceStopsHoldAndAutomaticModes() {
+        XCTAssertTrue(GlobalHotkeyManager.shouldForceStopInterruptedPrimaryPress(activationMode: .hold))
+        XCTAssertTrue(GlobalHotkeyManager.shouldForceStopInterruptedPrimaryPress(activationMode: .automatic))
+        XCTAssertFalse(GlobalHotkeyManager.shouldForceStopInterruptedPrimaryPress(activationMode: .toggle))
+    }
+
+    func testHotkeySessionLockDetection() {
+        XCTAssertTrue(GlobalHotkeyManager.sessionIsLocked(sessionInfo: ["CGSSessionScreenIsLocked": true]))
+        XCTAssertFalse(GlobalHotkeyManager.sessionIsLocked(sessionInfo: ["CGSSessionScreenIsLocked": false]))
+        XCTAssertFalse(GlobalHotkeyManager.sessionIsLocked(sessionInfo: [:]))
+    }
+
+    @MainActor
     func testBottomOverlayRapidStopStartStopDoesNotDropFinalHide() async {
         let audioPublisher = Just(CGFloat.zero).eraseToAnyPublisher()
         let controller = BottomOverlayWindowController.shared
@@ -1723,7 +2085,7 @@ final class HotkeyShortcutTests: XCTestCase {
     }
 
     @MainActor
-    func testRemovedConnectedMicrophoneReturnsAtSecondAfterReconnect() throws {
+    func testRemovedConnectedMicrophoneStaysRemovedAfterReconnect() throws {
         try self.withRestoredDefaults(keys: [
             self.preferredInputDeviceUIDKey,
             self.microphonePriorityKey,
@@ -1735,7 +2097,7 @@ final class HotkeyShortcutTests: XCTestCase {
                 .init(uid: builtIn.uid, name: builtIn.name),
                 .init(uid: usb.uid, name: usb.name),
             ]
-            SettingsStore.shared.removeMicrophoneFromPriority(uid: builtIn.uid, isConnected: true)
+            SettingsStore.shared.removeMicrophoneFromPriority(uid: builtIn.uid)
 
             let devices = FakeAudioDeviceManager(inputs: [builtIn, usb], defaultInputUID: builtIn.uid)
             let coordinator = MicrophonePreferenceCoordinator(settings: .shared, devices: devices)
@@ -1746,8 +2108,43 @@ final class HotkeyShortcutTests: XCTestCase {
             XCTAssertEqual(SettingsStore.shared.microphonePriority.map(\.uid), [usb.uid])
 
             SettingsStore.shared.reconcileMicrophonePriority(with: [usb])
+            XCTAssertTrue(SettingsStore.shared.suppressedMicrophoneUIDs.contains(builtIn.uid))
+
             SettingsStore.shared.reconcileMicrophonePriority(with: [builtIn, usb])
-            XCTAssertEqual(SettingsStore.shared.microphonePriority.map(\.uid), [usb.uid, builtIn.uid])
+            XCTAssertEqual(SettingsStore.shared.microphonePriority.map(\.uid), [usb.uid])
+            XCTAssertEqual(coordinator.inputDeviceForCapture(), usb)
+        }
+    }
+
+    @MainActor
+    func testMicrophoneRemovedWhileDisconnectedStaysRemovedUntilRestored() throws {
+        try self.withRestoredDefaults(keys: [
+            self.preferredInputDeviceUIDKey,
+            self.microphonePriorityKey,
+            self.suppressedMicrophoneUIDsKey,
+        ]) {
+            let builtIn = Self.device(uid: "internal", name: "MacBook Pro Microphone")
+            let usb = Self.device(uid: "usb", name: "USB Microphone")
+            SettingsStore.shared.suppressedMicrophoneUIDs = []
+            SettingsStore.shared.microphonePriority = [
+                .init(uid: builtIn.uid, name: builtIn.name),
+                .init(uid: usb.uid, name: usb.name),
+            ]
+
+            // The USB mic is unplugged when the user removes it from the list.
+            SettingsStore.shared.removeMicrophoneFromPriority(uid: usb.uid)
+            XCTAssertTrue(SettingsStore.shared.suppressedMicrophoneUIDs.contains(usb.uid))
+            SettingsStore.shared.reconcileMicrophonePriority(with: [builtIn])
+            XCTAssertEqual(SettingsStore.shared.microphonePriority.map(\.uid), [builtIn.uid])
+
+            // Plugging it back in must not bring it back.
+            SettingsStore.shared.reconcileMicrophonePriority(with: [builtIn, usb])
+            XCTAssertEqual(SettingsStore.shared.microphonePriority.map(\.uid), [builtIn.uid])
+
+            // Restore Removed does.
+            SettingsStore.shared.restoreRemovedMicrophones(with: [builtIn, usb])
+            XCTAssertTrue(SettingsStore.shared.suppressedMicrophoneUIDs.isEmpty)
+            XCTAssertEqual(Set(SettingsStore.shared.microphonePriority.map(\.uid)), [builtIn.uid, usb.uid])
         }
     }
 
@@ -1871,6 +2268,22 @@ private final class FakeAudioDeviceManager: AudioDeviceManaging {
 /// `ModifierOnlyShortcutFlagsDecision` state machine. `nextPressed` is the
 /// `synchronizedPressedModifierKeyCodes` output for each event (the sync function is provably
 /// correct for these inputs, so it is driven directly to focus the test on the decision logic).
+@MainActor
+private final class FakeCaptureStartState {
+    var isStarting = false
+    var isRunning = false
+    var activeTargets: Set<HotkeyHoldModeType>?
+
+    func makeLatch(stop: @escaping (HoldReleaseStopLatch.Request) -> Void) -> HoldReleaseStopLatch {
+        HoldReleaseStopLatch(
+            isStarting: { [unowned self] in self.isStarting },
+            isRunning: { [unowned self] in self.isRunning },
+            isTargetActive: { [unowned self] type in self.activeTargets?.contains(type) ?? true },
+            stop: stop
+        )
+    }
+}
+
 private final class ModifierOnlyFlagsReplay {
     let shortcut: HotkeyShortcut
     private(set) var pressedModifierKeyCodes: Set<UInt16> = []
@@ -1914,5 +2327,10 @@ private final class ModifierOnlyFlagsReplay {
         if self.activeModifierOnlyType != nil {
             self.otherKeyPressedDuringModifier = true
         }
+    }
+
+    /// Same mark as keyDown; the mouse observer tap calls markOtherInputDuringModifierOnly too.
+    func mouseDown() {
+        self.keyDown()
     }
 }

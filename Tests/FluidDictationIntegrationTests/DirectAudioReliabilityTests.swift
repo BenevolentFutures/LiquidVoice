@@ -61,7 +61,16 @@ final class DirectAudioReliabilityTests: XCTestCase {
                 timeoutNanoseconds: 10_000_000_000
             )
         }
-        await Task.yield()
+        // The unstructured task may not have parked its waiter after a single
+        // yield. Re-arming first would (correctly) make its late wait stale, so
+        // wait until the gate actually holds the first waiter.
+        let registrationDeadline = ProcessInfo.processInfo.systemUptime + 5
+        while !gate.hasRegisteredWaiter(sessionID: 41, attemptID: 1),
+              ProcessInfo.processInfo.systemUptime < registrationDeadline
+        {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTAssertTrue(gate.hasRegisteredWaiter(sessionID: 41, attemptID: 1), "first waiter never registered")
 
         gate.arm(sessionID: 41, attemptID: 2)
 

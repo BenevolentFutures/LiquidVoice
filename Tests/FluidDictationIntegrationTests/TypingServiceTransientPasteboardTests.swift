@@ -902,3 +902,30 @@ final class DictationTargetPolicyTests: XCTestCase {
         XCTAssertEqual(result?.pid, 200)
     }
 }
+
+// MARK: - Settings (defaults follow upstream: both off)
+
+@MainActor
+final class DeliverySettingsTests: XCTestCase {
+    func testPasteCheckIsOffByDefaultAndRoundTripsThroughBackup() {
+        let settings = SettingsStore.shared
+        let original = UserDefaults.standard.object(forKey: "ShowPasteCheckAlerts")
+        defer { UserDefaults.standard.set(original, forKey: "ShowPasteCheckAlerts") }
+
+        UserDefaults.standard.removeObject(forKey: "ShowPasteCheckAlerts")
+        XCTAssertFalse(settings.showPasteCheckAlerts)
+        settings.showPasteCheckAlerts = true
+        XCTAssertEqual(settings.makeBackupPayload().showPasteCheckAlerts, true)
+    }
+
+    func testReturnToStartingFieldIsOffByDefaultAndRoundTripsThroughBackup() {
+        let settings = SettingsStore.shared
+        let original = UserDefaults.standard.object(forKey: "ReturnDictationToStartingField")
+        defer { UserDefaults.standard.set(original, forKey: "ReturnDictationToStartingField") }
+
+        UserDefaults.standard.removeObject(forKey: "ReturnDictationToStartingField")
+        XCTAssertFalse(settings.returnDictationToStartingField)
+        settings.returnDictationToStartingField = true
+        XCTAssertEqual(settings.makeBackupPayload().returnDictationToStartingField, true)
+    }
+}

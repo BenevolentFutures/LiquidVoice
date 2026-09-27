@@ -2403,11 +2403,11 @@ struct ContentView: View {
                 model: transcriptionModelInfo.model
             )
         }
-        // When FluidVoice itself is frontmost, the bound editor already receives `finalText`.
-        // Avoid re-inserting or overwriting the clipboard in that self-target case.
+        // "Copy to Clipboard" is a backup the user asked for, so it applies even when Liquid Voice
+        // itself is frontmost and nothing is typed externally (ported from
+        // altic-dev/FluidVoice@7d6d0e7c).
         let shouldCopyToClipboard = shouldPersistOutputs &&
-            SettingsStore.shared.copyTranscriptionToClipboard &&
-            !isFluidFrontmost
+            SettingsStore.shared.copyTranscriptionToClipboard
 
         if shouldCopyToClipboard {
             ClipboardService.copyToClipboard(finalText)

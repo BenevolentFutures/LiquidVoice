@@ -776,3 +776,129 @@ final class PasteKeyCodeTests: XCTestCase {
         XCTAssertEqual(finished.wait(timeout: .now() + 2), .success)
     }
 }
+
+// MARK: - Refusing a target that cannot take text, and the paste read-back
+
+final class DeliveryTargetAssessmentTests: XCTestCase {
+    func testTextRolesAreEditable() {
+        for role in ["AXTextField", "AXTextArea", "AXComboBox", "AXSecureTextField"] {
+            XCTAssertEqual(DeliveryTargetAssessment.classify(role: role, valueSettable: false), .editable(role: role))
+        }
+    }
+
+    func testSettableValueWinsOverRole() {
+        XCTAssertEqual(DeliveryTargetAssessment.classify(role: "AXStaticText", valueSettable: true), .editable(role: "AXStaticText"))
+    }
+
+    func testControlsAndStaticContentAreRefused() {
+        for role in ["AXButton", "AXStaticText", "AXImage", "AXMenuItem", "AXSlider", "AXCheckBox", "AXLink"] {
+            XCTAssertTrue(DeliveryTargetAssessment.classify(role: role, valueSettable: false).isCertainlyNotEditable, role)
+        }
+    }
+
+    func testContainersStayUnknownSoPasteProceeds() {
+        // Apps that draw their own UI (GPU terminals such as c11 and Ghostty, remote desktops)
+        // report the window or application as the focused element and still accept Cmd+V.
+        for role in ["AXWindow", "AXSheet", "AXDrawer", "AXApplication", "AXGroup", "AXWebArea", "AXCell", "AXUnknown"] {
+            XCTAssertEqual(DeliveryTargetAssessment.classify(role: role, valueSettable: false), .unknown(reason: "role_\(role)"), role)
+        }
+    }
+}
+
+final class PasteVerifierTests: XCTestCase {
+    private func snapshot(value: String?, count: Int?, caret: CFRange?) -> PasteVerifier.Snapshot {
+        PasteVerifier.Snapshot(
+            element: AXUIElementCreateSystemWide(),
+            pid: 1,
+            role: "AXTextArea",
+            value: value,
+            characterCount: count,
+            caret: caret
+        )
+    }
+
+    func testNotLandedVerdictWaitsAtLeastOneAndAHalfSeconds() {
+        // A slow app that applies Cmd+V late must never draw a failure card.
+        XCTAssertGreaterThanOrEqual(PasteVerifier.totalDecisionDelay, 1.5)
+        XCTAssertEqual(PasteVerifier.finalCheckDelay, 1.0)
+    }
+
+    func testReadBackStandsDownWhenUserActsAfterPaste() {
+        // Return pressed 0.4 s after the paste; the verdict arrives at 1.5 s.
+        XCTAssertTrue(PasteVerifier.userActedAfterPaste(secondsSinceLastInput: 1.1, secondsSincePaste: 1.5))
+        // Our own synthesized V at the paste instant is not user input.
+        XCTAssertFalse(PasteVerifier.userActedAfterPaste(secondsSinceLastInput: 1.48, secondsSincePaste: 1.5))
+        // Nothing typed since well before the paste.
+        XCTAssertFalse(PasteVerifier.userActedAfterPaste(secondsSinceLastInput: 30, secondsSincePaste: 1.5))
+    }
+
+    func testTextAppearingInTheValueConfirmsTheLanding() {
+        let before = self.snapshot(value: "Hello", count: 5, caret: CFRange(location: 5, length: 0))
+        let after = self.snapshot(value: "Hello world", count: 11, caret: CFRange(location: 11, length: 0))
+        XCTAssertEqual(PasteVerifier.confirmation(before: before, after: after, needle: "world"), .confirmed(method: "value"))
+    }
+
+    func testCountAdvanceConfirmsWhenTheValueIsUnreadable() {
+        let before = self.snapshot(value: nil, count: 10, caret: nil)
+        let after = self.snapshot(value: nil, count: 15, caret: nil)
+        XCTAssertEqual(PasteVerifier.confirmation(before: before, after: after, needle: "hello"), .confirmed(method: "count"))
+    }
+
+    func testUnchangedFieldIsTheOnlyNotLandedCase() {
+        let before = self.snapshot(value: "draft", count: 5, caret: CFRange(location: 5, length: 0))
+        XCTAssertNil(PasteVerifier.unchangedVerdict(before: before, after: before), "fully unchanged → caller reports notLanded")
+        let changed = self.snapshot(value: "draft!", count: 6, caret: CFRange(location: 6, length: 0))
+        XCTAssertEqual(PasteVerifier.unchangedVerdict(before: before, after: changed), .unknown(reason: "changed_without_text"))
+        let blind = self.snapshot(value: nil, count: 5, caret: CFRange(location: 5, length: 0))
+        XCTAssertEqual(
+            PasteVerifier.unchangedVerdict(before: blind, after: blind),
+            .unknown(reason: "signals_incomplete value=false count=true caret=true")
+        )
+    }
+}
+
+// MARK: - Destination chosen at stop
+
+final class DictationTargetPolicyTests: XCTestCase {
+    private let ownPID: pid_t = 999
+
+    private func target(_ pid: pid_t) -> DictationTarget {
+        DictationTarget(pid: pid, bundleIdentifier: "test.app.\(pid)", window: nil, element: nil)
+    }
+
+    func testFollowsTheCursorAtStopByDefault() {
+        let result = DictationTargetPolicy.selectStopTarget(
+            current: self.target(200), original: self.target(100), returnToStartingField: false, ownPID: self.ownPID
+        )
+        XCTAssertEqual(result?.pid, 200)
+    }
+
+    func testReturnToStartingFieldSendsItBack() {
+        let result = DictationTargetPolicy.selectStopTarget(
+            current: self.target(200), original: self.target(100), returnToStartingField: true, ownPID: self.ownPID
+        )
+        XCTAssertEqual(result?.pid, 100)
+    }
+
+    func testOwnOverlayFocusRecoversTheStartingTarget() {
+        let result = DictationTargetPolicy.selectStopTarget(
+            current: self.target(self.ownPID), original: self.target(100), returnToStartingField: false, ownPID: self.ownPID
+        )
+        XCTAssertEqual(result?.pid, 100)
+    }
+
+    func testUnreadableFocusAtStopFallsBackToTheStartingTarget() {
+        XCTAssertEqual(
+            DictationTargetPolicy.selectStopTarget(current: nil, original: self.target(100), returnToStartingField: false, ownPID: self.ownPID)?.pid,
+            100
+        )
+        XCTAssertNil(DictationTargetPolicy.selectStopTarget(current: nil, original: nil, returnToStartingField: true, ownPID: self.ownPID))
+    }
+
+    func testReturnToStartingFieldWithoutAStartTargetUsesTheCursor() {
+        let result = DictationTargetPolicy.selectStopTarget(
+            current: self.target(200), original: nil, returnToStartingField: true, ownPID: self.ownPID
+        )
+        XCTAssertEqual(result?.pid, 200)
+    }
+}

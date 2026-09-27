@@ -16,22 +16,14 @@ final class ModelRepository {
 
     /// All built-in provider IDs (not including custom/saved providers)
     static var builtInProviderIDs: [String] {
-        var providers = [
+        [
             "openai", "anthropic", "xai", "groq", "cerebras", "google", "openrouter", "ollama", "lmstudio",
         ]
-        if PrivateFeatures.privateAIProvider {
-            providers.insert(PrivateAIProviderFeature.shared.providerID, at: 0)
-        }
-        return providers
     }
 
     /// Returns the default models for a given provider ID.
     /// This is used when the user has not added any custom models for that provider.
     func defaultModels(for providerID: String) -> [String] {
-        if PrivateFeatures.privateAIProvider, providerID == PrivateAIProviderFeature.shared.providerID {
-            return PrivateAIProviderFeature.shared.modelIDs()
-        }
-
         switch providerID {
         case "openai":
             return ["gpt-4.1"]
@@ -84,10 +76,6 @@ final class ModelRepository {
 
     /// Returns the display name for a provider ID
     func displayName(for providerID: String) -> String {
-        if PrivateFeatures.privateAIProvider, providerID == PrivateAIProviderFeature.shared.providerID {
-            return PrivateAIProviderFeature.shared.providerName
-        }
-
         switch providerID {
         case "openai": return "OpenAI"
         case "anthropic": return "Anthropic"
@@ -151,7 +139,7 @@ final class ModelRepository {
 
     /// Returns the list of built-in providers for UI pickers
     func builtInProvidersList() -> [(id: String, name: String)] {
-        var list: [(id: String, name: String)] = [
+        [
             ("openai", "OpenAI"),
             ("anthropic", "Anthropic"),
             ("xai", "xAI"),
@@ -162,12 +150,6 @@ final class ModelRepository {
             ("ollama", "Ollama"),
             ("lmstudio", "LM Studio"),
         ]
-
-        if PrivateFeatures.privateAIProvider {
-            list.insert((PrivateAIProviderFeature.shared.providerID, PrivateAIProviderFeature.shared.providerName), at: 0)
-        }
-
-        return list
     }
 
     /// Converts a provider ID to a storage key for UserDefaults
@@ -223,10 +205,6 @@ final class ModelRepository {
     ///   - apiKey: Optional API key for authentication
     /// - Returns: Array of model IDs sorted alphabetically
     func fetchModels(for providerID: String, baseURL: String, apiKey: String?) async throws -> [String] {
-        if PrivateFeatures.privateAIProvider, providerID == PrivateAIProviderFeature.shared.providerID {
-            return PrivateAIProviderFeature.shared.modelIDs()
-        }
-
         let isAnthropic = providerID == "anthropic" || baseURL.contains("anthropic.com")
 
         // Construct the models endpoint URL

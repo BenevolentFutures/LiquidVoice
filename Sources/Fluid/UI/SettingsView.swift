@@ -7,7 +7,6 @@
 
 import AppKit
 import AVFoundation
-import PromiseKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -59,13 +58,7 @@ struct SettingsView: View {
     @State private var cachedDefaultInputUID: String = ""
     @State private var cachedDefaultOutputName: String = ""
 
-    // Analytics consent UI state (default ON; user can opt-out)
-    @State private var shareAnonymousAnalytics: Bool = SettingsStore.shared.shareAnonymousAnalytics
     @State private var showAnalyticsPrivacy: Bool = false
-    @State private var pendingAnalyticsValue: Bool? = nil
-    @State private var showAreYouSureToStopAnalytics: Bool = false
-    @State private var rollbackVersion: String = ""
-    @State private var isRollingBack: Bool = false
     @State private var audioHistoryBudgetText: String = Self.audioBudgetText(for: SettingsStore.shared.audioHistoryBudgetGB)
     @State private var audioHistoryUsageBytes: Int64 = DictationAudioHistoryStore.shared.audioUsageBytes()
     @State private var draggedMicrophoneUID: String?
@@ -101,49 +94,6 @@ struct SettingsView: View {
         self.activeShortcutRecordingTarget == target
     }
 
-    private var analyticsToggleBinding: Binding<Bool> {
-        Binding(
-            get: {
-                self.pendingAnalyticsValue ?? self.shareAnonymousAnalytics
-            },
-            set: { newValue in
-                // User is trying to turn OFF → ask first
-                if self.shareAnonymousAnalytics == true, newValue == false {
-                    self.pendingAnalyticsValue = false
-                    self.showAreYouSureToStopAnalytics = true
-
-                    return
-                }
-
-                // Normal ON path
-                self.shareAnonymousAnalytics = newValue
-                self.applyAnalyticsConsentChange(newValue)
-            }
-        )
-    }
-
-    private var analyticsConfirmationBinding: Binding<Bool> {
-        Binding(
-            get: { self.showAreYouSureToStopAnalytics },
-            set: { newValue in
-                // Only open modal if we have a pending value
-                if newValue {
-                    if self.pendingAnalyticsValue != nil {
-                        self.showAreYouSureToStopAnalytics = true
-                    }
-                } else {
-                    // Closing the modal: reset pending state
-                    self.showAreYouSureToStopAnalytics = false
-                    self.pendingAnalyticsValue = nil
-                }
-            }
-        )
-    }
-
-    private var currentAppVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
-    }
-
     private var appDisplayName: String {
         Bundle.main.fluidAppDisplayName
     }
@@ -163,8 +113,6 @@ struct SettingsView: View {
                     return "__OFF__"
                 case .default:
                     return "__DEFAULT__"
-                case .privateAI:
-                    return PrivateAIProviderPromptFormat.promptSelectionID
                 case let .profile(id):
                     return id
                 }
@@ -174,13 +122,8 @@ struct SettingsView: View {
                 case "__OFF__":
                     self.settings.setDictationPromptSelection(.off, for: slot)
                 case "__DEFAULT__":
-                    guard !PrivateAIProviderPromptFormat.isAvailable(settings: self.settings) else { return }
                     self.settings.setDictationPromptSelection(.default, for: slot)
-                case PrivateAIProviderPromptFormat.promptSelectionID:
-                    guard PrivateAIProviderPromptFormat.isAvailable(settings: self.settings) else { return }
-                    self.settings.setDictationPromptSelection(.privateAI, for: slot)
                 default:
-                    guard !PrivateAIProviderPromptFormat.isAvailable(settings: self.settings) else { return }
                     self.settings.setDictationPromptSelection(.profile(newValue), for: slot)
                 }
             }
@@ -190,7 +133,6 @@ struct SettingsView: View {
     @ViewBuilder
     private func dictationPromptPicker(for slot: SettingsStore.DictationShortcutSlot) -> some View {
         let profiles = self.settings.promptProfiles(for: .dictate)
-        let privateAILocked = PrivateAIProviderPromptFormat.isAvailable(settings: self.settings)
         HStack {
             Text("AI Prompt")
                 .font(self.theme.typography.bodySmall)
@@ -199,16 +141,10 @@ struct SettingsView: View {
             Spacer()
             Picker("", selection: self.dictationPromptSelectionBinding(for: slot)) {
                 Text("Off").tag("__OFF__")
-                Text("Default").tag("__DEFAULT__").disabled(privateAILocked)
-                if PrivateFeatures.privateAIProvider {
-                    Text(PrivateAIProviderFeature.displayName)
-                        .tag(PrivateAIProviderPromptFormat.promptSelectionID)
-                        .disabled(!privateAILocked)
-                }
+                Text("Default").tag("__DEFAULT__")
                 ForEach(profiles) { profile in
                     Text(profile.name.isEmpty ? "Untitled" : profile.name)
                         .tag(profile.id)
-                        .disabled(privateAILocked)
                 }
             }
             .frame(width: 190)
@@ -372,197 +308,14 @@ struct SettingsView: View {
                                     }
                                     .frame(width: 150)
                                 }
-
-                                self.settingsToggleRow(
-                                    title: "Independent Volume",
-                                    description: "Sound volume stays constant regardless of system volume. Mute is still respected.",
-                                    footnote: "Temporarily changes system volume during playback, which may briefly affect other audio.",
-                                    isOn: Binding(
-                                        get: { SettingsStore.shared.transcriptionSoundIndependentVolume },
-                                        set: { SettingsStore.shared.transcriptionSoundIndependentVolume = $0 }
-                                    )
-                                )
                             }
 
                             Divider().opacity(0.2)
 
-                            // Automatic Updates
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack(alignment: .center) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Automatic Updates")
-                                            .font(self.theme.typography.bodyStrong)
-                                            .foregroundStyle(self.settingsTitleText)
-                                        Text("Check for updates automatically once per hour")
-                                            .font(self.theme.typography.bodySmall)
-                                            .foregroundStyle(self.settingsSecondaryText)
-                                    }
-
-                                    Spacer()
-
-                                    Toggle("", isOn: Binding(
-                                        get: { SettingsStore.shared.autoUpdateCheckEnabled },
-                                        set: { SettingsStore.shared.autoUpdateCheckEnabled = $0 }
-                                    ))
-                                    .toggleStyle(.switch)
-                                    .tint(self.theme.palette.accent)
-                                    .labelsHidden()
-                                }
-
-                                HStack(alignment: .center) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Beta Releases")
-                                            .font(self.theme.typography.bodyStrong)
-                                            .foregroundStyle(self.settingsTitleText)
-                                        Text("Opt in to preview builds that may be unstable")
-                                            .font(self.theme.typography.bodySmall)
-                                            .foregroundStyle(self.settingsSecondaryText)
-                                    }
-
-                                    Spacer()
-
-                                    Toggle("", isOn: Binding(
-                                        get: { SettingsStore.shared.betaReleasesEnabled },
-                                        set: { SettingsStore.shared.betaReleasesEnabled = $0 }
-                                    ))
-                                    .toggleStyle(.switch)
-                                    .tint(self.theme.palette.accent)
-                                    .labelsHidden()
-                                }
-
-                                if SettingsStore.shared.betaReleasesEnabled {
-                                    Text("Beta opt-in enabled. Update checks include both stable and beta builds.")
-                                        .font(.caption)
-                                        .foregroundStyle(self.theme.palette.warning)
-                                }
-
-                                if let lastCheck = SettingsStore.shared.lastUpdateCheckDate {
-                                    Text("Last checked: \(lastCheck.formatted(date: .abbreviated, time: .shortened))")
-                                        .font(self.theme.typography.bodySmall)
-                                        .foregroundStyle(self.settingsSecondaryText)
-                                }
-
-                                Text("Current version: \(self.currentAppVersion)")
-                                    .font(self.theme.typography.bodySmall)
-                                    .foregroundStyle(self.settingsSecondaryText)
-                            }
-
-                            // Update Buttons
-                            HStack(spacing: 10) {
-                                Button("Check for Updates") {
-                                    Task { @MainActor in
-                                        do {
-                                            let includePrerelease = SettingsStore.shared.betaReleasesEnabled
-                                            try await SimpleUpdater.shared.checkAndUpdate(
-                                                owner: "altic-dev",
-                                                repo: "Fluid-oss",
-                                                includePrerelease: includePrerelease
-                                            )
-                                        } catch SimpleUpdateError.updateAlreadyInProgress {
-                                            DebugLogger.shared.info(
-                                                "Update installation already in progress",
-                                                source: "SettingsView"
-                                            )
-                                        } catch {
-                                            let msg = NSAlert()
-                                            if let pmkError = error as? PMKError, pmkError.isCancelled {
-                                                let isBeta = SettingsStore.shared.betaReleasesEnabled
-                                                msg.messageText = isBeta ? "You're Up To Date (Beta)" : "You're Up To Date"
-                                                msg.informativeText = isBeta
-                                                    ? "You're already running the latest build available in the beta channel."
-                                                    : "You're already running the latest version of Liquid Voice."
-                                            } else {
-                                                msg.messageText = "Update Check Failed"
-                                                msg.informativeText = "Unable to check for updates. Please try again later.\n\nError: \(error.localizedDescription)"
-                                            }
-                                            msg.alertStyle = .informational
-                                            msg.runModal()
-                                        }
-                                    }
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .tint(self.theme.palette.accent)
-                                .controlSize(.regular)
-
-                                Button("Release Notes") {
-                                    if let url = URL(string: "https://github.com/altic-dev/Fluid-oss/releases") {
-                                        NSWorkspace.shared.open(url)
-                                    }
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.regular)
-
-                                Button(self.rollbackVersion.isEmpty ? "Rollback" : "Rollback to \(self.rollbackVersion)") {
-                                    guard !self.isRollingBack else { return }
-
-                                    let infoText = self.rollbackVersion.isEmpty ? "your previously installed version" : self.rollbackVersion
-                                    let targetVersion = self.rollbackVersion
-                                    let confirm = NSAlert()
-                                    confirm.messageText = "Rollback to \(infoText)?"
-                                    confirm.informativeText = "This will restore a previous app version and relaunch Liquid Voice."
-                                    confirm.alertStyle = .warning
-                                    confirm.addButton(withTitle: "Rollback")
-                                    confirm.addButton(withTitle: "Cancel")
-
-                                    guard confirm.runModal() == .alertFirstButtonReturn else { return }
-
-                                    self.isRollingBack = true
-                                    Task {
-                                        defer {
-                                            Task { @MainActor in
-                                                self.isRollingBack = false
-                                            }
-                                        }
-
-                                        do {
-                                            try await SimpleUpdater.shared.rollbackToLatestBackup()
-                                            await MainActor.run {
-                                                let success = NSAlert()
-                                                success.messageText = "Rollback Successful"
-                                                success.informativeText = "Rolled back to \(targetVersion). Liquid Voice will relaunch shortly."
-                                                success.alertStyle = .informational
-                                                success.addButton(withTitle: "Report Bug")
-                                                success.addButton(withTitle: "OK")
-                                                let response = success.runModal()
-                                                if response == .alertFirstButtonReturn {
-                                                    self.openIssueReportingPage()
-                                                }
-                                            }
-                                        } catch {
-                                            await MainActor.run {
-                                                let fail = NSAlert()
-                                                fail.messageText = "Rollback Failed"
-                                                fail.informativeText = error.localizedDescription
-                                                fail.alertStyle = .critical
-                                                fail.addButton(withTitle: "OK")
-                                                fail.runModal()
-                                                self.refreshRollbackState()
-                                            }
-                                        }
-                                    }
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.regular)
-                                .disabled(self.rollbackVersion.isEmpty || self.isRollingBack)
-                                .opacity(self.isRollingBack ? 0.7 : 1.0)
-
-                                Button("Get Previous Builds") {
-                                    self.openPreviousBuildPicker()
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.regular)
-                            }
-                            .padding(.top, 12)
-
-                            if self.rollbackVersion.isEmpty {
-                                Text("No rollback backup found.")
-                                    .font(self.theme.typography.bodySmall)
-                                    .foregroundStyle(self.settingsSecondaryText)
-                            } else {
-                                Text("Rollback target: \(self.rollbackVersion)")
-                                    .font(self.theme.typography.bodySmall)
-                                    .foregroundStyle(self.settingsSecondaryText)
-                            }
+                            // Updates: the upstream updater is off, so there is nothing to check.
+                            Text("Liquid Voice updates by local rebuild (./build.sh install).")
+                                .font(self.theme.typography.bodySmall)
+                                .foregroundStyle(self.settingsSecondaryText)
                         }
                     }
                     .padding(16)
@@ -980,21 +733,23 @@ struct SettingsView: View {
                                     )
                                     Divider().opacity(0.2)
 
-                                    self.optionToggleRow(
-                                        title: "Share Anonymous Analytics",
-                                        description: "Send lean, anonymous daily usage, onboarding, retention, and model metrics. Never includes transcription text or prompts.",
-                                        isOn: self.analyticsToggleBinding
-                                    )
+                                    HStack(alignment: .center) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Analytics")
+                                                .font(self.theme.typography.bodyStrong)
+                                                .foregroundStyle(self.settingsTitleText)
+                                            Text("Liquid Voice sends no analytics or telemetry.")
+                                                .font(self.theme.typography.bodySmall)
+                                                .foregroundStyle(self.settingsSecondaryText)
+                                        }
 
-                                    HStack {
-                                        Button("What we collect") {
+                                        Spacer()
+
+                                        Button("Details") {
                                             self.showAnalyticsPrivacy = true
                                         }
                                         .buttonStyle(.link)
-
-                                        Spacer()
                                     }
-                                    .padding(.top, 6)
                                 }
                                 .padding(12)
                             }
@@ -1526,7 +1281,7 @@ struct SettingsView: View {
                             Text("The debug log contains detailed information about app operations and can help with troubleshooting.")
                                 .font(self.theme.typography.bodySmall)
                                 .foregroundStyle(self.settingsSecondaryText)
-                            Text("Crash diagnostics are written to Library/Logs/Fluid/Fluid.log by default.")
+                            Text("Crash diagnostics are written to Library/Logs/\(AppStorageLocation.logFolderName)/Fluid.log by default.")
                                 .font(self.theme.typography.bodySmall)
                                 .foregroundStyle(self.settingsSecondaryText)
                         }
@@ -1540,22 +1295,6 @@ struct SettingsView: View {
             AnalyticsPrivacyView()
                 .frame(minWidth: 520, minHeight: 520)
                 .appTheme(self.theme)
-        }
-        .sheet(isPresented: self.analyticsConfirmationBinding) {
-            AnalyticsConfirmationView(
-                onConfirm: {
-                    if let pending = pendingAnalyticsValue {
-                        self.shareAnonymousAnalytics = pending
-                        self.applyAnalyticsConsentChange(pending)
-                    }
-                    self.pendingAnalyticsValue = nil
-                    self.showAreYouSureToStopAnalytics = false
-                },
-                onCancel: {
-                    self.pendingAnalyticsValue = nil
-                    self.showAreYouSureToStopAnalytics = false
-                }
-            )
         }
         .onAppear {
             Task { @MainActor in
@@ -1602,7 +1341,6 @@ struct SettingsView: View {
                 let defaultInput = AudioDevice.getDefaultInputDevice()
                 self.cachedDefaultInputUID = defaultInput?.uid ?? ""
                 self.cachedDefaultOutputName = AudioDevice.getDefaultOutputDevice()?.name ?? ""
-                self.refreshRollbackState()
                 self.settings.refreshLaunchAtStartupStatus(clearError: true, logMismatch: false)
                 self.refreshAudioHistoryUsage()
             }
@@ -1610,15 +1348,6 @@ struct SettingsView: View {
         .onChange(of: self.visualizerNoiseThreshold) { _, newValue in
             SettingsStore.shared.visualizerNoiseThreshold = newValue
         }
-    }
-
-    private func refreshRollbackState() {
-        self.rollbackVersion = SimpleUpdater.shared.latestRollbackVersion() ?? ""
-    }
-
-    private func openIssueReportingPage() {
-        guard let url = URL(string: "https://github.com/altic-dev/Fluid-oss/issues/new/choose") else { return }
-        NSWorkspace.shared.open(url)
     }
 
     private func exportBackup() {
@@ -1701,9 +1430,6 @@ struct SettingsView: View {
     }
 
     private func syncLocalSettingsAfterBackupRestore() {
-        self.shareAnonymousAnalytics = SettingsStore.shared.shareAnonymousAnalytics
-        self.pendingAnalyticsValue = nil
-        self.showAreYouSureToStopAnalytics = false
         self.refreshAudioHistoryUsage()
     }
 
@@ -1801,62 +1527,6 @@ struct SettingsView: View {
         alert.alertStyle = .critical
         alert.addButton(withTitle: "OK")
         alert.runModal()
-    }
-
-    private func openPreviousBuildPicker() {
-        Task { @MainActor in
-            do {
-                let options = try await SimpleUpdater.shared.fetchRecentReleaseBuildOptions(
-                    owner: "altic-dev",
-                    repo: "Fluid-oss",
-                    limit: 3,
-                    includePrerelease: SettingsStore.shared.betaReleasesEnabled
-                )
-                self.presentPreviousBuildPicker(options)
-            } catch {
-                self.openAllReleasesPage()
-            }
-        }
-    }
-
-    private func presentPreviousBuildPicker(_ options: [SimpleUpdater.ReleaseBuildOption]) {
-        guard !options.isEmpty else {
-            self.openAllReleasesPage()
-            return
-        }
-
-        let picker = NSAlert()
-        picker.messageText = "Download Previous Build"
-        picker.informativeText = "No local rollback backup was found. Choose a recent release build:"
-        picker.alertStyle = .informational
-
-        for option in options {
-            picker.addButton(withTitle: option.version)
-        }
-        picker.addButton(withTitle: "All Releases")
-        picker.addButton(withTitle: "Cancel")
-
-        let response = picker.runModal()
-        let first = NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
-        let index = response.rawValue - first
-
-        if index >= 0, index < options.count {
-            NSWorkspace.shared.open(options[index].url)
-            return
-        }
-        if index == options.count {
-            self.openAllReleasesPage()
-        }
-    }
-
-    private func openAllReleasesPage() {
-        guard let url = URL(string: "https://github.com/altic-dev/Fluid-oss/releases") else { return }
-        NSWorkspace.shared.open(url)
-    }
-
-    private func applyAnalyticsConsentChange(_ enabled: Bool) {
-        SettingsStore.shared.shareAnonymousAnalytics = enabled
-        AnalyticsService.shared.setEnabled(enabled)
     }
 
     // MARK: - Helper Views
@@ -2533,10 +2203,7 @@ private extension SettingsView {
 
     func removeMicrophonePriorityEntry(_ entry: SettingsStore.MicrophonePriorityEntry) {
         self.hoveredMicrophoneUID = nil
-        self.settings.removeMicrophoneFromPriority(
-            uid: entry.uid,
-            isConnected: self.inputDevices.contains { $0.uid == entry.uid }
-        )
+        self.settings.removeMicrophoneFromPriority(uid: entry.uid)
         self.refreshActiveInputSelection()
     }
 
@@ -2896,74 +2563,5 @@ struct FlowLayout: Layout {
 
         cache.containerSize = CGSize(width: maxWidth, height: y + rowHeight)
         cache.lastWidth = maxWidth
-    }
-}
-
-// MARK: - Analytics modal confirmation
-
-struct AnalyticsConfirmationView: View {
-    let onConfirm: () -> Void
-    let onCancel: () -> Void
-    @Environment(\.theme) private var theme
-
-    private var contactInfoText: AttributedString {
-        var text = AttributedString(
-            "If you have any concerns we would love to hear about it, please email alticdev@gmail.com or file an issue in our GitHub."
-        )
-
-        if let emailRange = text.range(of: "alticdev@gmail.com") {
-            text[emailRange].link = URL(string: "mailto:alticdev@gmail.com")
-            text[emailRange].foregroundColor = self.theme.palette.accent
-        }
-
-        if let githubRange = text.range(of: "GitHub") {
-            text[githubRange].link = URL(string: "https://github.com/altic-dev/FluidVoice")
-            text[githubRange].foregroundColor = self.theme.palette.accent
-        }
-
-        return text
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Are you sure you want to stop sharing anonymous analytics?")
-                .font(.headline)
-
-            Text("By sharing anonymous usage data, you help us build the features you care about most. We never collect personal information (Audio, Transcription text etc), ever. Your support simply helps us make Liquid Voice better for you.")
-                .font(self.theme.typography.bodySmall)
-                .foregroundStyle(.secondary)
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(self.theme.palette.cardBackground)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(self.theme.palette.cardBorder.opacity(0.6), lineWidth: 1)
-                )
-
-            Text(self.contactInfoText)
-                .font(self.theme.typography.bodySmall)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-
-            Divider()
-
-            HStack {
-                Spacer()
-
-                Button("Cancel") {
-                    self.onCancel()
-                }
-
-                Button("Yes") {
-                    self.onConfirm()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
-            }
-        }
-        .padding(20)
-        .frame(width: 420)
     }
 }

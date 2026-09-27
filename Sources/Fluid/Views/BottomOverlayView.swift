@@ -1866,10 +1866,6 @@ private struct BottomOverlayPromptMenuView: View {
     let onDismissRequested: () -> Void
     @State private var hoveredRowID: String?
 
-    private var privateAILocked: Bool {
-        self.promptMode.normalized == .dictate && PrivateAIProviderPromptFormat.isAvailable(settings: self.settings)
-    }
-
     private func rowBackground(isSelected: Bool, rowID: String) -> some View {
         let isHovered = self.hoveredRowID == rowID
         let fillColor: Color
@@ -1932,13 +1928,10 @@ private struct BottomOverlayPromptMenuView: View {
     @ViewBuilder
     private func defaultRow(selectedID: String?) -> some View {
         let activeSlot = self.contentState.activeDictationShortcutSlot ?? .primary
-        let isSelected = !self.privateAILocked && (
-            self.promptMode.normalized == .dictate
-                ? (self.settings.dictationPromptSelection(for: activeSlot) == .default)
-                : (selectedID == nil)
-        )
+        let isSelected = self.promptMode.normalized == .dictate
+            ? (self.settings.dictationPromptSelection(for: activeSlot) == .default)
+            : (selectedID == nil)
         Button(action: {
-            guard !self.privateAILocked else { return }
             if self.promptMode.normalized == .dictate {
                 self.contentState.onDictationPromptSelectionRequested?(.default)
             } else {
@@ -1960,55 +1953,18 @@ private struct BottomOverlayPromptMenuView: View {
             .background(self.rowBackground(isSelected: isSelected, rowID: "default"))
         }
         .buttonStyle(.plain)
-        .disabled(self.privateAILocked)
-        .opacity(self.privateAILocked ? 0.45 : 1)
         .onHover { hovering in
-            self.hoveredRowID = hovering && !self.privateAILocked ? "default" : nil
-        }
-    }
-
-    @ViewBuilder
-    private func privateAIRow() -> some View {
-        let activeSlot = self.contentState.activeDictationShortcutSlot ?? .primary
-        let isAvailable = PrivateAIProviderPromptFormat.isAvailable(settings: self.settings)
-        let isSelected = self.settings.dictationPromptSelection(for: activeSlot) == .privateAI
-        Button(action: {
-            guard isAvailable else { return }
-            self.contentState.onDictationPromptSelectionRequested?(.privateAI)
-            self.restoreTypingTargetApp()
-            self.onDismissRequested()
-        }) {
-            HStack {
-                Text(PrivateAIProviderFeature.displayName)
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .semibold))
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(self.rowBackground(isSelected: isSelected, rowID: PrivateAIProviderFeature.shared.providerID))
-        }
-        .buttonStyle(.plain)
-        .disabled(!isAvailable)
-        .opacity(isAvailable ? 1 : 0.45)
-        .help(isAvailable ? "Use \(PrivateAIProviderFeature.displayName)" : "Select \(PrivateAIProviderFeature.displayName) to enable this prompt")
-        .onHover { hovering in
-            self.hoveredRowID = hovering && isAvailable ? PrivateAIProviderFeature.shared.providerID : nil
+            self.hoveredRowID = hovering ? "default" : nil
         }
     }
 
     @ViewBuilder
     private func profileRow(_ profile: SettingsStore.DictationPromptProfile, selectedID: String?) -> some View {
         let activeSlot = self.contentState.activeDictationShortcutSlot ?? .primary
-        let isSelected = !self.privateAILocked && (
-            self.promptMode.normalized == .dictate
-                ? (self.settings.dictationPromptSelection(for: activeSlot) == .profile(profile.id))
-                : (selectedID == profile.id)
-        )
+        let isSelected = self.promptMode.normalized == .dictate
+            ? (self.settings.dictationPromptSelection(for: activeSlot) == .profile(profile.id))
+            : (selectedID == profile.id)
         Button(action: {
-            guard !self.privateAILocked else { return }
             if self.promptMode.normalized == .dictate {
                 self.contentState.onDictationPromptSelectionRequested?(.profile(profile.id))
             } else {
@@ -2030,10 +1986,8 @@ private struct BottomOverlayPromptMenuView: View {
             .background(self.rowBackground(isSelected: isSelected, rowID: profile.id))
         }
         .buttonStyle(.plain)
-        .disabled(self.privateAILocked)
-        .opacity(self.privateAILocked ? 0.45 : 1)
         .onHover { hovering in
-            self.hoveredRowID = hovering && !self.privateAILocked ? profile.id : nil
+            self.hoveredRowID = hovering ? profile.id : nil
         }
     }
 
@@ -2049,15 +2003,9 @@ private struct BottomOverlayPromptMenuView: View {
                     .padding(.vertical, 4)
             }
 
-            if !self.privateAILocked {
-                self.defaultRow(selectedID: selectedID)
-            }
+            self.defaultRow(selectedID: selectedID)
 
-            if self.promptMode.normalized == .dictate && PrivateFeatures.privateAIProvider {
-                self.privateAIRow()
-            }
-
-            if !self.privateAILocked && !profiles.isEmpty {
+            if !profiles.isEmpty {
                 Divider()
                     .padding(.vertical, 4)
 

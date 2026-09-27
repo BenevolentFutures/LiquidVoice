@@ -12,10 +12,6 @@ struct SettingsBackupPayload: Codable, Equatable {
     let selectedModelByProvider: [String: String]
     let savedProviders: [SettingsStore.SavedProvider]
     let modelReasoningConfigs: [String: SettingsStore.ModelReasoningConfig]
-    let privateAIPrefixKVCacheEnabled: Bool?
-    let privateAIBoostEnabled: Bool?
-    let privateAIBackendPreference: SettingsStore.PrivateAIBackendPreference?
-    let privateAIContextTokenLimit: Int?
     let selectedSpeechModel: SettingsStore.SpeechModel
     let selectedCohereLanguage: SettingsStore.CohereLanguage
     let selectedNemotronLanguage: SettingsStore.NemotronLanguage?
@@ -51,7 +47,9 @@ struct SettingsBackupPayload: Codable, Equatable {
     let accentColorOption: SettingsStore.AccentColorOption
     let transcriptionStartSound: SettingsStore.TranscriptionStartSound
     let transcriptionSoundVolume: Float
-    let transcriptionSoundIndependentVolume: Bool
+    // Independent Volume was removed, but the key is still written (always false) so backups
+    // from this build decode on app versions that require it. Ignored on restore.
+    let transcriptionSoundIndependentVolume: Bool?
     let autoUpdateCheckEnabled: Bool
     let betaReleasesEnabled: Bool
     let enableDebugLogs: Bool
@@ -177,10 +175,9 @@ final class BackupService {
     func decode(_ data: Data) throws -> AppBackupDocument {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let migratedData = Self.dataByMigratingLegacyPrivateAIKeys(in: data) ?? data
 
         do {
-            let document = try decoder.decode(AppBackupDocument.self, from: migratedData)
+            let document = try decoder.decode(AppBackupDocument.self, from: data)
             try self.validate(document)
             return document
         } catch let error as BackupServiceError {
@@ -217,24 +214,6 @@ final class BackupService {
         guard document.schemaVersion.major == BackupFileVersion.current.major else {
             throw BackupServiceError.unsupportedSchemaVersion(document.schemaVersion)
         }
-    }
-
-    private static func dataByMigratingLegacyPrivateAIKeys(in data: Data) -> Data? {
-        guard var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              var settings = root["settings"] as? [String: Any],
-              settings["privateAIPrefixKVCacheEnabled"] == nil
-        else {
-            return nil
-        }
-
-        let legacyPrefixCacheKey = ["fluid", "Int", "elligence", "PrefixKVCacheEnabled"].joined()
-        guard let legacyValue = settings[legacyPrefixCacheKey] else {
-            return nil
-        }
-
-        settings["privateAIPrefixKVCacheEnabled"] = legacyValue
-        root["settings"] = settings
-        return try? JSONSerialization.data(withJSONObject: root)
     }
 }
 

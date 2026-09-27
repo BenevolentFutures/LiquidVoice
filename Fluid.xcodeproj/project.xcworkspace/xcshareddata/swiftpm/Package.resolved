@@ -15,7 +15,6 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/altic-dev/DynamicNotchKit.git",
       "state" : {
-        "branch" : "main",
         "revision" : "708f31da5319436c64059ee7ae566953407063d7"
       }
     },
@@ -33,7 +32,6 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/altic-dev/FluidAudio.git",
       "state" : {
-        "branch" : "B/cohere-coreml-asr",
         "revision" : "2e885ba247bdbbb3d3e932ba9701a5c165356df7"
       }
     },
@@ -51,7 +49,6 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ejbills/mediaremote-adapter",
       "state" : {
-        "branch" : "master",
         "revision" : "78aae86c03adab11a7b352211cc82381737cf854"
       }
     },

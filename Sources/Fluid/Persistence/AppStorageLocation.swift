@@ -15,6 +15,16 @@ nonisolated enum AppStorageLocation {
         #endif
     }()
 
+    /// Folder under `~/Library/Logs` for the file log. Debug builds log separately so a test or
+    /// development run never mixes its lines into, or rotates away, the installed app's log.
+    static let logFolderName: String = {
+        #if DEBUG
+        return "Fluid-Dev"
+        #else
+        return "Fluid"
+        #endif
+    }()
+
     /// Bundle identifiers of this app: the installed build and the isolated Debug build.
     static let appBundleIdentifiers: Set<String> = ["com.FluidApp.app", "com.FluidApp.app.dev"]
 }

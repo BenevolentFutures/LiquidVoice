@@ -110,20 +110,6 @@ private struct SemanticVersion: Comparable {
 
 @MainActor
 final class SimpleUpdater {
-    struct ReleaseBuildOption {
-        let version: String
-        let url: URL
-    }
-
-    struct ReleaseNote: Codable, Hashable {
-        let version: String
-        let title: String
-        let notes: String
-        let publishedAt: Date?
-        let url: URL?
-        let isPrerelease: Bool
-    }
-
     static let shared = SimpleUpdater()
     private init() {}
 
@@ -187,114 +173,11 @@ final class SimpleUpdater {
         }
     }
 
-    func fetchRecentReleaseBuildOptions(
-        owner: String,
-        repo: String,
-        limit: Int = 3,
-        includePrerelease: Bool = false
-    ) async throws -> [ReleaseBuildOption] {
-        let releases = try await self.fetchReleases(owner: owner, repo: repo)
-        let count = max(1, limit)
-        let candidates = self.sortedCandidateReleases(
-            releases,
-            includePrerelease: includePrerelease
-        ).prefix(count)
-
-        return candidates.map { entry in
-            let release = entry.release
-            let zipAsset = release.assets.first {
-                $0.content_type == "application/zip" ||
-                    $0.content_type == "application/x-zip-compressed" ||
-                    $0.name.lowercased().hasSuffix(".zip")
-            }
-            let fallbackTagURL = URL(string: "https://github.com/\(owner)/\(repo)/releases/tag/\(release.tag_name)")
-            let fallbackReleasesURL = URL(string: "https://github.com/\(owner)/\(repo)/releases")
-            let url = zipAsset?.browser_download_url ??
-                release.html_url ??
-                fallbackTagURL ??
-                fallbackReleasesURL ??
-                URL(fileURLWithPath: "/")
-            return ReleaseBuildOption(version: release.tag_name, url: url)
-        }
-    }
-
-    func fetchRecentReleaseNotes(
-        owner: String,
-        repo: String,
-        limit: Int = 6,
-        includePrerelease: Bool = false
-    ) async throws -> [ReleaseNote] {
-        let releases = try await self.fetchReleases(owner: owner, repo: repo)
-        let count = max(1, limit)
-
-        return self.sortedCandidateReleases(
-            releases,
-            includePrerelease: includePrerelease
-        )
-        .prefix(count)
-        .map { entry in
-            let release = entry.release
-            return ReleaseNote(
-                version: release.tag_name,
-                title: Self.nonEmpty(release.name) ?? release.tag_name,
-                notes: Self.nonEmpty(release.body) ?? "No release notes available.",
-                publishedAt: Self.parseGitHubDate(release.published_at),
-                url: release.html_url,
-                isPrerelease: release.prerelease
-            )
-        }
-    }
-
     // Allowed Apple Developer Team IDs for code-sign validation
     // Configured per your request; restrict to your actual Team ID only.
     private let allowedTeamIDs: Set<String> = [
         "V4J43B279J",
     ]
-
-    private static let githubDateFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-
-    private static let githubFractionalDateFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    private static func parseGitHubDate(_ value: String?) -> Date? {
-        guard let value else { return nil }
-        return self.githubDateFormatter.date(from: value) ??
-            self.githubFractionalDateFormatter.date(from: value)
-    }
-
-    private static func nonEmpty(_ value: String?) -> String? {
-        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let trimmed, !trimmed.isEmpty else { return nil }
-        return trimmed
-    }
-
-    // Fetch latest release notes from GitHub
-    func fetchLatestReleaseNotes(
-        owner: String,
-        repo: String,
-        includePrerelease: Bool = false
-    ) async throws -> (version: String, notes: String) {
-        let releases = try await self.fetchReleases(owner: owner, repo: repo)
-
-        guard let latest = self.selectLatestRelease(
-            from: releases,
-            includePrerelease: includePrerelease
-        ) else {
-            throw SimpleUpdateError.noSuitableRelease
-        }
-
-        let version = latest.tag_name
-        let notes = latest.body ?? "No release notes available."
-
-        return (version, notes)
-    }
 
     // Silent check that returns update info without showing alerts or installing
     func checkForUpdate(

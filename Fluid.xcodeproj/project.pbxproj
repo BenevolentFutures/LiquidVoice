@@ -663,24 +663,24 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/altic-dev/FluidAudio.git";
 			requirement = {
-				branch = "B/cohere-coreml-asr";
-				kind = branch;
+				kind = revision;
+				revision = 2e885ba247bdbbb3d3e932ba9701a5c165356df7;
 			};
 		};
 		7C3697872ED70F9C005874CE /* XCRemoteSwiftPackageReference "DynamicNotchKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/altic-dev/DynamicNotchKit.git";
 			requirement = {
-				branch = main;
-				kind = branch;
+				kind = revision;
+				revision = 708f31da5319436c64059ee7ae566953407063d7;
 			};
 		};
 		7C5AF1492F15041600DE21B0 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/ejbills/mediaremote-adapter";
 			requirement = {
-				branch = master;
-				kind = branch;
+				kind = revision;
+				revision = 78aae86c03adab11a7b352211cc82381737cf854;
 			};
 		};
 		7C9A71002F58B00000FB7CAF /* XCRemoteSwiftPackageReference "transcribe-cpp-swift" */ = {

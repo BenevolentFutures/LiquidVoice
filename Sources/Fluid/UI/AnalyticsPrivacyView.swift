@@ -8,9 +8,9 @@ struct AnalyticsPrivacyView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Anonymous Analytics")
+                    Text("Analytics")
                         .font(.system(size: 18, weight: .semibold))
-                    Text("What Liquid Voice collects when analytics is enabled")
+                    Text("Liquid Voice sends no analytics or telemetry")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
@@ -23,33 +23,16 @@ struct AnalyticsPrivacyView: View {
 
             Divider().opacity(0.4)
 
-            self.contactInfoView
-
-            Divider().opacity(0.4)
-
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    self.sectionTitle("We collect")
-                    self.bullet("A random installation ID, app version, and the operating-system label macOS.")
-                    self.bullet("One daily active-use signal after you interact with the app.")
-                    self.bullet("Daily totals for Dictation, Command Mode, Edit Mode, and meeting transcription.")
-                    self.bullet("Onboarding steps viewed and completed, including skips.")
-                    self.bullet("Transcription and AI provider/model identifiers, counted as daily totals.")
-                    self.bullet("Model download source, outcome, and download duration.")
+                    self.sectionTitle("What Liquid Voice sends")
+                    self.bullet("No usage analytics, crash reports, or telemetry. The analytics backend upstream FluidVoice uses is switched off in this build, so there is nothing to opt in to or out of.")
+                    self.bullet("Your transcripts and audio stay on this Mac unless you set up a cloud AI provider yourself. Then the text you choose to enhance goes to that provider.")
 
-                    self.sectionTitle("We do NOT collect")
-                    self.bullet("Any transcription text or audio.")
-                    self.bullet("Selected text, rewrite prompts, or AI responses.")
-                    self.bullet("Terminal commands or outputs from Command Mode.")
-                    self.bullet("Window titles, app names, file names/paths, clipboard contents, or anything you type.")
-                    self.bullet("Hardware identifiers, CPU/chip details, performance timings, or individual transcription events.")
-
-                    self.sectionTitle("How it’s used")
-                    self.bullet("To understand feature adoption, onboarding completion, model usage, active installations, and retention without requiring accounts.")
-
-                    self.sectionTitle("Control")
-                    self.bullet("You can disable analytics anytime in Settings → Share Anonymous Analytics.")
-                    self.bullet("Disabling analytics securely removes all queued and aggregated analytics stored on this Mac.")
+                    self.sectionTitle("Network use you may see")
+                    self.bullet("Speech-model downloads, when you pick a model that is not on this Mac yet.")
+                    self.bullet("Requests to AI providers you configure in AI Enhancement.")
+                    self.bullet("Links you open yourself, such as Feedback, which opens GitHub in your browser.")
                 }
                 .padding(.vertical, 6)
             }
@@ -57,39 +40,6 @@ struct AnalyticsPrivacyView: View {
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(self.theme.palette.contentBackground)
-    }
-
-    private var contactInfoView: some View {
-        Text(self.contactInfoText)
-            .font(.system(size: 13))
-            .foregroundStyle(.primary)
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(self.theme.palette.cardBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(self.theme.palette.cardBorder.opacity(0.6), lineWidth: 1)
-            )
-    }
-
-    private var contactInfoText: AttributedString {
-        var text = AttributedString(
-            "If you have any concerns we would love to hear about it, please email alticdev@gmail.com or file an issue in our GitHub."
-        )
-
-        if let emailRange = text.range(of: "alticdev@gmail.com") {
-            text[emailRange].link = URL(string: "mailto:alticdev@gmail.com")
-            text[emailRange].foregroundColor = self.theme.palette.accent
-        }
-
-        if let githubRange = text.range(of: "GitHub") {
-            text[githubRange].link = URL(string: "https://github.com/altic-dev/FluidVoice")
-            text[githubRange].foregroundColor = self.theme.palette.accent
-        }
-
-        return text
     }
 
     private func sectionTitle(_ text: String) -> some View {

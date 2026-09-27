@@ -2501,10 +2501,7 @@ private extension SettingsView {
 
     func removeMicrophonePriorityEntry(_ entry: SettingsStore.MicrophonePriorityEntry) {
         self.hoveredMicrophoneUID = nil
-        self.settings.removeMicrophoneFromPriority(
-            uid: entry.uid,
-            isConnected: self.inputDevices.contains { $0.uid == entry.uid }
-        )
+        self.settings.removeMicrophoneFromPriority(uid: entry.uid)
         self.refreshActiveInputSelection()
     }
 

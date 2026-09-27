@@ -1944,15 +1944,13 @@ final class SettingsStore: ObservableObject {
         self.microphonePriority = entries
     }
 
-    func removeMicrophoneFromPriority(uid: String, isConnected: Bool) {
+    /// Removing a microphone always suppresses it, connected or not, so it stays out of the list
+    /// when it (re)connects. "Restore Removed" (restoreRemovedMicrophones) brings it back.
+    func removeMicrophoneFromPriority(uid: String) {
         guard uid.isEmpty == false else { return }
 
         var suppressedUIDs = self.suppressedMicrophoneUIDs
-        if isConnected {
-            suppressedUIDs.insert(uid)
-        } else {
-            suppressedUIDs.remove(uid)
-        }
+        suppressedUIDs.insert(uid)
         self.suppressedMicrophoneUIDs = suppressedUIDs
 
         let entries = self.microphonePriority.filter { $0.uid != uid }

@@ -1,6 +1,5 @@
 import AppKit
 import Combine
-import PromiseKit
 import SwiftUI
 
 enum MenuBarNavigationDestination: String {
@@ -19,7 +18,6 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
     // Cached menu items to avoid rebuilding entire menu
     private var statusMenuItem: NSMenuItem?
     private var copyLastTranscriptMenuItem: NSMenuItem?
-    private var rollbackMenuItem: NSMenuItem?
     private var microphoneMenuItem: NSMenuItem?
     private var microphoneSubmenu: NSMenu?
 
@@ -532,27 +530,6 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         self.microphoneMenuItem = microphoneMenuItem
         self.microphoneSubmenu = microphoneSubmenu
 
-        // Check for Updates
-        let updateItem = NSMenuItem(
-            title: "Check for Updates...",
-            action: #selector(checkForUpdates(_:)),
-            keyEquivalent: ""
-        )
-        updateItem.target = self
-        menu.addItem(updateItem)
-
-        menu.addItem(.separator())
-
-        let rollbackMenuItem = NSMenuItem(
-            title: "Rollback to Previous Version...",
-            action: #selector(rollbackToPreviousVersion(_:)),
-            keyEquivalent: ""
-        )
-        rollbackMenuItem.target = self
-        rollbackMenuItem.isEnabled = SimpleUpdater.shared.hasRollbackBackup()
-        menu.addItem(rollbackMenuItem)
-        self.rollbackMenuItem = rollbackMenuItem
-
         menu.addItem(.separator())
 
         // Quit
@@ -586,9 +563,6 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         self.statusMenuItem?.title = statusTitle
         self.copyLastTranscriptMenuItem?.isEnabled = self.canCopyLastTranscript
         self.microphoneMenuItem?.isEnabled = true
-
-        // Update rollback availability text
-        self.rollbackMenuItem?.isEnabled = SimpleUpdater.shared.hasRollbackBackup()
     }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -703,68 +677,6 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         SettingsStore.shared.recordInputDeviceSelection(device.uid, name: device.name)
 
         self.refreshMicrophoneMenu()
-    }
-
-    @objc private func checkForUpdates(_ sender: Any?) {
-        DebugLogger.shared.info("🔎 Menu action: Check for Updates…", source: "MenuBarManager")
-
-        // Call the AppDelegate's manual update check method if available
-        if let appDelegate = NSApp.delegate as? AppDelegate {
-            appDelegate.checkForUpdatesManually()
-            return
-        }
-
-        // No fallback: Liquid Voice never checks upstream FluidVoice releases.
-        DebugLogger.shared.warning("Update check unavailable: AppDelegate not found", source: "MenuBarManager")
-    }
-
-    @objc private func rollbackToPreviousVersion(_ sender: Any?) {
-        let availableVersion = SimpleUpdater.shared.latestRollbackVersion() ?? ""
-        guard !availableVersion.isEmpty else {
-            let msg = NSAlert()
-            msg.messageText = "No rollback backup found"
-            msg.informativeText = "No previous version backup is available on this device."
-            msg.alertStyle = .informational
-            msg.addButton(withTitle: "OK")
-            msg.runModal()
-            return
-        }
-
-        let confirm = NSAlert()
-        confirm.messageText = "Rollback to \(availableVersion)?"
-        confirm.informativeText = "This will restore the backup and relaunch Liquid Voice."
-        confirm.alertStyle = .warning
-        confirm.addButton(withTitle: "Rollback")
-        confirm.addButton(withTitle: "Cancel")
-
-        guard confirm.runModal() == .alertFirstButtonReturn else { return }
-
-        Task { @MainActor in
-            do {
-                try await SimpleUpdater.shared.rollbackToLatestBackup()
-                let success = NSAlert()
-                success.messageText = "Rollback Successful"
-                success.informativeText = "Rolled back to \(availableVersion). Liquid Voice will relaunch shortly."
-                success.alertStyle = .informational
-                success.addButton(withTitle: "Report Bug")
-                success.addButton(withTitle: "OK")
-                let response = success.runModal()
-                if response == .alertFirstButtonReturn {
-                    self.openIssueReportingPage()
-                }
-            } catch {
-                let fail = NSAlert()
-                fail.messageText = "Rollback Failed"
-                fail.informativeText = error.localizedDescription
-                fail.alertStyle = .critical
-                fail.addButton(withTitle: "OK")
-                fail.runModal()
-            }
-        }
-    }
-
-    private func openIssueReportingPage() {
-        NSWorkspace.shared.open(LiquidVoiceLinks.newIssue)
     }
 
     @objc private func openMainWindow() {

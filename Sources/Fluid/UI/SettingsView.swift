@@ -163,8 +163,6 @@ struct SettingsView: View {
                     return "__OFF__"
                 case .default:
                     return "__DEFAULT__"
-                case .privateAI:
-                    return PrivateAIProviderPromptFormat.promptSelectionID
                 case let .profile(id):
                     return id
                 }
@@ -174,13 +172,8 @@ struct SettingsView: View {
                 case "__OFF__":
                     self.settings.setDictationPromptSelection(.off, for: slot)
                 case "__DEFAULT__":
-                    guard !PrivateAIProviderPromptFormat.isAvailable(settings: self.settings) else { return }
                     self.settings.setDictationPromptSelection(.default, for: slot)
-                case PrivateAIProviderPromptFormat.promptSelectionID:
-                    guard PrivateAIProviderPromptFormat.isAvailable(settings: self.settings) else { return }
-                    self.settings.setDictationPromptSelection(.privateAI, for: slot)
                 default:
-                    guard !PrivateAIProviderPromptFormat.isAvailable(settings: self.settings) else { return }
                     self.settings.setDictationPromptSelection(.profile(newValue), for: slot)
                 }
             }
@@ -190,7 +183,6 @@ struct SettingsView: View {
     @ViewBuilder
     private func dictationPromptPicker(for slot: SettingsStore.DictationShortcutSlot) -> some View {
         let profiles = self.settings.promptProfiles(for: .dictate)
-        let privateAILocked = PrivateAIProviderPromptFormat.isAvailable(settings: self.settings)
         HStack {
             Text("AI Prompt")
                 .font(self.theme.typography.bodySmall)
@@ -199,16 +191,10 @@ struct SettingsView: View {
             Spacer()
             Picker("", selection: self.dictationPromptSelectionBinding(for: slot)) {
                 Text("Off").tag("__OFF__")
-                Text("Default").tag("__DEFAULT__").disabled(privateAILocked)
-                if PrivateFeatures.privateAIProvider {
-                    Text(PrivateAIProviderFeature.displayName)
-                        .tag(PrivateAIProviderPromptFormat.promptSelectionID)
-                        .disabled(!privateAILocked)
-                }
+                Text("Default").tag("__DEFAULT__")
                 ForEach(profiles) { profile in
                     Text(profile.name.isEmpty ? "Untitled" : profile.name)
                         .tag(profile.id)
-                        .disabled(privateAILocked)
                 }
             }
             .frame(width: 190)

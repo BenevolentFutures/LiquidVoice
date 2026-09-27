@@ -32,24 +32,8 @@ final class DictationE2ETests: XCTestCase {
     private let commandModeSelectedModelKey = "CommandModeSelectedModel"
     private let rewriteModeSelectedProviderIDKey = "RewriteModeSelectedProviderID"
     private let rewriteModeSelectedModelKey = "RewriteModeSelectedModel"
-    private var privateAISelectedModelIDKey: String {
-        PrivateAIProviderFeature.shared.selectedModelDefaultsKey
-    }
-
-    private var privateAILocalModelPathKey: String {
-        PrivateAIProviderFeature.shared.localModelPathDefaultsKey
-    }
-
-    private var privateAIPrefixKVCacheEnabledKey: String {
-        PrivateAIProviderFeature.shared.prefixCacheDefaultsKey
-    }
-
-    private var privateAIBoostEnabledKey: String {
-        PrivateAIProviderFeature.shared.boostDefaultsKey
-    }
-
-    private let privateAIContextTokenLimitKey = "PrivateAIProviderContextTokenLimit"
-    private let privateAIContextDefaultMigratedTo4KKey = "PrivateAIProviderContextDefaultMigratedTo4K"
+    private let secondaryDictationPromptOffKey = "SecondaryDictationPromptOff"
+    private let promptModeSelectedPromptIDKey = "PromptModeSelectedPromptID"
 
     private let verifiedProviderFingerprintsKey = "VerifiedProviderFingerprints"
 
@@ -1559,6 +1543,124 @@ final class DictationE2ETests: XCTestCase {
         }
     }
 
+    /// Settings left behind by an upstream FluidVoice build that used Fluid Intelligence must land on
+    /// plain dictation: the FI-routed slot is Off, nothing dangles, other providers are untouched.
+    func testRetiredFluidIntelligenceStateIsPurgedToPlainDictation() {
+        self.withRestoredDefaults(keys: self.retiredFluidIntelligenceTestKeys) {
+            let settings = SettingsStore.shared
+            let defaults = UserDefaults.standard
+            let shortcut = HotkeyShortcut(keyCode: 1, modifierFlags: [.command])
+            let custom = SettingsStore.DictationPromptProfile(name: "Custom", prompt: "Tidy it", mode: .dictate)
+            settings.dictationPromptProfiles = [custom]
+
+            // Primary slot selected the FI prompt; secondary slot uses a custom prompt pinned to OpenAI.
+            defaults.set(false, forKey: self.dictationPromptOffKey)
+            defaults.set("__FLUID_1__", forKey: self.selectedDictationPromptIDKey)
+            defaults.set(false, forKey: self.secondaryDictationPromptOffKey)
+            defaults.set(custom.id, forKey: self.promptModeSelectedPromptIDKey)
+            defaults.set("fluid-1", forKey: self.selectedProviderIDKey)
+            settings.selectedModel = "fluid-1"
+            settings.availableModelsByProvider = ["custom:fluid-1": ["fluid-1"], "openai": ["gpt-4.1"]]
+            settings.selectedModelByProvider = ["custom:fluid-1": "fluid-1", "openai": "gpt-4.1"]
+            settings.verifiedProviderFingerprints = ["fluid-1": "private-ai-provider|fluid-1", "openai": "verified"]
+            settings.commandModeSelectedProviderID = "fluid-1"
+            settings.commandModeSelectedModel = "fluid-1"
+            settings.rewriteModeSelectedProviderID = "custom:fluid-1"
+            settings.rewriteModeSelectedModel = "fluid-1"
+            settings.dictationPromptConfigurations = [
+                "__privateAI__": SettingsStore.DictationPromptConfiguration(shortcut: shortcut),
+                "__default__": SettingsStore.DictationPromptConfiguration(
+                    shortcut: shortcut,
+                    providerID: "fluid-1",
+                    modelName: "fluid-1"
+                ),
+                "profile:\(custom.id)": SettingsStore.DictationPromptConfiguration(
+                    providerID: "openai",
+                    modelName: "gpt-4.1"
+                ),
+            ]
+            defaults.set("mlx", forKey: "FluidIntelligenceBackendPreference")
+            defaults.set(true, forKey: "PrivateAIProviderBoostEnabled")
+
+            settings.purgeRetiredFluidIntelligenceState()
+            settings.purgeRetiredFluidIntelligenceState()
+
+            XCTAssertEqual(settings.dictationPromptSelection(for: .primary), .off)
+            XCTAssertNil(settings.selectedDictationPromptID)
+            XCTAssertEqual(settings.dictationPromptSelection(for: .secondary), .profile(custom.id))
+            XCTAssertEqual(settings.selectedProviderID, "")
+            XCTAssertNil(settings.selectedModel)
+            XCTAssertEqual(settings.commandModeSelectedProviderID, "")
+            XCTAssertNil(settings.commandModeSelectedModel)
+            XCTAssertEqual(settings.rewriteModeSelectedProviderID, "")
+            XCTAssertNil(settings.rewriteModeSelectedModel)
+            XCTAssertEqual(settings.availableModelsByProvider, ["openai": ["gpt-4.1"]])
+            XCTAssertEqual(settings.selectedModelByProvider, ["openai": "gpt-4.1"])
+            XCTAssertEqual(settings.verifiedProviderFingerprints, ["openai": "verified"])
+            XCTAssertNil(settings.dictationPromptConfigurations["__privateAI__"])
+            XCTAssertEqual(settings.dictationPromptConfigurations["__default__"]?.shortcut, shortcut)
+            XCTAssertEqual(settings.dictationPromptConfigurations["__default__"]?.providerID, "")
+            XCTAssertEqual(settings.dictationPromptConfigurations["profile:\(custom.id)"]?.providerID, "openai")
+            XCTAssertNil(defaults.object(forKey: "FluidIntelligenceBackendPreference"))
+            XCTAssertNil(defaults.object(forKey: "PrivateAIProviderBoostEnabled"))
+            XCTAssertFalse(DictationAIPostProcessingGate.isConfigured(for: .primary))
+            XCTAssertEqual(settings.dictationPromptDisplayName(for: .primary, appBundleID: nil), "Off")
+        }
+    }
+
+    func testRetiredFluidIntelligenceGlobalProviderTurnsDefaultDictationOff() {
+        self.withRestoredDefaults(keys: self.retiredFluidIntelligenceTestKeys) {
+            let settings = SettingsStore.shared
+            let defaults = UserDefaults.standard
+            settings.dictationPromptConfigurations = [:]
+            settings.setDictationPromptSelection(.default, for: .primary)
+            defaults.set(true, forKey: self.secondaryDictationPromptOffKey)
+            defaults.set("fluid-1", forKey: self.selectedProviderIDKey)
+
+            settings.purgeRetiredFluidIntelligenceState()
+
+            XCTAssertEqual(settings.dictationPromptSelection(for: .primary), .off)
+            XCTAssertEqual(settings.dictationPromptSelection(for: .secondary), .off)
+            XCTAssertEqual(settings.selectedProviderID, "")
+        }
+    }
+
+    func testNonFluidIntelligenceSettingsSurviveTheRetiredFluidIntelligencePurge() {
+        self.withRestoredDefaults(keys: self.retiredFluidIntelligenceTestKeys) {
+            let settings = SettingsStore.shared
+            settings.dictationPromptConfigurations = [:]
+            settings.setDictationPromptSelection(.default, for: .primary)
+            settings.selectedProviderID = "openai"
+            settings.selectedModelByProvider = ["openai": "gpt-4.1"]
+
+            settings.purgeRetiredFluidIntelligenceState()
+
+            XCTAssertEqual(settings.dictationPromptSelection(for: .primary), .default)
+            XCTAssertEqual(settings.selectedProviderID, "openai")
+            XCTAssertEqual(settings.selectedModelByProvider, ["openai": "gpt-4.1"])
+        }
+    }
+
+    private var retiredFluidIntelligenceTestKeys: [String] {
+        [
+            self.selectedProviderIDKey,
+            self.selectedAIModelKey,
+            self.availableModelsByProviderKey,
+            self.selectedModelByProviderKey,
+            self.verifiedProviderFingerprintsKey,
+            self.commandModeSelectedProviderIDKey,
+            self.commandModeSelectedModelKey,
+            self.rewriteModeSelectedProviderIDKey,
+            self.rewriteModeSelectedModelKey,
+            self.dictationPromptConfigurationsKey,
+            self.dictationPromptProfilesKey,
+            self.dictationPromptOffKey,
+            self.selectedDictationPromptIDKey,
+            self.secondaryDictationPromptOffKey,
+            self.promptModeSelectedPromptIDKey,
+        ] + SettingsStore.retiredFluidIntelligenceDefaultsKeys
+    }
+
     func testDictationProviderRouteUsesPromptConfigurationWithoutMutatingGlobalSelection() {
         self.withRestoredDefaults(
             keys: [
@@ -1598,21 +1700,6 @@ final class DictationE2ETests: XCTestCase {
 
             XCTAssertTrue(DictationAIPostProcessingGate.isConfigured(for: .primary))
             XCTAssertEqual(settings.selectedProviderID, "openai")
-        }
-    }
-
-    func testDictationProviderRouteReturnsEmptyRouteForUnverifiedPrivateAI() {
-        self.withPromptAndProviderSettingsRestored {
-            let settings = SettingsStore.shared
-            settings.verifiedProviderFingerprints = [:]
-
-            let route = DictationProviderRoute.privateAIRoute(settings: settings)
-
-            XCTAssertEqual(
-                route,
-                DictationProviderRoute(providerID: "", providerKey: "", baseURL: "", model: "", apiKey: "")
-            )
-            XCTAssertFalse(route.usesPrivateAI)
         }
     }
 
@@ -1707,301 +1794,6 @@ final class DictationE2ETests: XCTestCase {
 
             XCTAssertEqual(route.providerID, "openai")
             XCTAssertEqual(route.model, "gpt-4.1")
-        }
-    }
-
-    func testPrivateAIProviderDictationPromptSelection_allowsOffAndRestoresNonFluidPrompt() {
-        self.withPromptAndProviderSettingsRestored {
-            let settings = SettingsStore.shared
-            let custom = SettingsStore.DictationPromptProfile(
-                name: "Custom Dictate",
-                prompt: "Use the custom prompt",
-                mode: .dictate
-            )
-            settings.dictationPromptProfiles = [custom]
-            settings.selectedModelByProvider = [
-                "openai": "gpt-4.1",
-                PrivateAIProviderFeature.shared.providerID: PrivateAIProviderFeature.shared.providerID,
-            ]
-            settings.selectedProviderID = "openai"
-            settings.setDictationPromptSelection(.profile(custom.id))
-
-            XCTAssertEqual(settings.dictationPromptSelection(for: .primary), .profile(custom.id))
-
-            settings.selectedProviderID = PrivateAIProviderFeature.shared.providerID
-            if PrivateFeatures.privateAIProvider {
-                XCTAssertEqual(settings.dictationPromptSelection(for: .primary), .privateAI)
-            } else {
-                XCTAssertEqual(settings.dictationPromptSelection(for: .primary), .profile(custom.id))
-            }
-
-            settings.setDictationPromptSelection(.off)
-            XCTAssertEqual(settings.dictationPromptSelection(for: .primary), .off)
-
-            settings.selectedProviderID = "openai"
-            XCTAssertEqual(settings.dictationPromptSelection(for: .primary), .off)
-
-            settings.setDictationPromptSelection(.profile(custom.id))
-            XCTAssertEqual(settings.dictationPromptSelection(for: .primary), .profile(custom.id))
-        }
-    }
-
-    func testPrivateAIProviderDictationPromptSelection_usesOnlyFluidPromptOrOffWhileSelected() {
-        self.withPromptAndProviderSettingsRestored {
-            let settings = SettingsStore.shared
-            let custom = SettingsStore.DictationPromptProfile(
-                name: "Custom Dictate",
-                prompt: "Use the custom prompt",
-                mode: .dictate
-            )
-            settings.dictationPromptProfiles = [custom]
-            settings.selectedModelByProvider = [
-                "openai": "gpt-4.1",
-                PrivateAIProviderFeature.shared.providerID: PrivateAIProviderFeature.shared.providerID,
-            ]
-
-            settings.selectedProviderID = PrivateAIProviderFeature.shared.providerID
-            settings.setDictationPromptSelection(.default)
-            XCTAssertEqual(
-                settings.dictationPromptSelection(for: .primary),
-                PrivateFeatures.privateAIProvider ? .privateAI : .default
-            )
-
-            settings.setDictationPromptSelection(.profile(custom.id))
-            XCTAssertEqual(
-                settings.dictationPromptSelection(for: .primary),
-                PrivateFeatures.privateAIProvider ? .privateAI : .profile(custom.id)
-            )
-
-            settings.setDictationPromptSelection(.off)
-            XCTAssertEqual(settings.dictationPromptSelection(for: .primary), .off)
-            XCTAssertEqual(settings.dictationPromptDisplayName(for: .primary, appBundleID: nil), "Off")
-
-            settings.selectedProviderID = "openai"
-            settings.setDictationPromptSelection(.profile(custom.id))
-            XCTAssertEqual(settings.dictationPromptSelection(for: .primary), .profile(custom.id))
-        }
-    }
-
-    func testPrivateAIProviderPrefixKVCache_defaultsOnAndPersistsToggle() {
-        self.withRestoredDefaults(keys: [self.privateAIPrefixKVCacheEnabledKey]) {
-            let settings = SettingsStore.shared
-
-            XCTAssertTrue(settings.privateAIPrefixKVCacheEnabled)
-
-            settings.privateAIPrefixKVCacheEnabled = false
-            XCTAssertFalse(settings.privateAIPrefixKVCacheEnabled)
-
-            settings.privateAIPrefixKVCacheEnabled = true
-            XCTAssertTrue(settings.privateAIPrefixKVCacheEnabled)
-        }
-    }
-
-    func testPrivateAIProviderBoost_defaultsOnAndPersistsToggle() {
-        self.withRestoredDefaults(keys: [self.privateAIBoostEnabledKey]) {
-            let settings = SettingsStore.shared
-
-            XCTAssertTrue(settings.privateAIBoostEnabled)
-
-            settings.privateAIBoostEnabled = false
-            XCTAssertFalse(settings.privateAIBoostEnabled)
-
-            settings.privateAIBoostEnabled = true
-            XCTAssertTrue(settings.privateAIBoostEnabled)
-        }
-    }
-
-    func testPrivateAIProviderContextTokenLimit_defaultsPersistsAndClamps() {
-        self.withRestoredDefaults(keys: [self.privateAIContextTokenLimitKey, self.privateAIContextDefaultMigratedTo4KKey]) {
-            let settings = SettingsStore.shared
-            UserDefaults.standard.removeObject(forKey: self.privateAIContextTokenLimitKey)
-            UserDefaults.standard.removeObject(forKey: self.privateAIContextDefaultMigratedTo4KKey)
-
-            XCTAssertEqual(settings.privateAIContextTokenLimit, 4096)
-
-            settings.privateAIContextTokenLimit = 4096
-            XCTAssertEqual(settings.privateAIContextTokenLimit, 4096)
-
-            settings.privateAIContextTokenLimit = 1024
-            XCTAssertEqual(settings.privateAIContextTokenLimit, 2048)
-
-            settings.privateAIContextTokenLimit = 16_384
-            XCTAssertEqual(settings.privateAIContextTokenLimit, 8192)
-        }
-    }
-
-    func testPrivateAIProviderLocalRuntimeOnlyHandlesPrivateModels() {
-        self.withRestoredDefaults(keys: [self.privateAILocalModelPathKey]) {
-            let tempURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("FluidVoice-PrivateAI-\(UUID().uuidString).gguf")
-            XCTAssertTrue(FileManager.default.createFile(atPath: tempURL.path, contents: Data(), attributes: nil))
-            defer { try? FileManager.default.removeItem(at: tempURL) }
-
-            UserDefaults.standard.set(tempURL.path, forKey: self.privateAILocalModelPathKey)
-
-            XCTAssertEqual(
-                PrivateAIIntegrationService.isLocalRuntimeConfigured,
-                PrivateFeatures.privateAIProvider
-            )
-            XCTAssertFalse(PrivateAIIntegrationService.shouldHandleDictation(model: "gpt-4.1"))
-            XCTAssertEqual(
-                PrivateAIIntegrationService.shouldHandleDictation(model: PrivateAIProviderFeature.shared.providerID),
-                PrivateFeatures.privateAIProvider
-            )
-        }
-    }
-
-    func testPrivateAIProviderLocalRuntimeDoesNotConfigureNonFluidProvider() {
-        self.withRestoredDefaults(
-            keys: [
-                self.privateAILocalModelPathKey,
-                self.selectedProviderIDKey,
-                self.selectedModelByProviderKey,
-                self.verifiedProviderFingerprintsKey,
-                self.selectedDictationPromptIDKey,
-                self.dictationPromptOffKey,
-            ]
-        ) {
-            let settings = SettingsStore.shared
-            let tempURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("FluidVoice-PrivateAI-\(UUID().uuidString).gguf")
-            XCTAssertTrue(FileManager.default.createFile(atPath: tempURL.path, contents: Data(), attributes: nil))
-            defer { try? FileManager.default.removeItem(at: tempURL) }
-
-            UserDefaults.standard.set(tempURL.path, forKey: self.privateAILocalModelPathKey)
-            settings.selectedProviderID = "openai"
-            settings.selectedModelByProvider = ["openai": "gpt-4.1"]
-            settings.verifiedProviderFingerprints = [:]
-            settings.setDictationPromptSelection(.default)
-
-            XCTAssertEqual(
-                PrivateAIIntegrationService.isLocalRuntimeConfigured,
-                PrivateFeatures.privateAIProvider
-            )
-            XCTAssertFalse(DictationAIPostProcessingGate.isConfigured(for: .primary, appBundleID: nil))
-        }
-    }
-
-    func testMLXUpgradeOfferOnlyTargetsLegacyAppleSiliconInstalls() {
-        let eligible = PrivateAIMLXUpgradeCoordinator.shouldOffer(
-            hasPrivateProvider: true,
-            isAppleSilicon: true,
-            appVersion: "1.6.3",
-            backendPreferenceWasSet: false,
-            hasLegacyLlamaModel: true,
-            hasMLXModel: false,
-            offerWasHandled: false
-        )
-        XCTAssertTrue(eligible)
-
-        XCTAssertFalse(PrivateAIMLXUpgradeCoordinator.shouldOffer(
-            hasPrivateProvider: true,
-            isAppleSilicon: false,
-            appVersion: "1.6.3",
-            backendPreferenceWasSet: false,
-            hasLegacyLlamaModel: true,
-            hasMLXModel: false,
-            offerWasHandled: false
-        ))
-        XCTAssertFalse(PrivateAIMLXUpgradeCoordinator.shouldOffer(
-            hasPrivateProvider: true,
-            isAppleSilicon: true,
-            appVersion: "1.6.3",
-            backendPreferenceWasSet: true,
-            hasLegacyLlamaModel: true,
-            hasMLXModel: false,
-            offerWasHandled: false
-        ))
-        XCTAssertFalse(PrivateAIMLXUpgradeCoordinator.shouldOffer(
-            hasPrivateProvider: true,
-            isAppleSilicon: true,
-            appVersion: "1.6.3",
-            backendPreferenceWasSet: false,
-            hasLegacyLlamaModel: false,
-            hasMLXModel: false,
-            offerWasHandled: false
-        ))
-        XCTAssertFalse(PrivateAIMLXUpgradeCoordinator.shouldOffer(
-            hasPrivateProvider: true,
-            isAppleSilicon: true,
-            appVersion: "1.6.3",
-            backendPreferenceWasSet: false,
-            hasLegacyLlamaModel: true,
-            hasMLXModel: true,
-            offerWasHandled: false
-        ))
-        XCTAssertFalse(PrivateAIMLXUpgradeCoordinator.shouldOffer(
-            hasPrivateProvider: true,
-            isAppleSilicon: true,
-            appVersion: "1.6.3",
-            backendPreferenceWasSet: false,
-            hasLegacyLlamaModel: true,
-            hasMLXModel: false,
-            offerWasHandled: true
-        ))
-        for version in ["1.6.2", "1.6.4", "2.0.0", ""] {
-            XCTAssertFalse(PrivateAIMLXUpgradeCoordinator.shouldOffer(
-                hasPrivateProvider: true,
-                isAppleSilicon: true,
-                appVersion: version,
-                backendPreferenceWasSet: false,
-                hasLegacyLlamaModel: true,
-                hasMLXModel: false,
-                offerWasHandled: false
-            ))
-        }
-    }
-
-    func testMLXUpgradePreparedOfferIsRevalidatedBeforeResuming() {
-        XCTAssertTrue(PrivateAIMLXUpgradeCoordinator.shouldResumePreparedOffer(
-            hasPrivateProvider: true,
-            isAppleSilicon: true,
-            appVersion: "1.6.3",
-            backendPreference: .llama,
-            hasLegacyLlamaModel: true,
-            hasMLXModel: false
-        ))
-
-        for state in [
-            (true, true, "1.6.3", SettingsStore.PrivateAIBackendPreference.mlx, true, false),
-            (true, true, "1.6.3", SettingsStore.PrivateAIBackendPreference.llama, false, false),
-            (true, true, "1.6.3", SettingsStore.PrivateAIBackendPreference.llama, true, true),
-            (true, true, "1.6.4", SettingsStore.PrivateAIBackendPreference.llama, true, false),
-            (true, false, "1.6.3", SettingsStore.PrivateAIBackendPreference.llama, true, false),
-            (false, true, "1.6.3", SettingsStore.PrivateAIBackendPreference.llama, true, false),
-            (true, true, "1.6.3", nil, true, false),
-        ] {
-            XCTAssertFalse(PrivateAIMLXUpgradeCoordinator.shouldResumePreparedOffer(
-                hasPrivateProvider: state.0,
-                isAppleSilicon: state.1,
-                appVersion: state.2,
-                backendPreference: state.3,
-                hasLegacyLlamaModel: state.4,
-                hasMLXModel: state.5
-            ))
-        }
-    }
-
-    func testPrivateAIProviderDoesNotConfigureCommandMode() {
-        guard PrivateFeatures.privateAIProvider else { return }
-
-        self.withRestoredDefaults(
-            keys: [
-                self.selectedProviderIDKey,
-                self.commandModeLinkedToGlobalKey,
-                self.commandModeSelectedProviderIDKey,
-                self.commandModeSelectedModelKey,
-            ]
-        ) {
-            let settings = SettingsStore.shared
-            settings.selectedProviderID = PrivateAIProviderFeature.shared.providerID
-            settings.commandModeLinkedToGlobal = true
-            settings.commandModeSelectedProviderID = PrivateAIProviderFeature.shared.providerID
-            settings.commandModeSelectedModel = PrivateAIProviderFeature.shared.providerID
-
-            XCTAssertEqual(settings.effectiveCommandModeProviderID, "")
-            XCTAssertTrue(settings.commandModeReadinessIssue?.contains("coming soon") == true)
-            XCTAssertFalse(settings.isCommandModeProviderVerified(PrivateAIProviderFeature.shared.providerID))
         }
     }
 
@@ -2328,7 +2120,6 @@ final class DictationE2ETests: XCTestCase {
                 self.availableModelsByProviderKey,
                 self.selectedModelByProviderKey,
                 self.verifiedProviderFingerprintsKey,
-                self.privateAISelectedModelIDKey,
             ],
             run: run
         )
@@ -2536,12 +2327,12 @@ final class OverlayFailureStateTests: XCTestCase {
         }
 
         state.showAIProcessingFailure(
-            message: "Edit Mode cannot be used with Fluid-1",
+            message: "Edit Mode needs a verified provider",
             canRetry: false
         )
 
         XCTAssertTrue(state.isAIProcessingFailureVisible)
-        XCTAssertEqual(state.aiProcessingFailureMessage, "Edit Mode cannot be used with Fluid-1")
+        XCTAssertEqual(state.aiProcessingFailureMessage, "Edit Mode needs a verified provider")
         XCTAssertFalse(state.canRetryAIProcessingFailure)
 
         state.showAIProcessingFailure()

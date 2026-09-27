@@ -17,13 +17,6 @@ final class SettingsStore: ObservableObject {
     static let transcriptionPreviewCharLimitRange: ClosedRange<Int> = 50...800
     static let transcriptionPreviewCharLimitStep = 50
     static let defaultTranscriptionPreviewCharLimit = 150
-    static let privateAIContextTokenLimitRange: ClosedRange<Int> = 2048...8192
-    static let privateAIContextTokenLimitStep = 512
-    static let defaultPrivateAIContextTokenLimit = 4096
-    static let privateAIDictationSystemOverheadTokens = 1280
-    static let privateAIDictationMinimumOutputTokens = 256
-    static let privateAIDictationRoundTripTokenCost = 2.75
-    static let privateAIBackendPreferenceDefaultsKey = "FluidIntelligenceBackendPreference"
     private static let forcedOnboardingResetIntroducedAt = Date(timeIntervalSince1970: 1_782_091_732)
     private let defaults = UserDefaults.standard
     private let keychain = KeychainService.shared
@@ -41,71 +34,13 @@ final class SettingsStore: ObservableObject {
         self.migrateLegacyDictationAIPreferenceIfNeeded()
         self.migrateSecondaryPromptShortcutIfNeeded()
         self.retireLegacySecondaryPromptShortcutIfNeeded()
+        // Before normalization, which would otherwise turn a dangling FI prompt ID into "Default".
+        self.purgeRetiredFluidIntelligenceState()
         self.normalizePromptSelectionsIfNeeded()
         self.purgeRetiredAppleIntelligenceState()
         self.repairForcedOnboardingResetIfNeeded()
         self.migrateOverlayBottomOffsetTo50IfNeeded()
-        self.migratePrivateAIContextDefaultTo4KIfNeeded()
         self.refreshLaunchAtStartupStatus(clearError: true, logMismatch: false)
-    }
-
-    static func clampPrivateAIContextTokenLimit(_ value: Int) -> Int {
-        min(max(value, self.privateAIContextTokenLimitRange.lowerBound), self.privateAIContextTokenLimitRange.upperBound)
-    }
-
-    static func estimatedPrivateAIDictationWords(for contextTokenLimit: Int) -> Int {
-        let availableTokens = max(0, Self.clampPrivateAIContextTokenLimit(contextTokenLimit) - Self.privateAIDictationSystemOverheadTokens)
-        let inputTokens = Double(availableTokens) / Self.privateAIDictationRoundTripTokenCost
-        return max(100, Int((inputTokens * 0.75 / 50).rounded(.up)) * 50)
-    }
-
-    static func privateAIMaxOutputTokens(forInputText inputText: String, contextTokenLimit: Int) -> Int {
-        let wordCount = inputText.split { $0.isWhitespace || $0.isNewline }.count
-        let estimatedInputTokens = max(1, Int((Double(wordCount) / 0.75).rounded(.up)))
-        let requestedOutputTokens = max(
-            Self.privateAIDictationMinimumOutputTokens,
-            Int((Double(estimatedInputTokens) * 1.15).rounded(.up)) + 64
-        )
-        let availableOutputTokens = max(
-            Self.privateAIDictationMinimumOutputTokens,
-            Self.clampPrivateAIContextTokenLimit(contextTokenLimit) - Self.privateAIDictationSystemOverheadTokens - estimatedInputTokens
-        )
-        return min(requestedOutputTokens, availableOutputTokens)
-    }
-
-    enum PrivateAIBackendPreference: String, Codable, CaseIterable, Identifiable {
-        case auto
-        case llama
-        case mlx
-
-        var id: String { self.rawValue }
-
-        /// Default backend when no preference is stored.
-        /// Apple Silicon → MLX (fastest Fluid-1 path). Intel → llama.cpp.
-        static var systemDefault: PrivateAIBackendPreference {
-            CPUArchitecture.isAppleSilicon ? .mlx : .llama
-        }
-
-        var displayName: String {
-            switch self {
-            case .auto: return Self.systemDefault.displayName
-            case .llama: return "llama.cpp (Compatibility)"
-            case .mlx: return "MLX (Recommended)"
-            }
-        }
-
-        var detail: String {
-            switch self {
-            case .auto:
-                return Self.systemDefault.detail
-            case .llama:
-                return CPUArchitecture.isAppleSilicon
-                    ? "Optional and slower than MLX. Replaces MLX after verification."
-                    : "Recommended compatibility backend for Intel Macs."
-            case .mlx:
-                return "Recommended and faster than llama.cpp. Replaces it after verification."
-            }
-        }
     }
 
     // MARK: - Prompt Profiles (Unified)
@@ -207,7 +142,7 @@ final class SettingsStore: ObservableObject {
     }
 
     enum DictationPromptSelection: Equatable {
-        case off, `default`, privateAI
+        case off, `default`
         case profile(String)
     }
 
@@ -461,9 +396,6 @@ final class SettingsStore: ObservableObject {
     func dictationPromptSelection(for slot: DictationShortcutSlot) -> DictationPromptSelection {
         if self.isDictationPromptOff(for: slot) { return .off }
         if let promptID = self.selectedDictationPromptID(for: slot) {
-            if promptID == PrivateAIProviderPromptFormat.promptSelectionID {
-                return PrivateAIProviderPromptFormat.isAvailable(settings: self) ? .privateAI : .default
-            }
             return .profile(promptID)
         }
         return .default
@@ -474,8 +406,6 @@ final class SettingsStore: ObservableObject {
         switch selection {
         case .off, .default:
             selectedID = nil
-        case .privateAI:
-            selectedID = PrivateAIProviderPromptFormat.promptSelectionID
         case let .profile(promptID):
             selectedID = promptID
         }
@@ -487,8 +417,6 @@ final class SettingsStore: ObservableObject {
         switch selection {
         case .off:
             return nil
-        case .privateAI:
-            return "__privateAI__"
         case .default:
             return "__default__"
         case let .profile(promptID):
@@ -498,9 +426,6 @@ final class SettingsStore: ObservableObject {
     }
 
     func dictationPromptSelection(forConfigurationKey key: String) -> DictationPromptSelection? {
-        if key == "__privateAI__" {
-            return .privateAI
-        }
         if key == "__default__" {
             return .default
         }
@@ -548,9 +473,6 @@ final class SettingsStore: ObservableObject {
             guard let shortcut = configuration.shortcut else { return nil }
             if key == "__default__" {
                 return (.default, shortcut)
-            }
-            if key == "__privateAI__" {
-                return (.privateAI, shortcut)
             }
             if key.hasPrefix("profile:") {
                 let id = String(key.dropFirst("profile:".count))
@@ -614,8 +536,6 @@ final class SettingsStore: ObservableObject {
     func selectedPromptID(for mode: PromptMode) -> String? {
         switch mode.normalized {
         case .dictate:
-            if self.selectedDictationPromptID == PrivateAIProviderPromptFormat.promptSelectionID,
-               !PrivateAIProviderPromptFormat.isAvailable(settings: self) { return nil }
             return self.selectedDictationPromptID
         case .edit:
             return self.selectedEditPromptID
@@ -687,8 +607,6 @@ final class SettingsStore: ObservableObject {
         switch self.dictationPromptSelection(for: slot) {
         case .off:
             return nil
-        case .privateAI:
-            return nil
         case let .profile(promptID):
             return self.dictationPromptProfiles.first(where: { $0.id == promptID && $0.mode.normalized == .dictate })
         case .default:
@@ -701,7 +619,6 @@ final class SettingsStore: ObservableObject {
     }
 
     func isAppDictationPromptBindingActive(for slot: DictationShortcutSlot, appBundleID: String?) -> Bool {
-        guard !PrivateAIProviderPromptFormat.isAvailable(settings: self) else { return false }
         guard self.dictationPromptSelection(for: slot) == .default else { return false }
         return self.hasAppPromptBinding(for: .dictate, appBundleID: appBundleID)
     }
@@ -716,7 +633,6 @@ final class SettingsStore: ObservableObject {
                 return name.isEmpty ? "Untitled" : name
             }
             return "Default"
-        case .privateAI: return PrivateAIProviderFeature.displayName
         case let .profile(promptID):
             guard let profile = self.dictationPromptProfiles.first(where: { $0.id == promptID && $0.mode.normalized == .dictate }) else {
                 return "Default"
@@ -1187,7 +1103,7 @@ final class SettingsStore: ObservableObject {
         switch self.dictationPromptSelection(for: slot) {
         case .off:
             return ""
-        case .default, .privateAI:
+        case .default:
             return self.effectivePromptBody(for: .dictate, appBundleID: appBundleID)
         case let .profile(promptID):
             guard let profile = self.dictationPromptProfiles.first(where: { $0.id == promptID && $0.mode.normalized == .dictate }) else {
@@ -1208,7 +1124,7 @@ final class SettingsStore: ObservableObject {
         }
 
         switch self.dictationPromptSelection(for: slot) {
-        case .off, .default, .privateAI:
+        case .off, .default:
             return self.effectiveSystemPrompt(for: .dictate, appBundleID: appBundleID)
         case let .profile(promptID):
             guard let profile = self.dictationPromptProfiles.first(where: { $0.id == promptID && $0.mode.normalized == .dictate }) else {
@@ -1419,14 +1335,6 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    var privateAIInterestCaptured: Bool {
-        get { self.defaults.bool(forKey: Keys.privateAIInterestCaptured) }
-        set {
-            objectWillChange.send()
-            self.defaults.set(newValue, forKey: Keys.privateAIInterestCaptured)
-        }
-    }
-
     var availableModels: [String] {
         get { (self.defaults.array(forKey: Keys.availableAIModels) as? [String]) ?? [] }
         set {
@@ -1573,65 +1481,115 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    var privateAIPrefixKVCacheEnabled: Bool {
-        get { self.defaults.object(forKey: PrivateAIProviderFeature.shared.prefixCacheDefaultsKey) as? Bool ?? true }
-        set {
-            objectWillChange.send()
-            self.defaults.set(newValue, forKey: PrivateAIProviderFeature.shared.prefixCacheDefaultsKey)
+    // MARK: - Retired Fluid Intelligence
+
+    /// Provider IDs that upstream FluidVoice's private Fluid Intelligence runtime wrote into
+    /// settings: `fluid-1` in FI builds, and the placeholder ID used by public builds.
+    static let retiredFluidIntelligenceProviderIDs: Set<String> = ["fluid-1", "__private_ai_provider__"]
+
+    /// Dictation prompt IDs that selected Fluid Intelligence as the dictation prompt.
+    static let retiredFluidIntelligencePromptIDs: Set<String> = ["__FLUID_1__", "__PRIVATE_AI_PROVIDER__"]
+
+    /// Prompt-configuration key that held the Fluid Intelligence prompt's shortcut.
+    static let retiredFluidIntelligencePromptConfigurationKey = "__privateAI__"
+
+    /// Names an accidental, empty Fluid Intelligence prompt profile could carry.
+    static let retiredFluidIntelligenceProfileNames: Set<String> = [
+        "fluid intelligence", "fluid-1", "private ai provider",
+    ]
+
+    /// Defaults keys that only the Fluid Intelligence runtime read.
+    static let retiredFluidIntelligenceDefaultsKeys = [
+        "FluidIntelligenceBackendPreference",
+        "FluidIntelligenceSelectedModelID",
+        "FluidIntelligenceLocalModelPath",
+        "FluidIntelligenceMLXUpgrade163OfferHandled",
+        "FluidIntelligenceMLXUpgrade163OfferPrepared",
+        "FluidIntelligenceMLXUpgrade163Pending",
+        "FluidIntelligenceMLXUpgrade163PreviousVerification",
+        "PrivateAIProviderSelectedModelID",
+        "PrivateAIProviderLocalModelPath",
+        "PrivateAIProviderPrefixKVCacheEnabled",
+        "PrivateAIProviderBoostEnabled",
+        "PrivateAIProviderContextTokenLimit",
+        "PrivateAIProviderContextDefaultMigratedTo4K",
+        "PrivateAIProviderInterestCaptured",
+    ]
+
+    static func isRetiredFluidIntelligenceProviderID(_ providerID: String) -> Bool {
+        var trimmed = providerID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("custom:") {
+            trimmed = String(trimmed.dropFirst("custom:".count))
         }
+        return self.retiredFluidIntelligenceProviderIDs.contains(trimmed)
     }
 
-    var privateAIBoostEnabled: Bool {
-        get { self.defaults.object(forKey: PrivateAIProviderFeature.shared.boostDefaultsKey) as? Bool ?? true }
-        set {
-            objectWillChange.send()
-            self.defaults.set(newValue, forKey: PrivateAIProviderFeature.shared.boostDefaultsKey)
-        }
-    }
+    /// Liquid Voice has no Fluid Intelligence. Settings carried over from an upstream FluidVoice
+    /// install that pointed at it are retired to plain dictation: any dictation slot that routed
+    /// to Fluid Intelligence is turned Off (never silently re-routed to a cloud provider), and
+    /// every FI provider entry, verification, model list and runtime key is dropped.
+    func purgeRetiredFluidIntelligenceState() {
+        let rawSelectedProviderID = self.defaults.string(forKey: Keys.selectedProviderID) ?? ""
+        let globalProviderIsRetired = Self.isRetiredFluidIntelligenceProviderID(rawSelectedProviderID)
+        var configurations = self.dictationPromptConfigurations
 
-    var privateAIBackendPreference: PrivateAIBackendPreference {
-        get {
-            let rawValue = self.defaults.string(forKey: Keys.privateAIBackendPreference)?
+        for slot in DictationShortcutSlot.allCases where !self.isDictationPromptOff(for: slot) {
+            let promptID = self.selectedDictationPromptID(for: slot)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-            var preference = rawValue.flatMap(PrivateAIBackendPreference.init(rawValue:))
-                ?? PrivateAIBackendPreference.systemDefault
-            if preference == .auto {
-                preference = PrivateAIBackendPreference.systemDefault
+            let selectedFluidIntelligence = promptID.map { Self.retiredFluidIntelligencePromptIDs.contains($0) } ?? false
+            let configurationKey = promptID.map { "profile:\($0)" } ?? "__default__"
+            let configuredProviderID = configurations[configurationKey]?.providerID
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let routesToFluidIntelligence = configuredProviderID.isEmpty
+                ? globalProviderIsRetired
+                : Self.isRetiredFluidIntelligenceProviderID(configuredProviderID)
+            if selectedFluidIntelligence || routesToFluidIntelligence {
+                self.setDictationPromptOff(true, for: slot)
+                if selectedFluidIntelligence {
+                    self.setSelectedDictationPromptID(nil, for: slot)
+                }
             }
-            if preference == .mlx, CPUArchitecture.isIntel {
-                return .llama
-            }
-            return preference
         }
-        set {
-            objectWillChange.send()
-            var preference = newValue == .auto ? PrivateAIBackendPreference.systemDefault : newValue
-            if preference == .mlx, CPUArchitecture.isIntel {
-                preference = .llama
-            }
-            self.defaults.set(preference.rawValue, forKey: Keys.privateAIBackendPreference)
-        }
-    }
 
-    var privateAIContextTokenLimit: Int {
-        get {
-            let value = self.defaults.integer(forKey: Keys.privateAIContextTokenLimit)
-            return Self.clampPrivateAIContextTokenLimit(value == 0 ? Self.defaultPrivateAIContextTokenLimit : value)
+        if globalProviderIsRetired {
+            self.selectedProviderID = ""
+            self.selectedModel = nil
         }
-        set {
-            objectWillChange.send()
-            self.defaults.set(Self.clampPrivateAIContextTokenLimit(newValue), forKey: Keys.privateAIContextTokenLimit)
+        if Self.isRetiredFluidIntelligenceProviderID(self.commandModeSelectedProviderID) {
+            self.commandModeSelectedProviderID = ""
+            self.commandModeSelectedModel = nil
         }
-    }
+        if Self.isRetiredFluidIntelligenceProviderID(self.rewriteModeSelectedProviderID) {
+            self.rewriteModeSelectedProviderID = ""
+            self.rewriteModeSelectedModel = nil
+        }
 
-    private func migratePrivateAIContextDefaultTo4KIfNeeded() {
-        guard self.defaults.bool(forKey: Keys.privateAIContextDefaultMigratedTo4K) == false else { return }
-        let storedValue = self.defaults.object(forKey: Keys.privateAIContextTokenLimit) as? Int
-        if storedValue == nil || storedValue == Self.privateAIContextTokenLimitRange.lowerBound {
-            self.defaults.set(Self.defaultPrivateAIContextTokenLimit, forKey: Keys.privateAIContextTokenLimit)
+        let fingerprints = self.verifiedProviderFingerprints.filter { !Self.isRetiredFluidIntelligenceProviderID($0.key) }
+        if fingerprints != self.verifiedProviderFingerprints {
+            self.verifiedProviderFingerprints = fingerprints
         }
-        self.defaults.set(true, forKey: Keys.privateAIContextDefaultMigratedTo4K)
+        let availableModels = self.availableModelsByProvider.filter { !Self.isRetiredFluidIntelligenceProviderID($0.key) }
+        if availableModels != self.availableModelsByProvider {
+            self.availableModelsByProvider = availableModels
+        }
+        let selectedModels = self.selectedModelByProvider.filter { !Self.isRetiredFluidIntelligenceProviderID($0.key) }
+        if selectedModels != self.selectedModelByProvider {
+            self.selectedModelByProvider = selectedModels
+        }
+
+        configurations.removeValue(forKey: Self.retiredFluidIntelligencePromptConfigurationKey)
+        configurations = configurations.compactMapValues { configuration in
+            guard Self.isRetiredFluidIntelligenceProviderID(configuration.providerID) else { return configuration }
+            guard configuration.shortcut != nil else { return nil }
+            return DictationPromptConfiguration(shortcut: configuration.shortcut)
+        }
+        if configurations != self.dictationPromptConfigurations {
+            self.dictationPromptConfigurations = configurations
+        }
+
+        for key in Self.retiredFluidIntelligenceDefaultsKeys where self.defaults.object(forKey: key) != nil {
+            self.defaults.removeObject(forKey: key)
+        }
     }
 
     var savedProviders: [SavedProvider] {
@@ -3206,10 +3164,6 @@ final class SettingsStore: ObservableObject {
             selectedModelByProvider: self.selectedModelByProvider,
             savedProviders: self.savedProviders,
             modelReasoningConfigs: self.modelReasoningConfigs,
-            privateAIPrefixKVCacheEnabled: self.privateAIPrefixKVCacheEnabled,
-            privateAIBoostEnabled: self.privateAIBoostEnabled,
-            privateAIBackendPreference: self.privateAIBackendPreference,
-            privateAIContextTokenLimit: self.privateAIContextTokenLimit,
             selectedSpeechModel: self.selectedSpeechModel,
             selectedCohereLanguage: self.selectedCohereLanguage,
             selectedNemotronLanguage: self.selectedNemotronLanguage,
@@ -3317,18 +3271,6 @@ final class SettingsStore: ObservableObject {
         self.selectedProviderID = payload.selectedProviderID
         self.selectedModelByProvider = payload.selectedModelByProvider
         self.modelReasoningConfigs = payload.modelReasoningConfigs
-        if let privateAIPrefixKVCacheEnabled = payload.privateAIPrefixKVCacheEnabled {
-            self.privateAIPrefixKVCacheEnabled = privateAIPrefixKVCacheEnabled
-        }
-        if let privateAIBoostEnabled = payload.privateAIBoostEnabled {
-            self.privateAIBoostEnabled = privateAIBoostEnabled
-        }
-        if let privateAIBackendPreference = payload.privateAIBackendPreference {
-            self.privateAIBackendPreference = privateAIBackendPreference
-        }
-        if let privateAIContextTokenLimit = payload.privateAIContextTokenLimit {
-            self.privateAIContextTokenLimit = privateAIContextTokenLimit
-        }
         self.selectedSpeechModel = payload.selectedSpeechModel
         self.selectedCohereLanguage = payload.selectedCohereLanguage
         if let selectedNemotronLanguage = payload.selectedNemotronLanguage {
@@ -3475,6 +3417,7 @@ final class SettingsStore: ObservableObject {
         }
         self.promptModeSelectedPromptID = payload.promptModeSelectedPromptID
         self.isSecondaryDictationPromptOff = payload.secondaryDictationPromptOff ?? false
+        self.purgeRetiredFluidIntelligenceState()
         self.normalizePromptSelectionsIfNeeded()
         self.purgeRetiredAppleIntelligenceState()
     }
@@ -3633,22 +3576,19 @@ final class SettingsStore: ObservableObject {
             let isLegacyPlaceholder = profile.mode.normalized == .dictate &&
                 name.caseInsensitiveCompare("Blocked") == .orderedSame &&
                 prompt.caseInsensitiveCompare("Blocked prompt") == .orderedSame
-            let isAccidentalPrivateAIProfile = profile.mode.normalized == .dictate &&
-                name.caseInsensitiveCompare(PrivateAIProviderFeature.displayName) == .orderedSame &&
+            let isAccidentalFluidIntelligenceProfile = profile.mode.normalized == .dictate &&
+                Self.retiredFluidIntelligenceProfileNames.contains(name.lowercased()) &&
                 prompt.isEmpty
-            if isLegacyPlaceholder || isAccidentalPrivateAIProfile {
+            if isLegacyPlaceholder || isAccidentalFluidIntelligenceProfile {
                 didChangeProfiles = true
             }
-            return isLegacyPlaceholder || isAccidentalPrivateAIProfile
+            return isLegacyPlaceholder || isAccidentalFluidIntelligenceProfile
         }
         if didChangeProfiles {
             self.dictationPromptProfiles = normalizedProfiles
         }
 
-        let privateAIPromptID = PrivateAIProviderPromptFormat.promptSelectionID
-
         if let id = self.selectedDictationPromptID,
-           !(PrivateFeatures.privateAIProvider && id == privateAIPromptID),
            self.dictationPromptProfiles.contains(where: { $0.id == id && $0.mode == .dictate }) == false
         {
             self.selectedDictationPromptID = nil
@@ -3661,7 +3601,6 @@ final class SettingsStore: ObservableObject {
         }
 
         if let id = self.promptModeSelectedPromptID,
-           !(PrivateFeatures.privateAIProvider && id == privateAIPromptID),
            self.dictationPromptProfiles.contains(where: { $0.id == id && $0.mode.normalized == .dictate }) == false
         {
             self.promptModeSelectedPromptID = nil
@@ -3736,7 +3675,7 @@ final class SettingsStore: ObservableObject {
 
     private func normalizeDictationPromptConfigurationsIfNeeded() {
         let validKeys = Set(
-            ["__default__", "__privateAI__"] + self.dictationPromptProfiles
+            ["__default__"] + self.dictationPromptProfiles
                 .filter { $0.mode.normalized == .dictate }
                 .map { "profile:\($0.id)" }
         )
@@ -3820,10 +3759,7 @@ final class SettingsStore: ObservableObject {
     }
 
     private func verifiedProviderIDsForCurrentConfiguration() -> [String] {
-        var providerIDs = ModelRepository.builtInProviderIDs + self.savedProviders.map(\.id)
-        if PrivateFeatures.privateAIProvider {
-            providerIDs.append(PrivateAIProviderFeature.shared.providerID)
-        }
+        let providerIDs = ModelRepository.builtInProviderIDs + self.savedProviders.map(\.id)
 
         var seenProviderKeys = Set<String>()
         return providerIDs.filter { providerID in
@@ -3836,12 +3772,6 @@ final class SettingsStore: ObservableObject {
     private func isVerifiedProviderForCurrentConfiguration(_ providerID: String) -> Bool {
         let trimmed = providerID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
-
-        if PrivateFeatures.privateAIProvider,
-           trimmed == PrivateAIProviderFeature.shared.providerID
-        {
-            return PrivateAIProviderPromptFormat.verifiedModelID(settings: self) != nil
-        }
 
         let key = self.canonicalProviderKey(for: trimmed)
         guard let stored = self.verifiedProviderFingerprints[key] else { return false }
@@ -3876,8 +3806,7 @@ final class SettingsStore: ObservableObject {
     }
 
     private func syncLinkedProviderSelections(to providerID: String) {
-        let trimmed = providerID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let linkedProviderID = self.isPrivateAIProviderID(trimmed) ? "" : trimmed
+        let linkedProviderID = providerID.trimmingCharacters(in: .whitespacesAndNewlines)
         let model = self.modelSelection(for: linkedProviderID)
 
         if self.rewriteModeLinkedToGlobal {
@@ -3891,20 +3820,8 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    private func isPrivateAIProviderID(_ providerID: String) -> Bool {
-        PrivateFeatures.privateAIProvider &&
-            providerID.trimmingCharacters(in: .whitespacesAndNewlines) == PrivateAIProviderFeature.shared.providerID
-    }
-
     private func modelSelection(for providerID: String) -> String? {
         guard !providerID.isEmpty else { return nil }
-
-        if PrivateFeatures.privateAIProvider,
-           providerID == PrivateAIProviderFeature.shared.providerID,
-           let modelID = PrivateAIProviderPromptFormat.verifiedModelID(settings: self)
-        {
-            return modelID
-        }
 
         let key = self.canonicalProviderKey(for: providerID)
         if let selected = self.selectedModelByProvider[key],
@@ -3947,11 +3864,6 @@ final class SettingsStore: ObservableObject {
         guard !trimmed.isEmpty else { return "" }
         let providerID = trimmed
         if ModelRepository.shared.isBuiltIn(providerID) { return providerID }
-        if PrivateFeatures.privateAIProvider,
-           providerID == PrivateAIProviderFeature.shared.providerID
-        {
-            return providerID
-        }
 
         let savedProviderID = providerID.hasPrefix("custom:") ?
             String(providerID.dropFirst("custom:".count)) : providerID
@@ -5275,17 +5187,11 @@ private extension SettingsStore {
         static let selectedAIModel = "SelectedAIModel"
         static let selectedModelByProvider = "SelectedModelByProvider"
         static let selectedProviderID = "SelectedProviderID"
-        static let privateAIPrefixKVCacheEnabled = "PrivateAIProviderPrefixKVCacheEnabled"
-        static let privateAIBoostEnabled = "PrivateAIProviderBoostEnabled"
-        static let privateAIBackendPreference = SettingsStore.privateAIBackendPreferenceDefaultsKey
-        static let privateAIContextTokenLimit = "PrivateAIProviderContextTokenLimit"
-        static let privateAIContextDefaultMigratedTo4K = "PrivateAIProviderContextDefaultMigratedTo4K"
         static let providerAPIKeys = "ProviderAPIKeys"
         static let providerAPIKeyIdentifiers = "ProviderAPIKeyIdentifiers"
         static let savedProviders = "SavedProviders"
         static let verifiedProviderFingerprints = "VerifiedProviderFingerprints"
         static let shareAnonymousAnalytics = "ShareAnonymousAnalytics"
-        static let privateAIInterestCaptured = "PrivateAIProviderInterestCaptured"
         static let hotkeyShortcutKey = "HotkeyShortcutKey"
         static let primaryDictationShortcutsKey = "PrimaryDictationShortcuts"
         static let preferredInputDeviceUID = "PreferredInputDeviceUID"

@@ -64,7 +64,6 @@ extension AIEnhancementSettingsView {
 
             VStack(alignment: .leading, spacing: 8) {
                 self.promptProfilesHelpRow("Built-in is the normal prompt. Assign any prompt as Primary to use it with your main hotkey.")
-                self.promptProfilesHelpRow("\(PrivateAIProviderFeature.displayName) uses its own local prompt.")
                 self.promptProfilesHelpRow("Custom prompts can be assigned globally, by app, or by shortcut.")
             }
         }
@@ -212,9 +211,7 @@ extension AIEnhancementSettingsView {
         tone: Color
     ) -> some View {
         let symbol: String
-        if title == PrivateAIProviderFeature.displayName {
-            symbol = "sparkles"
-        } else if title.localizedCaseInsensitiveContains("default") {
+        if title.localizedCaseInsensitiveContains("default") {
             symbol = "text.bubble.fill"
         } else {
             symbol = mode.normalized == .dictate ? "quote.bubble.fill" : "text.cursor"
@@ -414,14 +411,13 @@ extension AIEnhancementSettingsView {
     }
 
     private func promptAssignments(
-        selection: SettingsStore.DictationPromptSelection,
-        isPrivateAI: Bool = false
+        selection: SettingsStore.DictationPromptSelection
     ) -> PromptCardAssignments {
         let configuration = self.settings.dictationPromptConfiguration(for: selection)
         return PromptCardAssignments(
             isDefault: self.viewModel.isDictationPromptSelection(selection, for: .primary),
             shortcutDisplay: configuration.shortcut?.displayString,
-            modelPicker: self.promptModelPicker(selection: selection, isPrivateAI: isPrivateAI),
+            modelPicker: self.promptModelPicker(selection: selection),
             onMakeDefault: {
                 self.viewModel.setDictationPromptSelection(selection, for: .primary)
             }
@@ -438,8 +434,6 @@ extension AIEnhancementSettingsView {
             return .profile(promptID)
         case .newPrompt:
             return nil
-        case .privateAI:
-            return .privateAI
         }
     }
 
@@ -471,11 +465,6 @@ extension AIEnhancementSettingsView {
         self.promptEditorModelDraft = configuration?.modelName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if self.promptEditorModelDraft.isEmpty, !self.promptEditorProviderIDDraft.isEmpty {
             self.promptEditorModelDraft = self.viewModel.selectedModel(for: self.promptEditorProviderIDDraft)
-        }
-
-        if mode.isPrivateAI {
-            self.promptEditorProviderIDDraft = PrivateAIProviderFeature.shared.providerID
-            self.promptEditorModelDraft = PrivateAIIntegrationService.configuredModelID
         }
 
         if mode.isDefault, let promptMode = mode.mode {
@@ -594,21 +583,14 @@ extension AIEnhancementSettingsView {
         if case .newPrompt = mode {
             return self.viewModel.draftPromptMode.normalized == .dictate
         }
-        if case .privateAI = mode {
-            return true
-        }
         return self.promptEditorSelection(for: mode) != nil
     }
 
     private func promptEditorConfigurationPanel(mode: PromptEditorMode) -> some View {
         Grid(alignment: .leading, horizontalSpacing: 28, verticalSpacing: 14) {
             self.promptEditorShortcutRow(mode: mode)
-            Group {
-                self.promptEditorProviderRow
-                self.promptEditorModelRow
-            }
-            .disabled(mode.isPrivateAI)
-            .opacity(mode.isPrivateAI ? 0.6 : 1)
+            self.promptEditorProviderRow
+            self.promptEditorModelRow
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -816,27 +798,8 @@ extension AIEnhancementSettingsView {
     }
 
     private func promptModelPicker(
-        selection: SettingsStore.DictationPromptSelection,
-        isPrivateAI: Bool
+        selection: SettingsStore.DictationPromptSelection
     ) -> PromptCardModelPicker? {
-        if isPrivateAI {
-            return PromptCardModelPicker(
-                summary: "fluid-1",
-                selectedModel: PrivateAIIntegrationService.configuredModelID,
-                models: PrivateAIModelRegistry.modelIDs(),
-                providerName: PrivateAIProviderFeature.displayName,
-                onSelectModel: { _ in
-                    self.selectedConfigurationSection = .providers
-                    self.expandedProviderID = PrivateAIProviderFeature.shared.providerID
-                },
-                onOpenProviders: {
-                    self.selectedConfigurationSection = .providers
-                    self.expandedProviderID = PrivateAIProviderFeature.shared.providerID
-                }
-            )
-        }
-
-        guard !self.viewModel.isPrivateAIModelSelected() else { return nil }
         let configuration = self.settings.dictationPromptConfiguration(for: selection)
         let configuredProviderID = configuration.providerID.trimmingCharacters(in: .whitespacesAndNewlines)
         let providerID = configuredProviderID.isEmpty
@@ -940,108 +903,68 @@ extension AIEnhancementSettingsView {
     private func promptModeSection(mode: SettingsStore.PromptMode) -> some View {
         let customProfiles = self.viewModel.dictationPromptProfiles
             .filter { $0.mode.normalized == mode }
-        let isPrivateAI = mode.normalized == .dictate && self.viewModel.isPrivateAIModelSelected()
-        let isSelectedAppsOnly = !isPrivateAI && self.viewModel.promptRoutingScope(for: mode) == .selectedAppsOnly
+        let isSelectedAppsOnly = self.viewModel.promptRoutingScope(for: mode) == .selectedAppsOnly
 
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 10) {
-                if isPrivateAI {
-                    let privateAISelection = SettingsStore.DictationPromptSelection.privateAI
+                self.promptRoutingScopeRow(mode: mode)
+
+                if mode.normalized == .dictate {
+                    self.customPromptOnlyToggleRow
+                }
+
+                Text(
+                    isSelectedAppsOnly
+                        ? "Custom prompts only run in apps listed in App Overrides."
+                        : "Custom prompts run based on your shortcut or the app you're in."
+                )
+                .font(.caption2)
+                .foregroundStyle(self.theme.palette.secondaryText)
+                .padding(.horizontal, 4)
+                .padding(.bottom, 2)
+
+                Group {
+                    let defaultSelection = SettingsStore.DictationPromptSelection.default
                     self.promptProfileCard(
-                        cardKey: "\(mode.normalized.rawValue)-\(PrivateAIProviderFeature.shared.providerID)",
-                        title: PrivateAIProviderFeature.displayName,
+                        cardKey: "\(mode.normalized.rawValue)-default",
+                        title: mode.normalized == .dictate ? "Built-in Default" : "Default \(self.friendlyModeName(mode))",
                         subtitle: "",
                         mode: mode,
-                        isSelected: true,
-                        assignments: self.promptAssignments(selection: privateAISelection, isPrivateAI: true),
-                        onManage: { self.viewModel.openPrivateAIPromptEditor() },
-                        isEnabled: true
+                        isSelected: mode.normalized == .dictate
+                            ? (self.viewModel.selectedPromptID(for: mode) == nil)
+                            : (self.viewModel.selectedPromptID(for: mode) == nil),
+                        assignments: mode.normalized == .dictate
+                            ? self.promptAssignments(selection: defaultSelection)
+                            : nil,
+                        onManage: { self.viewModel.openDefaultPromptViewer(for: mode) },
+                        isEnabled: !isSelectedAppsOnly
                     )
 
-                    self.privateAIOnlyNotice
-                } else {
-                    self.promptRoutingScopeRow(mode: mode)
-
-                    if mode.normalized == .dictate {
-                        self.customPromptOnlyToggleRow
-                    }
-
-                    Text(
-                        isSelectedAppsOnly
-                            ? "Custom prompts only run in apps listed in App Overrides."
-                            : "Custom prompts run based on your shortcut or the app you're in."
-                    )
-                    .font(.caption2)
-                    .foregroundStyle(self.theme.palette.secondaryText)
-                    .padding(.horizontal, 4)
-                    .padding(.bottom, 2)
-
-                    Group {
-                        let defaultSelection = SettingsStore.DictationPromptSelection.default
-                        self.promptProfileCard(
-                            cardKey: "\(mode.normalized.rawValue)-default",
-                            title: mode.normalized == .dictate ? "Built-in Default" : "Default \(self.friendlyModeName(mode))",
-                            subtitle: "",
-                            mode: mode,
-                            isSelected: mode.normalized == .dictate
-                                ? (self.viewModel.selectedPromptID(for: mode) == nil)
-                                : (self.viewModel.selectedPromptID(for: mode) == nil),
-                            assignments: mode.normalized == .dictate
-                                ? self.promptAssignments(selection: defaultSelection)
-                                : nil,
-                            onManage: { self.viewModel.openDefaultPromptViewer(for: mode) },
-                            isEnabled: !isSelectedAppsOnly
-                        )
-
-                        if !customProfiles.isEmpty {
-                            ForEach(customProfiles) { profile in
-                                let profileSelection = SettingsStore.DictationPromptSelection.profile(profile.id)
-                                self.promptProfileCard(
-                                    cardKey: "\(profile.mode.normalized.rawValue)-\(profile.id)",
-                                    title: profile.name.isEmpty ? "Untitled Prompt" : profile.name,
-                                    subtitle: "",
-                                    mode: profile.mode,
-                                    isSelected: self.viewModel.selectedPromptID(for: profile.mode) == profile.id,
-                                    assignments: profile.mode.normalized == .dictate
-                                        ? self.promptAssignments(selection: profileSelection)
-                                        : nil,
-                                    onManage: { self.viewModel.openEditor(for: profile) },
-                                    onDelete: { self.viewModel.requestDeletePrompt(profile) },
-                                    isEnabled: !isSelectedAppsOnly
-                                )
-                            }
+                    if !customProfiles.isEmpty {
+                        ForEach(customProfiles) { profile in
+                            let profileSelection = SettingsStore.DictationPromptSelection.profile(profile.id)
+                            self.promptProfileCard(
+                                cardKey: "\(profile.mode.normalized.rawValue)-\(profile.id)",
+                                title: profile.name.isEmpty ? "Untitled Prompt" : profile.name,
+                                subtitle: "",
+                                mode: profile.mode,
+                                isSelected: self.viewModel.selectedPromptID(for: profile.mode) == profile.id,
+                                assignments: profile.mode.normalized == .dictate
+                                    ? self.promptAssignments(selection: profileSelection)
+                                    : nil,
+                                onManage: { self.viewModel.openEditor(for: profile) },
+                                onDelete: { self.viewModel.requestDeletePrompt(profile) },
+                                isEnabled: !isSelectedAppsOnly
+                            )
                         }
                     }
-                    .opacity(isSelectedAppsOnly ? 0.5 : 1)
-
-                    self.appPromptBindingsSection(mode: mode, isEmphasized: isSelectedAppsOnly, isEnabled: true)
                 }
+                .opacity(isSelectedAppsOnly ? 0.5 : 1)
+
+                self.appPromptBindingsSection(mode: mode, isEmphasized: isSelectedAppsOnly, isEnabled: true)
             }
         }
         .padding(.top, 2)
-    }
-
-    private var privateAIOnlyNotice: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "lock.fill")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-            Text("\(PrivateAIProviderFeature.displayName) uses its own built-in system prompt. Switch to another provider to create custom prompts.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 13)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(self.theme.palette.cardBackground)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(self.theme.palette.cardBorder, lineWidth: 1)
-                )
-        )
     }
 
     private func promptModeHintRow(mode: SettingsStore.PromptMode) -> some View {
@@ -1086,7 +1009,7 @@ extension AIEnhancementSettingsView {
 
             if mode.normalized == .edit {
                 self.editModeInlineModelControls
-            } else if !self.viewModel.isPrivateAIModelSelected() {
+            } else {
                 Button {
                     self.viewModel.openNewPromptEditor(prefillMode: .dictate)
                 } label: {
@@ -1177,30 +1100,7 @@ extension AIEnhancementSettingsView {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(self.theme.palette.secondaryText)
 
-            if self.isEditModeLinkedToPrivateAI {
-                Toggle("Sync", isOn: self.editModeLinkedToGlobalBinding)
-                    .toggleStyle(.checkbox)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .onChange(of: self.settings.rewriteModeLinkedToGlobal) { _, linked in
-                        if linked {
-                            self.syncEditModeToGlobalSelection()
-                        } else {
-                            self.normalizeEditModeProviderSelection()
-                        }
-                    }
-
-                HStack(spacing: 8) {
-                    Image(systemName: "clock")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                    Text("\(PrivateAIProviderFeature.displayName) for Edit Mode is coming soon")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            } else if verified.isEmpty {
+            if verified.isEmpty {
                 HStack(spacing: 8) {
                     Image(systemName: "info.circle")
                         .font(.system(size: 12))
@@ -1458,7 +1358,6 @@ extension AIEnhancementSettingsView {
 
     private var editModeVerifiedProviders: [AIEnhancementSettingsViewModel.ProviderItemData] {
         self.viewModel.cachedVerifiedProviderItems
-            .filter { !self.isPrivateAIProviderID($0.id) }
             .sorted { lhs, rhs in
                 lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
@@ -1474,15 +1373,9 @@ extension AIEnhancementSettingsView {
 
     private var activeEditModeProviderID: String {
         if self.settings.rewriteModeLinkedToGlobal {
-            let global = self.viewModel.selectedProviderID
-            return self.isPrivateAIProviderID(global) ? "" : global
+            return self.viewModel.selectedProviderID
         }
         return self.editModeSelectedProviderID
-    }
-
-    private var isEditModeLinkedToPrivateAI: Bool {
-        self.settings.rewriteModeLinkedToGlobal &&
-            self.isPrivateAIProviderID(self.viewModel.selectedProviderID)
     }
 
     private var editModeLinkedToGlobalBinding: Binding<Bool> {
@@ -1543,9 +1436,7 @@ extension AIEnhancementSettingsView {
 
     private func syncEditModeToGlobalSelection() {
         let global = self.viewModel.selectedProviderID
-        guard !global.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !self.isPrivateAIProviderID(global)
-        else {
+        guard !global.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             self.settings.rewriteModeSelectedProviderID = ""
             self.settings.rewriteModeSelectedModel = nil
             return
@@ -1566,11 +1457,6 @@ extension AIEnhancementSettingsView {
             self.settings.rewriteModeLinkedToGlobal = true
             self.syncEditModeToGlobalSelection()
         }
-    }
-
-    private func isPrivateAIProviderID(_ providerID: String) -> Bool {
-        PrivateFeatures.privateAIProvider &&
-            providerID.trimmingCharacters(in: .whitespacesAndNewlines) == PrivateAIProviderFeature.shared.providerID
     }
 
     private func canFetchModels(for providerID: String) -> Bool {
@@ -1639,15 +1525,10 @@ extension AIEnhancementSettingsView {
                                 case let .defaultPrompt(promptMode): return "Default \(self.friendlyModeName(promptMode)) Prompt"
                                 case let .newPrompt(prefillMode): return "New \(self.friendlyModeName(prefillMode)) Prompt"
                                 case .edit: return "Edit Prompt"
-                                case .privateAI: return PrivateAIProviderFeature.displayName
                                 }
                             }())
                                 .font(.headline)
-                            if mode.isPrivateAI {
-                                Text("Built-in system prompt. Only the shortcut can be customized.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            } else if mode.isDefault {
+                            if mode.isDefault {
                                 Text("This is the built-in prompt. Create a custom prompt to override it.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -1660,48 +1541,44 @@ extension AIEnhancementSettingsView {
                         self.promptEditorConfigurationPanel(mode: mode)
                     }
 
-                    if !mode.isPrivateAI {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Name")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            let isDefaultNameLocked = mode.isDefault
-                            TextField("Prompt name", text: self.$viewModel.draftPromptName)
-                                .textFieldStyle(.roundedBorder)
-                                .disabled(isDefaultNameLocked)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Name")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        let isDefaultNameLocked = mode.isDefault
+                        TextField("Prompt name", text: self.$viewModel.draftPromptName)
+                            .textFieldStyle(.roundedBorder)
+                            .disabled(isDefaultNameLocked)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Prompt")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        PromptTextView(
+                            text: self.$viewModel.draftPromptText,
+                            isEditable: true,
+                            font: NSFont.monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+                        )
+                        .id(self.viewModel.promptEditorSessionID)
+                        .frame(minHeight: 180)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(self.theme.palette.contentBackground)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .stroke(self.theme.palette.cardBorder, lineWidth: 1)
+                                )
+                        )
+                        .onChange(of: self.viewModel.draftPromptText) { _, newValue in
+                            guard self.viewModel.draftPromptMode == .dictate else { return }
+                            let combined = self.viewModel.combinedDraftPrompt(newValue, mode: self.viewModel.draftPromptMode)
+                            self.promptTest.updateDraftPromptText(combined)
                         }
                     }
 
-                    if !mode.isPrivateAI {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Prompt")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            PromptTextView(
-                                text: self.$viewModel.draftPromptText,
-                                isEditable: true,
-                                font: NSFont.monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
-                            )
-                            .id(self.viewModel.promptEditorSessionID)
-                            .frame(minHeight: 180)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(self.theme.palette.contentBackground)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .stroke(self.theme.palette.cardBorder, lineWidth: 1)
-                                    )
-                            )
-                            .onChange(of: self.viewModel.draftPromptText) { _, newValue in
-                                guard self.viewModel.draftPromptMode == .dictate else { return }
-                                let combined = self.viewModel.combinedDraftPrompt(newValue, mode: self.viewModel.draftPromptMode)
-                                self.promptTest.updateDraftPromptText(combined)
-                            }
-                        }
-
-                        if self.viewModel.draftPromptMode == .dictate {
-                            self.baseDictationPromptReference
-                        }
+                    if self.viewModel.draftPromptMode == .dictate {
+                        self.baseDictationPromptReference
                     }
 
                     if self.viewModel.draftPromptMode != .dictate {
@@ -1731,7 +1608,7 @@ extension AIEnhancementSettingsView {
 
                     // MARK: - Test Mode
 
-                    if self.viewModel.draftPromptMode == .dictate && !mode.isPrivateAI {
+                    if self.viewModel.draftPromptMode == .dictate {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(spacing: 8) {
                                 Image(systemName: "waveform")
@@ -1964,10 +1841,6 @@ extension AIEnhancementSettingsView {
 
     func openNewPromptEditor(prefillMode: SettingsStore.PromptMode = .edit) {
         self.viewModel.openNewPromptEditor(prefillMode: prefillMode)
-    }
-
-    func openPrivateAIPromptEditor() {
-        self.viewModel.openPrivateAIPromptEditor()
     }
 
     func openEditor(for profile: SettingsStore.DictationPromptProfile) {

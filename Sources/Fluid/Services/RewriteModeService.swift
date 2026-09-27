@@ -200,13 +200,6 @@ final class RewriteModeService: ObservableObject {
                 userInfo: [NSLocalizedDescriptionKey: "No verified AI provider selected"]
             )
         }
-        guard !self.isPrivateAIProviderID(providerID) else {
-            throw NSError(
-                domain: "RewriteMode",
-                code: -5,
-                userInfo: [NSLocalizedDescriptionKey: "\(PrivateAIProviderFeature.displayName) for Edit Mode is coming soon. Choose a verified chat provider or turn Sync off."]
-            )
-        }
         guard self.isProviderVerified(providerID, settings: settings) else {
             throw NSError(
                 domain: "RewriteMode",
@@ -267,13 +260,6 @@ final class RewriteModeService: ObservableObject {
                 domain: "RewriteMode",
                 code: -4,
                 userInfo: [NSLocalizedDescriptionKey: "No AI model selected"]
-            )
-        }
-        guard !PrivateAIIntegrationService.shouldHandleDictation(model: model) else {
-            throw NSError(
-                domain: "RewriteMode",
-                code: -6,
-                userInfo: [NSLocalizedDescriptionKey: "\(PrivateAIProviderFeature.displayName) for Edit Mode is coming soon. Choose a verified chat provider model."]
             )
         }
         self.appendDiagnosticLog(
@@ -429,17 +415,11 @@ final class RewriteModeService: ObservableObject {
     }
 
     private func isProviderVerified(_ providerID: String, settings: SettingsStore) -> Bool {
-        guard !self.isPrivateAIProviderID(providerID) else { return false }
         let key = self.providerKey(for: providerID)
         guard let stored = settings.verifiedProviderFingerprints[key] else { return false }
         let baseURL = self.providerBaseURL(for: providerID, settings: settings)
         let apiKey = settings.getAPIKey(for: providerID) ?? ""
         let current = self.providerFingerprint(baseURL: baseURL, apiKey: apiKey)
         return current == stored
-    }
-
-    private func isPrivateAIProviderID(_ providerID: String) -> Bool {
-        PrivateFeatures.privateAIProvider &&
-            providerID.trimmingCharacters(in: .whitespacesAndNewlines) == PrivateAIProviderFeature.shared.providerID
     }
 }

@@ -21,21 +21,11 @@ enum DictationAIPostProcessingGate {
             return false
         }
 
-        if promptSelection == .privateAI {
-            let route = DictationProviderRoute.resolve(
-                settings: settings,
-                dictationSlot: slot,
-                appBundleID: appBundleID
-            )
-            return route.usesPrivateAI && self.isPrivateProviderConfigured(settings: settings)
-        }
-
         let route = DictationProviderRoute.resolve(
             settings: settings,
             dictationSlot: slot,
             appBundleID: appBundleID
         )
-        guard !route.usesPrivateAI else { return false }
         return self.isProviderConfigured(route: route, settings: settings)
     }
 
@@ -44,9 +34,6 @@ enum DictationAIPostProcessingGate {
     static func isProviderConfigured() -> Bool {
         let settings = SettingsStore.shared
         let route = DictationProviderRoute.resolve(settings: settings)
-        if route.usesPrivateAI {
-            return self.isPrivateProviderConfigured(settings: settings)
-        }
         return self.isProviderConfigured(route: route, settings: settings)
     }
 
@@ -91,10 +78,6 @@ enum DictationAIPostProcessingGate {
         let input = "\(trimmedBase)|\(trimmedKey)"
         let digest = SHA256.hash(data: Data(input.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
-    }
-
-    private static func isPrivateProviderConfigured(settings: SettingsStore) -> Bool {
-        PrivateAIProviderPromptFormat.verifiedModelID(settings: settings) != nil
     }
 
     static func isLocalEndpoint(_ urlString: String) -> Bool {

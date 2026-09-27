@@ -7,12 +7,6 @@ struct DictationProviderRoute: Equatable {
     let model: String
     let apiKey: String
 
-    var usesPrivateAI: Bool {
-        self.providerID == PrivateAIProviderFeature.shared.providerID ||
-            self.providerKey == PrivateAIProviderFeature.shared.providerID ||
-            self.providerKey == "custom:\(PrivateAIProviderFeature.shared.providerID)"
-    }
-
     static func resolve(
         settings: SettingsStore,
         dictationSlot: SettingsStore.DictationShortcutSlot? = nil,
@@ -29,9 +23,6 @@ struct DictationProviderRoute: Equatable {
             )
             if selection == .off {
                 return Self(providerID: "", providerKey: "", baseURL: "", model: "", apiKey: "")
-            }
-            if selection == .privateAI {
-                return self.privateAIRoute(settings: settings)
             }
 
             let configuration = settings.dictationPromptConfiguration(for: selection)
@@ -82,26 +73,10 @@ struct DictationProviderRoute: Equatable {
         )
     }
 
-    static func privateAIRoute(settings: SettingsStore) -> Self {
-        guard let modelID = PrivateAIProviderPromptFormat.verifiedModelID(settings: settings) else {
-            return Self(providerID: "", providerKey: "", baseURL: "", model: "", apiKey: "")
-        }
-        return Self(
-            providerID: PrivateAIProviderFeature.shared.providerID,
-            providerKey: PrivateAIProviderFeature.shared.providerID,
-            baseURL: ModelRepository.shared.defaultBaseURL(for: PrivateAIProviderFeature.shared.providerID),
-            model: modelID,
-            apiKey: ""
-        )
-    }
-
     static func resolveForPostProcessing(
         settings: SettingsStore,
         dictationSlot: SettingsStore.DictationShortcutSlot
     ) -> Self {
-        if settings.dictationPromptSelection(for: dictationSlot) == .privateAI {
-            return self.privateAIRoute(settings: settings)
-        }
         if settings.promptRoutingScope(for: .dictate) == .selectedAppsOnly {
             return self.resolve(settings: settings)
         }
@@ -114,7 +89,7 @@ struct DictationProviderRoute: Equatable {
         appBundleID: String?
     ) -> SettingsStore.DictationPromptSelection {
         let selection = settings.dictationPromptSelection(for: dictationSlot)
-        guard selection != .off, selection != .privateAI else { return selection }
+        guard selection != .off else { return selection }
 
         let usesOnlyAppBindings = settings.promptRoutingScope(for: .dictate) == .selectedAppsOnly
         guard usesOnlyAppBindings || selection == .default else { return selection }
@@ -162,41 +137,6 @@ final class DictationPostProcessingService {
             "DictationPostProcessingService using provider=\(resolved.providerKey), model=\(resolved.model)",
             source: "DictationPostProcessingService"
         )
-
-        let usesPrivateAISelection = settings.dictationPromptSelection(for: dictationSlot) == .privateAI
-        guard usesPrivateAISelection || !resolved.usesPrivateAI else {
-            throw AIProcessingError.noVerifiedProvider
-        }
-
-        if usesPrivateAISelection,
-           resolved.usesPrivateAI || PrivateAIIntegrationService.shouldHandleDictation(model: resolved.model)
-        {
-            let response = try await PrivateAIIntegrationService.shared.enhanceDictation(
-                trimmed,
-                runtime: PrivateAIIntegrationService.RuntimeConfiguration(
-                    selectedProviderID: resolved.providerID,
-                    providerKey: resolved.providerKey,
-                    baseURL: resolved.baseURL,
-                    model: resolved.model,
-                    apiKey: resolved.apiKey,
-                    localModelPath: PrivateAIIntegrationService.configuredLocalModelPath,
-                    usesStablePromptPrefixKVCache: settings.privateAIPrefixKVCacheEnabled,
-                    usesFluid1Boost: settings.privateAIBoostEnabled,
-                    contextTokenLimit: settings.privateAIContextTokenLimit
-                ),
-                context: PrivateAIIntegrationService.AppContext(
-                    appName: "",
-                    bundleID: "",
-                    windowTitle: "",
-                    appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-                )
-            )
-            return Result(
-                text: ASRService.applyGAAVFormatting(response.outputText),
-                providerID: resolved.providerID,
-                model: resolved.model
-            )
-        }
 
         let promptText = settings.effectiveDictationSystemPrompt(for: dictationSlot, appBundleID: nil)
         let systemPrompt = ""

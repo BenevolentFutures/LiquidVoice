@@ -179,6 +179,133 @@ final class HotkeyShortcutTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testHoldReleaseDuringSlowStartEndsRecordingWhenStartCompletes() {
+        let asr = FakeCaptureStartState()
+        var stops: [HoldReleaseStopLatch.Request] = []
+        let latch = asr.makeLatch { stops.append($0) }
+
+        // Hold pressed: the hotkey dispatches a start, ASR begins a slow direct Core Audio start.
+        latch.startRequested()
+        asr.isStarting = true
+        latch.startRequestSettled()
+
+        // Released while still starting: latched, never cancelled, nothing stopped yet.
+        let release = HoldReleaseStopLatch.Request(type: .transcription, label: "Transcription", requireTargetMode: true)
+        XCTAssertEqual(latch.release(release), .latched)
+        XCTAssertTrue(stops.isEmpty)
+
+        // However long the start takes, the latch waits (there is no timer to expire).
+        latch.captureStartSettled() // spurious notification while still starting
+        XCTAssertTrue(stops.isEmpty)
+        XCTAssertEqual(latch.pending[.transcription], release)
+
+        // The start completes (direct capture or the AVAudioEngine fallback): stop right away.
+        asr.isStarting = false
+        asr.isRunning = true
+        latch.captureStartSettled()
+        XCTAssertEqual(stops, [release])
+        XCTAssertTrue(latch.pending.isEmpty)
+
+        // Honored exactly once.
+        latch.captureStartSettled()
+        XCTAssertEqual(stops.count, 1)
+    }
+
+    @MainActor
+    func testHoldReleaseBeforeStartReachesASRIsStillLatched() {
+        let asr = FakeCaptureStartState()
+        var stops: [HoldReleaseStopLatch.Request] = []
+        let latch = asr.makeLatch { stops.append($0) }
+
+        latch.startRequested() // hotkey action dispatched, ASR has not begun yet
+        let release = HoldReleaseStopLatch.Request(type: .promptMode, label: "Prompt mode", requireTargetMode: true)
+        XCTAssertEqual(latch.release(release), .latched)
+
+        asr.isStarting = true // the callback's start reached ASR
+        latch.startRequestSettled()
+        XCTAssertTrue(stops.isEmpty)
+
+        asr.isStarting = false
+        asr.isRunning = true
+        latch.captureStartSettled()
+        XCTAssertEqual(stops, [release])
+    }
+
+    @MainActor
+    func testFailedStartClearsHoldReleaseLatch() {
+        let asr = FakeCaptureStartState()
+        var stops: [HoldReleaseStopLatch.Request] = []
+        let latch = asr.makeLatch { stops.append($0) }
+
+        latch.startRequested()
+        asr.isStarting = true
+        latch.startRequestSettled()
+        XCTAssertEqual(latch.release(.init(type: .transcription, label: "Transcription", requireTargetMode: true)), .latched)
+
+        // Every backend failed: nothing to stop, and the latch is gone.
+        asr.isStarting = false
+        asr.isRunning = false
+        latch.captureStartSettled()
+        XCTAssertTrue(stops.isEmpty)
+        XCTAssertTrue(latch.pending.isEmpty)
+
+        // A later, unrelated recording is not stopped by the stale release.
+        latch.startRequested()
+        asr.isStarting = true
+        latch.startRequestSettled()
+        asr.isStarting = false
+        asr.isRunning = true
+        latch.captureStartSettled()
+        XCTAssertTrue(stops.isEmpty)
+    }
+
+    @MainActor
+    func testHoldReleaseLatchEdgeCases() {
+        let asr = FakeCaptureStartState()
+        var stops: [HoldReleaseStopLatch.Request] = []
+        let latch = asr.makeLatch { stops.append($0) }
+        let release = HoldReleaseStopLatch.Request(type: .transcription, label: "Transcription", requireTargetMode: true)
+
+        // Nothing running or starting (e.g. the start was refused): nothing to stop, nothing latched.
+        XCTAssertEqual(latch.release(release), .nothingToStop)
+        XCTAssertTrue(latch.pending.isEmpty)
+
+        // A hotkey start whose callback never started capture clears its latch when it settles.
+        latch.startRequested()
+        XCTAssertEqual(latch.release(release), .latched)
+        latch.startRequestSettled()
+        XCTAssertTrue(latch.pending.isEmpty)
+        XCTAssertTrue(stops.isEmpty)
+
+        // Already running: stop immediately.
+        asr.isRunning = true
+        XCTAssertEqual(latch.release(release), .stoppedNow)
+        XCTAssertEqual(stops, [release])
+        stops.removeAll()
+
+        // Pressing the same shortcut again supersedes the earlier release.
+        asr.isRunning = false
+        asr.isStarting = true
+        XCTAssertEqual(latch.release(release), .latched)
+        latch.cancel(.transcription)
+        asr.isStarting = false
+        asr.isRunning = true
+        latch.captureStartSettled()
+        XCTAssertTrue(stops.isEmpty)
+
+        // If another mode took over by the time the start settles, a mode-bound release is skipped.
+        asr.isRunning = false
+        asr.isStarting = true
+        asr.activeTargets = [.promptMode]
+        XCTAssertEqual(latch.release(release), .latched)
+        asr.isStarting = false
+        asr.isRunning = true
+        latch.captureStartSettled()
+        XCTAssertTrue(stops.isEmpty)
+        XCTAssertTrue(latch.pending.isEmpty)
+    }
+
     func testKeyboardEventMaskExcludesMouseEvents() {
         let mask = GlobalHotkeyManager.keyboardEventMask()
         for type in [CGEventType.keyDown, .keyUp, .flagsChanged] {
@@ -2141,6 +2268,22 @@ private final class FakeAudioDeviceManager: AudioDeviceManaging {
 /// `ModifierOnlyShortcutFlagsDecision` state machine. `nextPressed` is the
 /// `synchronizedPressedModifierKeyCodes` output for each event (the sync function is provably
 /// correct for these inputs, so it is driven directly to focus the test on the decision logic).
+@MainActor
+private final class FakeCaptureStartState {
+    var isStarting = false
+    var isRunning = false
+    var activeTargets: Set<HotkeyHoldModeType>?
+
+    func makeLatch(stop: @escaping (HoldReleaseStopLatch.Request) -> Void) -> HoldReleaseStopLatch {
+        HoldReleaseStopLatch(
+            isStarting: { [unowned self] in self.isStarting },
+            isRunning: { [unowned self] in self.isRunning },
+            isTargetActive: { [unowned self] type in self.activeTargets?.contains(type) ?? true },
+            stop: stop
+        )
+    }
+}
+
 private final class ModifierOnlyFlagsReplay {
     let shortcut: HotkeyShortcut
     private(set) var pressedModifierKeyCodes: Set<UInt16> = []

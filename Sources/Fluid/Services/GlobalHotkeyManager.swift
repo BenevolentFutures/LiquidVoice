@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 
 nonisolated enum HotkeyHoldModeType: Hashable {
@@ -224,6 +225,117 @@ nonisolated struct OneShotMouseUpSwallow: Equatable {
     }
 }
 
+/// A hold-mode release must always end its recording. When the release arrives while the capture
+/// is still starting (a direct Core Audio start can take seconds under DeadlineRace, before the
+/// AVAudioEngine fallback), the stop is latched and honored the moment the start settles, through
+/// the normal stop-and-transcribe path. It never cancels the start, which would drop the audio it
+/// captures, and never gives up on a timer. A start that fails clears the latch.
+@MainActor
+final class HoldReleaseStopLatch {
+    struct Request: Equatable {
+        let type: HotkeyHoldModeType
+        let label: String
+        /// Skip the stop if a different recording mode is active by the time the start settles.
+        let requireTargetMode: Bool
+    }
+
+    enum Outcome: Equatable {
+        case stoppedNow
+        case latched
+        case nothingToStop
+    }
+
+    private let isStarting: () -> Bool
+    private let isRunning: () -> Bool
+    private let isTargetActive: (HotkeyHoldModeType) -> Bool
+    private let stop: (Request) -> Void
+    private(set) var pending: [HotkeyHoldModeType: Request] = [:]
+    /// Hotkey actions that may still start a capture ASR has not begun yet.
+    private(set) var outstandingStartRequests = 0
+
+    init(
+        isStarting: @escaping () -> Bool,
+        isRunning: @escaping () -> Bool,
+        isTargetActive: @escaping (HotkeyHoldModeType) -> Bool,
+        stop: @escaping (Request) -> Void
+    ) {
+        self.isStarting = isStarting
+        self.isRunning = isRunning
+        self.isTargetActive = isTargetActive
+        self.stop = stop
+    }
+
+    var isStartInFlight: Bool {
+        self.isStarting() || self.outstandingStartRequests > 0
+    }
+
+    /// A hotkey action that may start a capture was dispatched.
+    func startRequested() {
+        self.outstandingStartRequests += 1
+    }
+
+    /// That action finished and any capture start it kicked off is visible to ASR.
+    func startRequestSettled() {
+        self.outstandingStartRequests = max(0, self.outstandingStartRequests - 1)
+        self.resolve(reason: "start request settled")
+    }
+
+    /// ASR finished a capture start, on either backend, successfully or not.
+    func captureStartSettled() {
+        self.resolve(reason: "capture start settled")
+    }
+
+    @discardableResult
+    func release(_ request: Request) -> Outcome {
+        if self.isRunning() {
+            self.pending.removeValue(forKey: request.type)
+            self.stop(request)
+            return .stoppedNow
+        }
+        guard self.isStartInFlight else {
+            self.pending.removeValue(forKey: request.type)
+            return .nothingToStop
+        }
+        self.pending[request.type] = request
+        DebugLogger.shared.info(
+            "\(request.label) released while capture is starting - stop latched until the start settles",
+            source: "GlobalHotkeyManager"
+        )
+        return .latched
+    }
+
+    /// A new press of the same shortcut supersedes its earlier release.
+    func cancel(_ type: HotkeyHoldModeType) {
+        self.pending.removeValue(forKey: type)
+    }
+
+    private func resolve(reason: String) {
+        guard !self.pending.isEmpty, !self.isStartInFlight else { return }
+        let requests = Array(self.pending.values)
+        self.pending.removeAll()
+
+        guard self.isRunning() else {
+            DebugLogger.shared.info(
+                "Release stop latch cleared (\(reason)) - the start did not produce a recording",
+                source: "GlobalHotkeyManager"
+            )
+            return
+        }
+        guard let request = requests.first(where: { !$0.requireTargetMode || self.isTargetActive($0.type) }) else {
+            DebugLogger.shared.debug(
+                "Release stop latch skipped (\(reason)) - active mode changed",
+                source: "GlobalHotkeyManager"
+            )
+            return
+        }
+        DebugLogger.shared.info(
+            "\(request.label) release stop honored (\(reason)) - stopping now",
+            source: "GlobalHotkeyManager"
+        )
+        self.stop(request)
+    }
+}
+
 private final nonisolated class HotkeyState: @unchecked Sendable {
     private let lock = NSLock()
     var isKeyPressed = false
@@ -238,8 +350,6 @@ private final nonisolated class HotkeyState: @unchecked Sendable {
     var otherKeyPressedDuringModifier = false
     var modifierPressStartTime: Date?
     var holdModeStartTriggeredTypes: Set<HotkeyHoldModeType> = []
-    var pendingReleaseStopTasks: [HotkeyHoldModeType: Task<Void, Never>] = [:]
-    var pendingReleaseStopTokens: [HotkeyHoldModeType: UUID] = [:]
     var automaticPressStartTimes: [HotkeyHoldModeType: Date] = [:]
     var automaticPressWasTargetActive: [HotkeyHoldModeType: Bool] = [:]
     var automaticPressStartedTypes: Set<HotkeyHoldModeType> = []
@@ -377,57 +487,7 @@ final class GlobalHotkeyManager: NSObject {
     }
 
     private func cancelPendingReleaseStop(for type: HotkeyHoldModeType) {
-        let task = self.state.withLock { () -> Task<Void, Never>? in
-            _ = self.state.pendingReleaseStopTokens.removeValue(forKey: type)
-            return self.state.pendingReleaseStopTasks.removeValue(forKey: type)
-        }
-        task?.cancel()
-    }
-
-    private func cancelPendingReleaseStops() {
-        let tasks = self.state.withLock { () -> [Task<Void, Never>] in
-            let tasks = Array(self.state.pendingReleaseStopTasks.values)
-            self.state.pendingReleaseStopTasks.removeAll()
-            self.state.pendingReleaseStopTokens.removeAll()
-            return tasks
-        }
-        for task in tasks {
-            task.cancel()
-        }
-    }
-
-    private func beginPendingReleaseStop(for type: HotkeyHoldModeType) -> UUID {
-        let token = UUID()
-        let task = self.state.withLock { () -> Task<Void, Never>? in
-            self.state.pendingReleaseStopTokens[type] = token
-            return self.state.pendingReleaseStopTasks.removeValue(forKey: type)
-        }
-        task?.cancel()
-        return token
-    }
-
-    private func storePendingReleaseStopTask(_ task: Task<Void, Never>, for type: HotkeyHoldModeType, token: UUID) {
-        let taskToCancel = self.state.withLock { () -> Task<Void, Never>? in
-            guard self.state.pendingReleaseStopTokens[type] == token else { return task }
-            let previousTask = self.state.pendingReleaseStopTasks[type]
-            self.state.pendingReleaseStopTasks[type] = task
-            return previousTask
-        }
-        taskToCancel?.cancel()
-    }
-
-    private func isPendingReleaseStopCurrent(for type: HotkeyHoldModeType, token: UUID) -> Bool {
-        self.state.withLock {
-            self.state.pendingReleaseStopTokens[type] == token
-        }
-    }
-
-    private func clearPendingReleaseStop(for type: HotkeyHoldModeType, token: UUID) {
-        self.state.withLock {
-            guard self.state.pendingReleaseStopTokens[type] == token else { return }
-            _ = self.state.pendingReleaseStopTokens.removeValue(forKey: type)
-            _ = self.state.pendingReleaseStopTasks.removeValue(forKey: type)
-        }
+        self.holdReleaseStopLatch.cancel(type)
     }
 
     private func beginAutomaticPress(for type: HotkeyHoldModeType, wasTargetActive: Bool) {
@@ -475,8 +535,8 @@ final class GlobalHotkeyManager: NSObject {
         }
     }
 
+    /// Leaves latched release stops alone: each one is a release that already happened.
     private func clearAutomaticPressTracking() {
-        self.cancelPendingReleaseStops()
         self.state.withLock {
             self.state.holdModeStartTriggeredTypes.removeAll()
             self.state.automaticPressStartTimes.removeAll()
@@ -495,6 +555,13 @@ final class GlobalHotkeyManager: NSObject {
     private var retryDelay: TimeInterval = 0.5
     private var healthCheckInterval: TimeInterval = 30.0
     private var activeShortcutLogScheduled = false
+    private lazy var holdReleaseStopLatch = HoldReleaseStopLatch(
+        isStarting: { [weak self] in self?.asrService.isStarting ?? false },
+        isRunning: { [weak self] in self?.asrService.isRunning ?? false },
+        isTargetActive: { [weak self] type in self?.isRecordingTargetActive(for: type) ?? false },
+        stop: { [weak self] _ in self?.stopRecordingIfNeeded() }
+    )
+    private var captureStartSettledObserver: AnyCancellable?
 
     init(
         asrService: ASRService,
@@ -541,6 +608,17 @@ final class GlobalHotkeyManager: NSObject {
         self.isRewriteRecordingProvider = isRewriteRecordingProvider
         self.isShortcutCaptureActiveProvider = isShortcutCaptureActiveProvider
         super.init()
+
+        // A capture start settling (success or failure, either backend) resolves latched release
+        // stops. @Published emits before the value changes, so resolve on the next main-actor turn.
+        self.captureStartSettledObserver = asrService.$isStarting
+            .removeDuplicates()
+            .filter { $0 == false }
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.holdReleaseStopLatch.captureStartSettled()
+                }
+            }
 
         self.initializeWithDelay()
     }
@@ -1157,12 +1235,12 @@ final class GlobalHotkeyManager: NSObject {
     }
 
     private nonisolated func clearPrimaryShortcutPressState(mouseOnly: Bool = false) {
-        let task = self.state.withLock { () -> Task<Void, Never>? in
+        self.state.withLock {
             self.state.oneShotMouseUpSwallow.reset()
             if mouseOnly {
-                guard case .mouse? = self.state.activePrimaryShortcutPress else { return nil }
+                guard case .mouse? = self.state.activePrimaryShortcutPress else { return }
             } else {
-                guard self.state.activePrimaryShortcutPress != nil || self.state.isKeyPressed else { return nil }
+                guard self.state.activePrimaryShortcutPress != nil || self.state.isKeyPressed else { return }
             }
             self.state.activePrimaryShortcutPress = nil
             self.state.isKeyPressed = false
@@ -1170,10 +1248,7 @@ final class GlobalHotkeyManager: NSObject {
             self.state.automaticPressStartTimes.removeValue(forKey: .transcription)
             self.state.automaticPressWasTargetActive.removeValue(forKey: .transcription)
             self.state.automaticPressStartedTypes.remove(.transcription)
-            _ = self.state.pendingReleaseStopTokens.removeValue(forKey: .transcription)
-            return self.state.pendingReleaseStopTasks.removeValue(forKey: .transcription)
         }
-        task?.cancel()
     }
 
     private func markOtherInputDuringModifierOnly() {
@@ -1210,18 +1285,12 @@ final class GlobalHotkeyManager: NSObject {
         )
 
         guard Self.shouldForceStopInterruptedPrimaryPress(activationMode: self.hotkeyMode) else { return true }
-        if self.asrService.isRunningOrStarting {
-            self.stopRecordingIfNeeded()
-        } else {
-            // The start task has not reached ASR yet. Stop it as soon as it is starting, since a
-            // direct Core Audio start can take seconds (DeadlineRace) before it is running.
-            self.stopRecordingAfterRelease(
-                for: .transcription,
-                label: "Interrupted mouse shortcut",
-                requireTargetMode: false,
-                cancelsPendingStart: true
-            )
-        }
+        // Same as a release: stop now if running, otherwise when the start in flight settles.
+        self.stopRecordingAfterRelease(
+            for: .transcription,
+            label: "Interrupted mouse shortcut",
+            requireTargetMode: false
+        )
         return true
     }
 
@@ -1890,54 +1959,19 @@ final class GlobalHotkeyManager: NSObject {
         }
     }
 
+    /// Ends the recording a released hold owns: now if it is running, or as soon as a start still in
+    /// flight settles (see HoldReleaseStopLatch). There is no timeout that gives up.
     private func stopRecordingAfterRelease(
         for type: HotkeyHoldModeType,
         label: String,
-        requireTargetMode: Bool = true,
-        cancelsPendingStart: Bool = false
+        requireTargetMode: Bool = true
     ) {
-        if self.asrService.isRunning {
-            self.cancelPendingReleaseStop(for: type)
-            self.stopRecordingIfNeeded()
-            return
+        let outcome = self.holdReleaseStopLatch.release(
+            .init(type: type, label: label, requireTargetMode: requireTargetMode)
+        )
+        if outcome == .nothingToStop {
+            DebugLogger.shared.debug("\(label) released with no recording or start in flight", source: "GlobalHotkeyManager")
         }
-
-        let token = self.beginPendingReleaseStop(for: type)
-        DebugLogger.shared.debug("\(label) release stop deferred until recording starts", source: "GlobalHotkeyManager")
-
-        let task = Task { @MainActor [weak self] in
-            let maxAttempts = 60
-            let retryDelayNanoseconds: UInt64 = 50_000_000
-
-            for _ in 0..<maxAttempts {
-                guard !Task.isCancelled else { return }
-                guard let self = self else { return }
-                guard self.isPendingReleaseStopCurrent(for: type, token: token) else { return }
-
-                if self.asrService.isRunning || (cancelsPendingStart && self.asrService.isStarting) {
-                    guard !requireTargetMode || self.isRecordingTargetActive(for: type) else {
-                        DebugLogger.shared.debug("\(label) deferred stop skipped - active mode changed", source: "GlobalHotkeyManager")
-                        self.clearPendingReleaseStop(for: type, token: token)
-                        return
-                    }
-
-                    DebugLogger.shared.info("\(label) deferred stop after recording start", source: "GlobalHotkeyManager")
-                    self.clearPendingReleaseStop(for: type, token: token)
-                    await self.stopRecordingInternal()
-                    return
-                }
-
-                try? await Task.sleep(nanoseconds: retryDelayNanoseconds)
-            }
-
-            guard !Task.isCancelled else { return }
-            guard let self = self else { return }
-            guard self.isPendingReleaseStopCurrent(for: type, token: token) else { return }
-            DebugLogger.shared.warning("\(label) deferred stop expired before recording started", source: "GlobalHotkeyManager")
-            self.clearPendingReleaseStop(for: type, token: token)
-        }
-
-        self.storePendingReleaseStopTask(task, for: type, token: token)
     }
 
     private func label(for type: HotkeyHoldModeType) -> String {
@@ -2055,7 +2089,12 @@ final class GlobalHotkeyManager: NSObject {
             case .reinitialize:
                 DebugLogger.shared.info("Hotkey manager reinitializing - stopping active hold recording before reset", source: "GlobalHotkeyManager")
             }
-            self.stopRecordingIfNeeded()
+            // Treated as a release: stop now if running, otherwise when the start in flight settles.
+            self.stopRecordingAfterRelease(
+                for: .transcription,
+                label: "Shortcut tracking reset",
+                requireTargetMode: false
+            )
         }
     }
 
@@ -2255,8 +2294,22 @@ final class GlobalHotkeyManager: NSObject {
         }
     }
 
-    private func triggerPromptMode() {
+    /// Runs a hotkey action that may start a capture. Until it settles, a hold release counts as
+    /// arriving during a start, so it is latched rather than lost.
+    private func performStartingHotkeyAction(_ action: @escaping @MainActor () async -> Void) {
+        self.holdReleaseStopLatch.startRequested()
         Task { @MainActor [weak self] in
+            await action()
+            guard let self = self else { return }
+            // The callbacks start capture in a task of their own, and ASRService.start() marks
+            // itself starting before its first suspension, so one main-actor turn makes it visible.
+            await Task.yield()
+            self.holdReleaseStopLatch.startRequestSettled()
+        }
+    }
+
+    private func triggerPromptMode() {
+        self.performStartingHotkeyAction { [weak self] in
             guard let self = self else { return }
             guard self.canTriggerRecordingAction("Prompt mode hotkey") else { return }
             DebugLogger.shared.info("Prompt mode hotkey triggered", source: "GlobalHotkeyManager")
@@ -2265,7 +2318,7 @@ final class GlobalHotkeyManager: NSObject {
     }
 
     private func triggerPromptSelection(_ selection: SettingsStore.DictationPromptSelection) {
-        Task { @MainActor [weak self] in
+        self.performStartingHotkeyAction { [weak self] in
             guard let self = self else { return }
             guard self.canTriggerRecordingAction("Prompt selection hotkey") else { return }
             DebugLogger.shared.info("Prompt selection hotkey triggered", source: "GlobalHotkeyManager")
@@ -2274,7 +2327,7 @@ final class GlobalHotkeyManager: NSObject {
     }
 
     private func triggerCommandMode() {
-        Task { @MainActor [weak self] in
+        self.performStartingHotkeyAction { [weak self] in
             guard let self = self else { return }
             guard self.canTriggerRecordingAction("Command mode hotkey") else { return }
             DebugLogger.shared.info("Command mode hotkey triggered", source: "GlobalHotkeyManager")
@@ -2287,7 +2340,7 @@ final class GlobalHotkeyManager: NSObject {
     }
 
     private func triggerRewriteMode() {
-        Task { @MainActor [weak self] in
+        self.performStartingHotkeyAction { [weak self] in
             guard let self = self else { return }
             guard self.canTriggerRecordingAction("Rewrite mode hotkey") else { return }
             DebugLogger.shared.info("Rewrite mode hotkey triggered", source: "GlobalHotkeyManager")
@@ -2390,7 +2443,7 @@ final class GlobalHotkeyManager: NSObject {
     }
 
     private func triggerDictationMode() {
-        Task { @MainActor [weak self] in
+        self.performStartingHotkeyAction { [weak self] in
             guard let self = self else { return }
             guard self.canTriggerRecordingAction("Dictate mode hotkey") else { return }
             let model = SettingsStore.shared.selectedSpeechModel
@@ -2480,7 +2533,7 @@ final class GlobalHotkeyManager: NSObject {
     }
 
     private func startRecordingIfNeeded() {
-        Task { @MainActor [weak self] in
+        self.performStartingHotkeyAction { [weak self] in
             guard let self = self else { return }
 
             // Prevent starting while stop is processing

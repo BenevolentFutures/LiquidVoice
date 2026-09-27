@@ -903,6 +903,83 @@ final class DictationTargetPolicyTests: XCTestCase {
     }
 }
 
+// MARK: - Invariant 2: failures are shown and the transcript is kept
+
+@MainActor
+final class DeliveryFailureReportingTests: XCTestCase {
+    private var pasteboard: NSPasteboard!
+    private var session: ClipboardPasteSession!
+    private var originalHandler: ((TextDeliveryFailure, String) -> Void)!
+    private var reported: [(TextDeliveryFailure, String)] = []
+
+    override func setUp() async throws {
+        try await super.setUp()
+        self.pasteboard = TypingServiceTransientPasteboardTests.makePasteboard()
+        self.pasteboard.setString("before", forType: .string)
+        self.session = ClipboardPasteSession(pasteboard: SystemPasteboardManager(pasteboard: self.pasteboard), label: "DeliveryFailureReportingTests")
+        self.originalHandler = TypingService.deliveryFailureHandler
+        TypingService.deliveryFailureHandler = { [weak self] failure, transcript in
+            self?.reported.append((failure, transcript))
+        }
+    }
+
+    override func tearDown() async throws {
+        TypingService.deliveryFailureHandler = self.originalHandler
+        self.session.waitUntilIdle()
+        self.pasteboard.releaseGlobally()
+        try await super.tearDown()
+    }
+
+    func testEveryFailureExceptAnEmptyTranscriptIsShown() {
+        for failure in TextDeliveryFailure.allCases {
+            XCTAssertEqual(failure.isUserVisible, failure != .emptyText, failure.rawValue)
+        }
+        XCTAssertEqual(TextDeliveryFailure.noEditableTarget.userFacingTitle, "No text field focused")
+        XCTAssertEqual(TextDeliveryFailure.pasteNotLanded.userFacingTitle, "Text wasn't inserted")
+        XCTAssertEqual(TextDeliveryFailure.accessibilityNotTrusted.userFacingTitle, "Enable Accessibility to insert text")
+    }
+
+    func testAReportedFailureShowsTheCardAndKeepsTheTranscriptOnTheClipboard() async {
+        TypingService.reportDeliveryFailure(.noEditableTarget, transcript: "lost words", pasteSession: self.session)
+        await self.waitForReports(1)
+        self.session.waitUntilIdle()
+
+        XCTAssertEqual(self.reported.first?.0, .noEditableTarget)
+        XCTAssertEqual(self.reported.first?.1, "lost words")
+        XCTAssertEqual(self.pasteboard.string(forType: .string), "lost words")
+    }
+
+    func testAnEmptyTranscriptIsNeitherShownNorCopied() async {
+        TypingService.reportDeliveryFailure(.emptyText, transcript: "", pasteSession: self.session)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        self.session.waitUntilIdle()
+
+        XCTAssertTrue(self.reported.isEmpty)
+        XCTAssertEqual(self.pasteboard.string(forType: .string), "before")
+    }
+
+    func testWithoutAccessibilityTheDictationIsKeptAndTheUserIsTold() async throws {
+        try XCTSkipIf(AXIsProcessTrusted(), "with Accessibility granted this would type into the focused app")
+        let typing = TypingService(pasteSession: self.session)
+        var result: TextDeliveryResult?
+
+        typing.typeOutputPlanInstantly(.plain("dictated words"), preferredTargetPID: nil, textReadyAt: nil) { result = $0 }
+        await self.waitForReports(1)
+        self.session.waitUntilIdle()
+
+        XCTAssertEqual(result, .recoverableFailure(.accessibilityNotTrusted))
+        XCTAssertEqual(self.reported.first?.0, .accessibilityNotTrusted)
+        XCTAssertEqual(self.pasteboard.string(forType: .string), "dictated words")
+    }
+
+    private func waitForReports(_ count: Int) async {
+        let deadline = Date().addingTimeInterval(3)
+        while self.reported.count < count, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+}
+
 // MARK: - Settings (defaults follow upstream: both off)
 
 @MainActor
@@ -927,5 +1004,18 @@ final class DeliverySettingsTests: XCTestCase {
         XCTAssertFalse(settings.returnDictationToStartingField)
         settings.returnDictationToStartingField = true
         XCTAssertEqual(settings.makeBackupPayload().returnDictationToStartingField, true)
+    }
+}
+
+// MARK: - Invariant 1: c11 and Ghostty always get the clipboard paste
+
+final class TerminalRoutingTests: XCTestCase {
+    @MainActor
+    func testC11AndGhosttyAreForcedOntoClipboardPaste() {
+        // c11 and Ghostty silently dropped direct CGEvent text; they must stay on Reliable Paste.
+        XCTAssertTrue(TypingService.isGhosttyFamily(bundleIdentifier: "com.stage11.c11"))
+        XCTAssertTrue(TypingService.isGhosttyFamily(bundleIdentifier: "com.mitchellh.ghostty"))
+        XCTAssertFalse(TypingService.isGhosttyFamily(bundleIdentifier: "com.apple.TextEdit"))
+        XCTAssertFalse(TypingService.isGhosttyFamily(bundleIdentifier: nil))
     }
 }

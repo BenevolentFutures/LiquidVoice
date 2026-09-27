@@ -787,6 +787,12 @@ final class GlobalHotkeyManager: NSObject {
             return tapRecoveryResult
         }
 
+        // Liquid Voice's own synthesized paste (Command down, V, Command up) must never be read
+        // as a hotkey press, or a Command-based modifier-only shortcut could fire on it.
+        if PasteCommandEvents.isSynthesized(event) {
+            return Unmanaged.passUnretained(event)
+        }
+
         if self.isShortcutCaptureActiveProvider?() ?? false {
             self.resetModifierOnlyShortcutTracking()
             return Unmanaged.passUnretained(event)

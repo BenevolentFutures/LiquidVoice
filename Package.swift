@@ -10,7 +10,9 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/mxcl/AppUpdater.git", from: "1.0.0"),
-        .package(url: "https://github.com/altic-dev/FluidAudio.git", branch: "B/cohere-coreml-asr"),
+        // Pinned to an exact commit: a branch pin on altic-dev's fork breaks every fresh build
+        // the day that branch is deleted. This is the commit last resolved from B/cohere-coreml-asr.
+        .package(url: "https://github.com/altic-dev/FluidAudio.git", revision: "2e885ba247bdbbb3d3e932ba9701a5c165356df7"),
         .package(url: "https://github.com/mxcl/PromiseKit", from: "6.0.0"),
         .package(url: "https://github.com/altic-dev/DynamicNotchKit.git", branch: "main"),
         .package(url: "https://github.com/altic-dev/transcribe-cpp-swift.git", exact: "0.1.2"),

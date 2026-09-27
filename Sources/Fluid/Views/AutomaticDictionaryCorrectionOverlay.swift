@@ -251,7 +251,7 @@ final class MicrophoneChangeOverlayController {
     private init() {}
 
     func show(_ notice: MicrophoneChangeNotice) {
-        guard AppStorageLocation.appBundleIdentifiers.contains(Bundle.main.bundleIdentifier ?? ""),
+        guard Self.supportsAlerts(bundleIdentifier: Bundle.main.bundleIdentifier),
               SettingsStore.shared.showMicrophoneChangeAlerts
         else { return }
         self.generation &+= 1
@@ -298,6 +298,12 @@ final class MicrophoneChangeOverlayController {
             else { return }
             self.hide()
         }
+    }
+
+    /// The installed app and the isolated Debug build alert; a foreign test host does not.
+    nonisolated static func supportsAlerts(bundleIdentifier: String?) -> Bool {
+        guard let bundleIdentifier else { return false }
+        return AppStorageLocation.appBundleIdentifiers.contains(bundleIdentifier)
     }
 
     func disableFutureAlerts() {

@@ -1873,10 +1873,7 @@ final class SettingsStore: ObservableObject {
             AudioDevice.isPrivateDefaultDeviceAggregate(uid: $0.uid, name: $0.name) == false
         }
         let preferredUID = self.preferredInputDeviceUID
-        let connectedUIDs = Set(devices.map(\.uid))
-        var suppressedUIDs = self.suppressedMicrophoneUIDs
-        suppressedUIDs.formIntersection(connectedUIDs)
-        self.suppressedMicrophoneUIDs = suppressedUIDs
+        let suppressedUIDs = self.suppressedMicrophoneUIDs
 
         if entries.isEmpty,
            let preferredUID,
@@ -1910,15 +1907,13 @@ final class SettingsStore: ObservableObject {
         self.microphonePriority = entries
     }
 
-    func removeMicrophoneFromPriority(uid: String, isConnected: Bool) {
+    /// Removing a microphone always suppresses it, connected or not, so it stays out of the list
+    /// when it (re)connects. "Restore Removed" (restoreRemovedMicrophones) brings it back.
+    func removeMicrophoneFromPriority(uid: String) {
         guard uid.isEmpty == false else { return }
 
         var suppressedUIDs = self.suppressedMicrophoneUIDs
-        if isConnected {
-            suppressedUIDs.insert(uid)
-        } else {
-            suppressedUIDs.remove(uid)
-        }
+        suppressedUIDs.insert(uid)
         self.suppressedMicrophoneUIDs = suppressedUIDs
 
         let entries = self.microphonePriority.filter { $0.uid != uid }
@@ -2288,17 +2283,6 @@ final class SettingsStore: ObservableObject {
             objectWillChange.send()
             let clamped = max(0.0, min(1.0, newValue))
             self.defaults.set(clamped, forKey: Keys.transcriptionSoundVolume)
-        }
-    }
-
-    var transcriptionSoundIndependentVolume: Bool {
-        get {
-            let value = self.defaults.object(forKey: Keys.transcriptionSoundIndependentVolume)
-            return value as? Bool ?? false
-        }
-        set {
-            objectWillChange.send()
-            self.defaults.set(newValue, forKey: Keys.transcriptionSoundIndependentVolume)
         }
     }
 
@@ -3201,7 +3185,7 @@ final class SettingsStore: ObservableObject {
             accentColorOption: self.accentColorOption,
             transcriptionStartSound: self.transcriptionStartSound,
             transcriptionSoundVolume: self.transcriptionSoundVolume,
-            transcriptionSoundIndependentVolume: self.transcriptionSoundIndependentVolume,
+            transcriptionSoundIndependentVolume: false,
             autoUpdateCheckEnabled: self.autoUpdateCheckEnabled,
             betaReleasesEnabled: self.betaReleasesEnabled,
             enableDebugLogs: self.enableDebugLogs,
@@ -3319,7 +3303,6 @@ final class SettingsStore: ObservableObject {
         self.accentColorOption = payload.accentColorOption
         self.transcriptionStartSound = payload.transcriptionStartSound
         self.transcriptionSoundVolume = payload.transcriptionSoundVolume
-        self.transcriptionSoundIndependentVolume = payload.transcriptionSoundIndependentVolume
         self.autoUpdateCheckEnabled = payload.autoUpdateCheckEnabled
         self.betaReleasesEnabled = payload.betaReleasesEnabled
         self.enableDebugLogs = payload.enableDebugLogs
@@ -5215,7 +5198,6 @@ private extension SettingsStore {
         static let enableTranscriptionSounds = "EnableTranscriptionSounds"
         static let transcriptionStartSound = "TranscriptionStartSound"
         static let transcriptionSoundVolume = "TranscriptionSoundVolume"
-        static let transcriptionSoundIndependentVolume = "TranscriptionSoundIndependentVolume"
         static let pressAndHoldMode = "PressAndHoldMode"
         static let hotkeyMode = "HotkeyMode"
         static let enableStreamingPreview = "EnableStreamingPreview"

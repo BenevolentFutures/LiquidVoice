@@ -24,9 +24,9 @@ Liquid Voice is a GPL-3 fork of [FluidVoice](https://github.com/altic-dev/FluidV
 | | SHA | Note |
 |---|---|---|
 | Fork base | `d62adc9` | `d62adc9ac35467f9933fda689111514545466a2d` |
-| Watermark | `3b509ea1` | `upstream/main`, reviewed through 2026-09-24 |
+| Watermark | `3b509ea1` | `upstream/main` on 2026-09-24: where the last review stopped |
 
-Move the watermark forward after each review, in the same PR as the ports.
+The watermark is where review stopped, not a claim that every commit before it is settled. The ledger fills in as port PRs merge. After the next review pass, move the watermark to the upstream commit it stopped at.
 
 ## Next review
 
@@ -35,7 +35,7 @@ git fetch upstream
 git log --no-merges 3b509ea1..upstream/main
 ```
 
-Skip anything on the never-port list. For each remaining commit, port it or record why not, in the ledger below.
+Skip anything on the never-port list. Each commit that gets ported, or deliberately skipped, gets a ledger row when its PR merges.
 
 ## Port ledger
 

@@ -2,7 +2,7 @@
 
 Run once after installing a new build. It takes about ten minutes, fifteen the first time after the identity change.
 
-Install with `./build.sh install` (with Atin, never unattended). It quits the app, backs up the installed one to `~/Backups/liquid-voice-<timestamp>/Liquid Voice.app`, installs the new build, and prints the exact rollback command. Keep that output.
+Install with `./build.sh install` (with Atin, never unattended). It quits the app and waits for it to go, backs up the installed one to `~/Backups/liquid-voice-<timestamp>/Liquid Voice.app` and verifies the copy (bundle ID and `codesign --verify --deep --strict`), prints the rollback command, and only then copies the new build next to the old one and swaps it in. Keep that output.
 
 Tail the log in a c11 pane first:
 
@@ -10,18 +10,19 @@ Tail the log in a c11 pane first:
 tail -F ~/Library/Logs/LiquidVoice/Fluid.log | grep -E 'IDENTITY_MIGRATION|STOP_SUMMARY|frontmost_check|send_key|SPOKEN_SEND|stop_target_capture|DELIVERY'
 ```
 
-Rollback: run the command `./build.sh install` printed. By hand: quit Liquid Voice, then
+Rollback: run the command `./build.sh install` printed:
 
 ```sh
-rm -rf "/Applications/Liquid Voice.app" && ditto "$HOME/Backups/liquid-voice-<timestamp>/Liquid Voice.app" "/Applications/Liquid Voice.app" && open "/Applications/Liquid Voice.app"
+bash ~/Backups/liquid-voice-<timestamp>/rollback.sh
 ```
 
-The previous app still finds all of its own data, because the identity migration copies and never moves. Dictations made with the new app are not in the old one.
+It quits Liquid Voice, waits for it to go, puts the backed-up app back and opens it. The previous app still finds all of its own data, because the identity migration copies and never moves. Dictations made with the new app are not in the old one.
 
 ## 0. First launch after the identity change (once)
 
 The app is now `com.stage11.liquidvoice`, no longer FluidVoice's `com.FluidApp.app`. macOS treats it as a new app: your data comes over on the first launch, but Microphone and Accessibility must be granted again.
 
+0. Before installing: nothing may exist yet under the new identity, or the one-time copy is skipped or merged into it. `defaults read com.stage11.liquidvoice` should say the domain does not exist, and `~/Library/Application Support/LiquidVoice` should not exist. `./build.sh install` checks both on a first install of the new identity; if either exists it explains, prints the commands to move them aside, and installs only after you type `install`. Move them aside unless Cairn says otherwise.
 1. Open `/Applications/Liquid Voice.app`. The window opens on **Getting Started**. Under Quick Setup, **Grant Microphone Permission** and **Enable Accessibility Access** are pending. The voice model shows ready after a second or two (the model cache is shared, nothing downloads).
 2. The log (new folder: `~/Library/Logs/LiquidVoice/`) shows, within a second of launch, with your own counts:
    ```
@@ -31,9 +32,9 @@ The app is now `com.stage11.liquidvoice`, no longer FluidVoice's `com.FluidApp.a
    IDENTITY_MIGRATION step=login_item outcome=not_needed (launch at startup was off)
    IDENTITY_MIGRATION finished result=ok defaults=copied(119) folder=copied(2) loginItem=not_needed elapsedMs=<n>
    ```
-   Any `outcome=failed` or `result=incomplete`: stop and tell Cairn before dictating. A failed step is not marked done and runs again on the next launch; the old data is untouched. (If a retry replaces values the app wrote in between, it first saves them to `~/Backups/liquid-voice-displaced-defaults-*.plist` and logs `displaced=`. If the folder step finds a `LiquidVoice` folder already there, it adds only the missing files and logs `outcome=merged`.)
-   A line `IDENTITY_MIGRATION skipped reason=not_installed` means the app was not started from `/Applications`.
-3. Accessibility: click **Open Settings** on that step. System Settings opens at Privacy & Security > Accessibility, with a floating guide. Drag Liquid Voice into the list (or click +, pick `/Applications/Liquid Voice.app`) and switch it on. Within two seconds the app restarts itself once. You may see two "Liquid Voice" rows; the one that was already on belongs to the old identifier. Leave it until you no longer need rollback (section 7).
+   Any `outcome=failed` or `result=incomplete`: stop and tell Cairn before dictating. The old data is untouched either way. A failed step is not marked done and runs once more on the next launch. Your old data always wins: a value or file the new app already had and the copy changes is saved first, to `~/Backups/liquid-voice-displaced-defaults-*.plist` or `~/Backups/liquid-voice-displaced-folder-*/`, and logged as `displaced=`. If a retry had to set data aside and still failed, the migration stops retrying: an alert before the app opens names the log and the backup (`outcome=halted`). To try again after a fix: `defaults delete com.stage11.liquidvoice LiquidVoiceIdentityMigrationDefaultsHalted`.
+   Other lines: `outcome=merged` means a `LiquidVoice` folder already existed and the old files were merged into it; `skipped_symlink=` or `skipped_unreadable=` name old files left behind, on purpose; `skipped reason=not_installed` means the app was not started from `/Applications`.
+3. Accessibility: click **Open Settings** on that step. System Settings opens at Privacy & Security > Accessibility, with a floating guide. Drag Liquid Voice into the list (or click +, pick `/Applications/Liquid Voice.app`) and switch it on. About 2.5 s after you switch it on, the app restarts itself once. You may see two "Liquid Voice" rows; the one that was already on belongs to the old identifier. Leave it until you no longer need rollback (section 7).
 4. Microphone: after the restart, press the dictation hotkey (or click **Grant Access** under Getting Started, or in Settings > Microphone Permission). macOS asks; choose **Allow**. That press does not record; the next one does. If you choose Don't Allow, the hotkey shows a "Microphone access is off" card whose gear opens Privacy & Security > Microphone.
    If macOS asks whether Liquid Voice may use the keychain item `com.fluidvoice.provider-api-keys`, choose Always Allow (only happens when an AI provider key was saved; there is none today).
 5. Your data carried over:
@@ -41,7 +42,7 @@ The app is now `com.stage11.liquidvoice`, no longer FluidVoice's `com.FluidApp.a
    - Custom Dictionary lists your entries and replacements.
    - Settings: the same dictation, Paste Last and Reprocess Last hotkeys; the same microphone, overlay position and size, sounds and text insertion mode.
    - `defaults read com.stage11.liquidvoice LiquidVoiceIdentityMigrationDefaults` prints the date and the key count.
-6. Launch at startup, only if you had it on: Settings shows it on, and System Settings > General > Login Items lists Liquid Voice. If the log says `requires_approval`, approve it there; if it says `outcome=failed`, turn Launch at startup on again in Settings. The old app's login item cannot be removed by the new app and would start the backup copy: remove the older "Liquid Voice" entry there with the minus button.
+6. Launch at startup, only if you had it on: Settings shows it on, and System Settings > General > Login Items lists Liquid Voice. If the log says `requires_approval`, approve it there; if it says `outcome=failed`, turn Launch at startup on again in Settings. The old app's login item cannot be removed by the new app. It is registered as `com.FluidApp.app` and could start the backup copy, or an old Release build such as `~/Projects/LiquidVoice/DerivedData/Build/Products/Release/Liquid Voice.app`: remove the older "Liquid Voice" entry there with the minus button.
 7. Dictate once into c11. The text lands. Then go on with section 1.
 
 ## 1. Delivery into c11 (must pass)

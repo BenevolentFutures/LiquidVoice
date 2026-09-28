@@ -25,7 +25,7 @@ Liquid Voice is a fork of [FluidVoice](https://github.com/altic-dev/FluidVoice) 
 - **Spoken Send, in c11 too.** end with "send it" and Return follows the text, only in the pane you stopped in. off by default. [#7], [#8]
 - **a faster stop.** in a headless benchmark, stop-path work outside the model fell from a 145 ms median to 4 ms; model time is unchanged. a stalled model no longer loses the recording: it is kept for Reprocess, even across a restart. [#9], [#10]
 - **hotkey, mic and media fixes.** holds that always end, removed mics that stay removed, media resumed only if we paused it, a hung mic routed around, and a hotkey to reprocess the last dictation. [#2], [`8295536`][8295536], [`68afebc`][68afebc], [`0e2948a`][0e2948a]
-- **Atin's overlay.** a vertical action rail, a scrolling voice trace, a history browser, drag anywhere, and copy, reprocess and cancel one click away. [overlay history][overlay]
+- **a new overlay, by Atin Woodard.** a vertical action rail, a scrolling voice trace, a history browser, drag anywhere, and copy, reprocess and cancel one click away. [overlay history][overlay]
 
 ## install.
 
@@ -45,7 +45,7 @@ cd LiquidVoice
 
 ## privacy.
 
-your audio and your text stay on your Mac. no telemetry, no account. the app goes online for three things, each your choice:
+no telemetry, no account. your audio and your text stay on your Mac unless you choose otherwise. the app goes online for three things, each your choice:
 
 - downloading the speech model you pick.
 - AI cleanup, if you set up a provider: OpenAI, Anthropic, Google, xAI, Groq, Cerebras, OpenRouter or a custom endpoint. Ollama and LM Studio stay on your Mac.

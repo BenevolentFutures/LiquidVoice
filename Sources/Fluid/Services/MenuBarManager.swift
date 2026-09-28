@@ -24,6 +24,8 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
     // References to app state
     private weak var asrService: ASRService?
     private var cancellables = Set<AnyCancellable>()
+    /// A menu rebuild owed from a stop that held UI refreshes (see ASRService.holdsStopUIRefresh).
+    private var hasDeferredMenuRefresh = false
     private var configuredASRIdentifier: ObjectIdentifier?
 
     /// Overlay management (persistent, independent of window lifecycle)
@@ -104,13 +106,31 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         // Subscribe to recording state changes
         asrService.$isRunning
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] isRunning in
-                self?.isRecording = isRunning
-                self?.updateMenuBarIcon()
-                self?.updateMenu()
+            .sink { [weak self, weak asrService] isRunning in
+                guard let self else { return }
+                self.isRecording = isRunning
+                self.updateMenuBarIcon()
+                // Rebuilding the menu is main-thread work nobody sees mid-stop: do it once the
+                // stop pipeline has handed the text off (from altic-dev/FluidVoice#950).
+                if !isRunning, asrService?.holdsStopUIRefresh == true {
+                    self.hasDeferredMenuRefresh = true
+                } else {
+                    self.hasDeferredMenuRefresh = false
+                    self.updateMenu()
+                }
 
                 // Handle overlay lifecycle (independent of window state)
-                self?.handleOverlayState(isRunning: isRunning, asrService: asrService)
+                if let asrService {
+                    self.handleOverlayState(isRunning: isRunning, asrService: asrService)
+                }
+            }
+            .store(in: &self.cancellables)
+
+        asrService.stopUIRefreshReleased
+            .sink { [weak self] in
+                guard let self, self.hasDeferredMenuRefresh else { return }
+                self.hasDeferredMenuRefresh = false
+                self.updateMenu()
             }
             .store(in: &self.cancellables)
 
@@ -490,11 +510,14 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
     }
 
     private func updateMenuBarIcon() {
-        guard let statusItem = statusItem else { return }
+        // The template icon is the same in every state. Assigning a fresh NSImage on each
+        // recording change forced a status item redraw and a WindowServer round trip on every
+        // start and stop (ported from altic-dev/FluidVoice@fea6d6c9).
+        guard let statusItem = statusItem, statusItem.button?.image == nil else { return }
 
         // Use MenuBarIcon asset - vectorized from logo
         if let image = NSImage(named: "MenuBarIcon") {
-            image.isTemplate = true // Adapts to light/dark mode and tints red when recording
+            image.isTemplate = true // Adapts to light/dark mode
             statusItem.button?.image = image
         }
     }

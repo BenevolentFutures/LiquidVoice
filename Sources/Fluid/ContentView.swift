@@ -2094,6 +2094,9 @@ struct ContentView: View {
         #endif
         var traceOutcome = "stopped"
         defer { trace.finishUnlessDelivering(outcome: traceOutcome) }
+        // No whole-app UI rebuild until the text is handed off (see ASRService.holdsStopUIRefresh).
+        let uiRefreshHold = self.asr.holdStopUIRefresh()
+        defer { self.asr.releaseStopUIRefresh(uiRefreshHold) }
         DebugLogger.shared.debug("stopAndProcessTranscription called", source: "ContentView")
         DebugLogger.shared.info("Output route selected: \(route.rawValue)", source: "ContentView")
         self.appBench("stop_path_enter route=\(route.rawValue)")
@@ -2275,6 +2278,8 @@ struct ContentView: View {
         )
 
         if shouldUseAI {
+            // The AI call takes far longer than any UI refresh: let the app catch up now.
+            self.asr.releaseStopUIRefresh(uiRefreshHold)
             DebugLogger.shared.debug("Routing transcription through AI post-processing", source: "ContentView")
             postProcessingModel = postProcessingModelInfo.model
             let postProcessingInputChars = normalizedTranscribedText.count

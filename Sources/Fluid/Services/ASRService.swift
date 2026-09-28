@@ -96,6 +96,43 @@ final class ASRService: ObservableObject {
         self.isAsrReady && self.transcriptionProvider.isReady
     }
 
+    // MARK: Stop-time UI refresh hold
+
+    /// True while a dictation's stop pipeline holds whole-app UI refreshes. AppServices forwards
+    /// every ASR change to FluidApp, ContentView and the overlay, and the rebuild that
+    /// `isRunning = false` caused ran on the main thread between stopping the mic and handing
+    /// the text off. Observers defer that work while this is set and do it once on release.
+    private(set) var holdsStopUIRefresh = false
+    /// Sent once when a hold ends (explicitly or by its safety timeout).
+    let stopUIRefreshReleased = PassthroughSubject<Void, Never>()
+    private var stopUIRefreshHoldGeneration: UInt64 = 0
+    private var stopUIRefreshTimeout: Task<Void, Never>?
+    private static let stopUIRefreshHoldLimitNanoseconds: UInt64 = 1_500_000_000
+
+    /// Holds whole-app UI refreshes until `releaseStopUIRefresh` with the returned token, or
+    /// 1.5 s at most. A newer hold supersedes an older one.
+    func holdStopUIRefresh() -> UInt64 {
+        self.stopUIRefreshHoldGeneration &+= 1
+        let generation = self.stopUIRefreshHoldGeneration
+        self.holdsStopUIRefresh = true
+        self.stopUIRefreshTimeout?.cancel()
+        self.stopUIRefreshTimeout = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: Self.stopUIRefreshHoldLimitNanoseconds)
+            guard !Task.isCancelled else { return }
+            self?.releaseStopUIRefresh(generation)
+        }
+        return generation
+    }
+
+    /// Ends the hold `generation` if it is still the current one. Safe to call more than once.
+    func releaseStopUIRefresh(_ generation: UInt64) {
+        guard self.holdsStopUIRefresh, generation == self.stopUIRefreshHoldGeneration else { return }
+        self.holdsStopUIRefresh = false
+        self.stopUIRefreshTimeout?.cancel()
+        self.stopUIRefreshTimeout = nil
+        self.stopUIRefreshReleased.send()
+    }
+
     nonisolated static func shouldAssessShortAudioSilence(
         isEnabled: Bool,
         useDictionaryTrainingPath: Bool,

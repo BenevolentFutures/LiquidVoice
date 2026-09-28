@@ -1,4 +1,5 @@
 @testable import Liquid_Voice_Debug
+import Combine
 import Foundation
 import XCTest
 
@@ -2766,5 +2767,39 @@ final class TranscriptionHistoryPersistenceTests: XCTestCase {
         await store.waitForTodaySummary()
         XCTAssertEqual(store.todaySummary, TranscriptionHistoryStore.TodaySummary(words: 0, transcriptions: 0))
         store.flushPendingWrites()
+    }
+}
+
+@MainActor
+final class StopUIRefreshHoldTests: XCTestCase {
+    func testASRChangesDuringAStopReachTheAppUIOnceWhenTheHoldEnds() {
+        let asr = AppServices.shared.asr
+        var forwarded = 0
+        let subscription = AppServices.shared.objectWillChange.sink { forwarded += 1 }
+        defer { subscription.cancel() }
+
+        let hold = asr.holdStopUIRefresh()
+        XCTAssertTrue(asr.holdsStopUIRefresh)
+        asr.objectWillChange.send()
+        asr.objectWillChange.send()
+        XCTAssertEqual(forwarded, 0, "no whole-app rebuild while the stop pipeline runs")
+
+        asr.releaseStopUIRefresh(hold)
+        XCTAssertFalse(asr.holdsStopUIRefresh)
+        XCTAssertEqual(forwarded, 1, "one refresh when the text has been handed off")
+
+        asr.releaseStopUIRefresh(hold)
+        asr.objectWillChange.send()
+        XCTAssertEqual(forwarded, 2, "released twice is harmless; later changes forward as usual")
+    }
+
+    func testAnOlderHoldCannotEndANewerOne() {
+        let asr = AppServices.shared.asr
+        let older = asr.holdStopUIRefresh()
+        let newer = asr.holdStopUIRefresh()
+        asr.releaseStopUIRefresh(older)
+        XCTAssertTrue(asr.holdsStopUIRefresh)
+        asr.releaseStopUIRefresh(newer)
+        XCTAssertFalse(asr.holdsStopUIRefresh)
     }
 }

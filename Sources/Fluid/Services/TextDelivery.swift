@@ -90,3 +90,31 @@ nonisolated struct DeliveryFailureReport: Equatable, Sendable {
     /// Rewrite output and debug deliveries are not.
     let inHistory: Bool
 }
+
+/// How one dictation's delivery ended, for the overlay's outcome state (the delivered hold).
+/// Reported once per dictation, keyed by its stop-path trace.
+nonisolated struct DictationDeliveryOutcome: Equatable, Sendable {
+    /// How the text was handed over. Nothing reads it back: the paste is posted, not verified.
+    enum Method: String, Equatable, Sendable {
+        case paste
+        case keystrokes
+        case accessibility
+    }
+
+    let traceID: Int
+    let result: TextDeliveryResult
+    /// nil when nothing was dispatched.
+    let method: Method?
+    /// Spoken Send pressed Return after the text.
+    let sentReturn: Bool
+}
+
+extension DictationDeliveryOutcome.Method {
+    var signalMethod: SignalDelivery.Method {
+        switch self {
+        case .paste: .paste
+        case .keystrokes: .keystrokes
+        case .accessibility: .accessibility
+        }
+    }
+}

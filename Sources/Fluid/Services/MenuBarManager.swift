@@ -431,6 +431,17 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         self.overlayVisible = true
     }
 
+    /// Hands the stopped dictation's overlay to its outcome hold (Pasted / Sent, or a recovery
+    /// card): processing ends and the recording lifecycle is released, so the next recording starts
+    /// fresh, but nothing hides here. The overlay dismisses itself when the hold ends.
+    func releaseOverlayForOutcomeHold() {
+        self.cancelPendingProcessingCompletionOperations()
+        self.isProcessingActive = false
+        self.overlayVisible = false
+        NotchOverlayManager.shared.setProcessing(false)
+        self.overlayBench("release_for_outcome_hold")
+    }
+
     /// Ends processing and waits for the recording overlay's exit transition.
     /// Output paths normally call this asynchronously after insertion dispatch
     /// so the exit animation cannot delay text delivery.

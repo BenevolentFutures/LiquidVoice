@@ -2167,11 +2167,16 @@ struct ContentView: View {
         self.clearActiveRecordingMode()
 
         var deferredTranscribingStatus: (@MainActor () -> Void)?
-        if shouldHideOverlayOnStop {
+        // The Signal overlay stays up through the stop for the outcome (Pasted / Sent, held 1.2 s,
+        // or a recovery card), so a plain dictation no longer hides it here.
+        let holdsOverlayForOutcome = shouldHideOverlayOnStop && self.overlayHoldsForOutcome
+        if shouldHideOverlayOnStop, !holdsOverlayForOutcome {
             didRequestOverlayHideOnStop = true
             DebugLogger.shared.debug("Hiding dictation overlay at stop path", source: "ContentView")
             self.hideOverlayAsync(reason: "stop_path")
         } else {
+            // Input closed: the trace flattens, the square goes hollow, the timer freezes.
+            BottomOverlayWindowController.shared.markRecordingStopped()
             // The overlay stays for prompt, command, rewrite, or AI feedback. For AI dictation
             // with the model loaded, a fast final pass (the usual case) finishes before a
             // "Transcribing" render could queue ahead of its result, so that status waits.
@@ -2587,7 +2592,12 @@ struct ContentView: View {
             }
             didTypeExternally = true
             if !shouldShowAIProcessingFailure, !didRequestOverlayHideOnStop {
-                self.hideOverlayAfterOutput()
+                self.holdOverlayForOutcome(
+                    traceID: trace.id,
+                    appName: stopTarget.flatMap { NSRunningApplication(processIdentifier: $0.pid)?.localizedName } ?? appInfo.name,
+                    text: finalText,
+                    failureReported: !isTargetReady
+                )
             }
         }
 
@@ -2619,6 +2629,29 @@ struct ContentView: View {
 
     private func hideOverlayAfterOutput() {
         self.hideOverlayAsync(reason: "after_output")
+    }
+
+    /// Whether the recording overlay holds a stopped dictation on screen for its outcome: the
+    /// bottom (Signal) overlay, while it is up.
+    private var overlayHoldsForOutcome: Bool {
+        SettingsStore.shared.overlayPosition == .bottom && NotchOverlayManager.shared.isBottomOverlayVisible
+    }
+
+    /// After the handoff: the overlay waits for the typing worker's outcome, then shows Pasted or
+    /// Sent for 1.2 s (or gives way to a recovery card). It never delays the paste: the outcome
+    /// comes from the worker once the paste is posted. Without the bottom overlay, hide as before.
+    private func holdOverlayForOutcome(traceID: Int, appName: String?, text: String, failureReported: Bool) {
+        guard self.overlayHoldsForOutcome else {
+            self.hideOverlayAfterOutput()
+            return
+        }
+        self.menuBarManager.releaseOverlayForOutcomeHold()
+        BottomOverlayWindowController.shared.awaitDelivery(
+            traceID: traceID,
+            appName: appName,
+            words: SignalOverlayModel.wordCount(text),
+            failureReported: failureReported
+        )
     }
 
     private func advanceOverlayLifecycle() {
@@ -3711,6 +3744,14 @@ struct ContentView: View {
     @discardableResult
     private func handleCancelShortcut() -> Bool {
         var handled = false
+
+        // During Spoken Send's quiet countdown, cancel means "don't press Return": the dictation
+        // goes on (DESIGN.md §15: the pill, the Cancel chip or Esc cancel the send).
+        if SpokenSendController.shared.indicator == .countingDown {
+            DebugLogger.shared.debug("Cancel shortcut: canceling the Spoken Send countdown", source: "ContentView")
+            SpokenSendController.shared.cancelSend()
+            return true
+        }
 
         if DictionaryCorrectionOverlayController.shared.isPresented {
             DebugLogger.shared.debug("Cancel shortcut: closing dictionary suggestion", source: "ContentView")

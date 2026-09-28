@@ -13,6 +13,8 @@ struct SignalTraceView: View {
     let isLive: Bool
     /// Transcribing: the orange 24 x 4 block steps across on the bar pitch.
     let isSweeping: Bool
+    /// Spoken Send's countdown: the trace draws flat under the drain bar.
+    var drain: SignalDrain?
     var showsAgeRuler = true
 
     @Environment(\.signalPalette) private var palette
@@ -29,7 +31,8 @@ struct SignalTraceView: View {
     }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !self.isLive && Date() >= self.settlesUntil)) { timeline in
+        let runsClock = self.isLive || self.drain?.isRunning == true || Date() < self.settlesUntil
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !runsClock)) { timeline in
             Canvas(opaque: false, rendersAsynchronously: false) { context, _ in
                 let now = timeline.date.timeIntervalSinceReferenceDate
                 self.model.reducesMotion = self.reduceMotion
@@ -63,19 +66,34 @@ struct SignalTraceView: View {
         context.fill(Path(CGRect(x: 0, y: mid - 0.5, width: self.width, height: 1)), with: .color(self.palette.midline))
 
         let count = self.model.barCount
-        let live = self.model.isLive
+        let flat = self.drain != nil
+        let live = self.model.isLive && !flat
         for index in 0..<count {
             let age = count - 1 - index
-            let barHeight = self.model.shownHeight(at: index, now: now)
+            let barHeight = flat ? SignalTraceModel.floor : self.model.shownHeight(at: index, now: now)
             let x = self.width - metrics.barWidth - CGFloat(age) * metrics.barPitch
             let isHead = live && age < metrics.writeHeadBars
             let color = isHead
                 ? self.palette.accent
-                : self.palette.ink.opacity(SignalTraceModel.bandOpacity(age: age))
+                : self.palette.ink.opacity(SignalTraceModel.bandOpacity(age: age, of: count))
             context.fill(
                 Path(CGRect(x: x, y: mid - barHeight / 2, width: metrics.barWidth, height: barHeight)),
                 with: .color(color)
             )
+        }
+
+        if let drain = self.drain {
+            // The drain bar: solid, 4 pt, the full trace width on the midline, shrinking from the
+            // right on the 4 pt pitch. Orange while the send is live; ink and stopped once canceled.
+            let remaining = drain.remaining(at: Date(timeIntervalSinceReferenceDate: now))
+            let steps = (remaining / drain.duration * Double(self.width + 2) / Double(metrics.barPitch)).rounded(.down)
+            let drainWidth = min(self.width, CGFloat(max(steps, 0)) * metrics.barPitch)
+            if drainWidth > 0 {
+                context.fill(
+                    Path(CGRect(x: 0, y: mid - 2, width: drainWidth, height: 4)),
+                    with: .color(drain.isCanceled ? self.palette.ink : self.palette.accent)
+                )
+            }
         }
 
         guard self.showsAgeRuler else { return }
@@ -89,6 +107,27 @@ struct SignalTraceView: View {
                 with: .color(self.palette.graticule)
             )
         }
+    }
+}
+
+/// Spoken Send's quiet countdown (round 5): its length and start, or where a cancel stopped it.
+struct SignalDrain: Equatable {
+    let startedAt: Date
+    let duration: TimeInterval
+    /// Set once canceled: the bar stops here, in ink.
+    var frozenRemaining: TimeInterval?
+
+    var isCanceled: Bool {
+        self.frozenRemaining != nil
+    }
+
+    var isRunning: Bool {
+        self.frozenRemaining == nil && Date().timeIntervalSince(self.startedAt) < self.duration
+    }
+
+    func remaining(at date: Date) -> TimeInterval {
+        if let frozen = self.frozenRemaining { return frozen }
+        return min(self.duration, max(0, self.duration - date.timeIntervalSince(self.startedAt)))
     }
 }
 

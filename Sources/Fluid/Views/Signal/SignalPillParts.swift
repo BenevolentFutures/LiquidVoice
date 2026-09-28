@@ -9,19 +9,48 @@ enum SignalRecordMark: Equatable {
     case none
 }
 
-/// The trace row (DESIGN.md §4, §11): the target-app icon, the trace, then the record square and
-/// the mono timer right-aligned in a box reserved for "99:59", all centred on the trace's
-/// midline. The icon keeps the shape the OS gives it; its frame is reserved with no icon.
+/// Spoken Send's placard in the trace row (DESIGN.md §15): empty at rest, its width reserved.
+enum SignalPlacard: Equatable {
+    case none
+    /// The phrase was heard; Return follows the paste. Orange.
+    case send
+    /// The send was canceled. Ink.
+    case noSend
+    /// A terminal that never gets Return. Dim.
+    case noReturn
+
+    var text: String {
+        switch self {
+        case .none: ""
+        case .send: "Send"
+        case .noSend, .noReturn: "No send"
+        }
+    }
+}
+
+/// What the timer box shows.
+enum SignalTimerReadout: Equatable {
+    /// The recording's length, running from this start.
+    case running(Date)
+    /// A frozen length ("0:41"); `dim` for the microphone card's "0:00".
+    case frozen(String, dim: Bool)
+    /// Spoken Send's countdown, "1.5" to "0.0" with one decimal: orange, ink once canceled.
+    case countdown(SignalDrain)
+}
+
+/// The trace row (DESIGN.md §4, §11, §15): `[icon 20] 10 [trace] [placard 7 ch] 6 [square 6] 4
+/// [timer 5 ch]`, all centred on the trace's midline. The icon keeps the shape the OS gives it;
+/// its frame, the placard's and the timer's are reserved whatever they show.
 struct SignalTraceRow: View {
     let geometry: SignalOverlayGeometry
     let icon: NSImage?
     let trace: SignalTraceModel
     let isLive: Bool
     let isSweeping: Bool
+    var drain: SignalDrain?
     let mark: SignalRecordMark
-    /// The running timer's start while listening; nil shows `frozenTimer`.
-    let timerStart: Date?
-    let frozenTimer: String
+    var placard: SignalPlacard = .none
+    let timer: SignalTimerReadout
 
     @Environment(\.signalPalette) private var palette
 
@@ -42,21 +71,36 @@ struct SignalTraceRow: View {
             .padding(.top, metrics.traceMidline - metrics.targetIcon / 2)
             .help("Dictation target app")
 
-            Spacer(minLength: 0)
+            SignalTraceView(model: self.trace, isLive: self.isLive, isSweeping: self.isSweeping, drain: self.drain)
+                .padding(.leading, metrics.traceLeadingGap)
 
-            SignalTraceView(model: self.trace, isLive: self.isLive, isSweeping: self.isSweeping)
+            Spacer(minLength: metrics.placardLeadingGap)
 
-            Spacer(minLength: 0)
+            SignalMonoLabel(text: self.placard.text, role: SignalTheme.Typography.placard, color: self.placardColor)
+                .fixedSize()
+                .frame(width: metrics.placardWidth, height: SignalTheme.Typography.placard.lineHeight, alignment: .trailing)
+                .padding(.top, metrics.traceMidline - SignalTheme.Typography.placard.lineHeight / 2)
+                .help("Spoken Send")
 
             HStack(spacing: metrics.readoutGap) {
                 self.recordSquare
-                self.timer
+                self.timerView
+                    .fixedSize()
                     .frame(width: metrics.timerBoxWidth, alignment: .trailing)
             }
             .frame(height: SignalTheme.Typography.timer.lineHeight)
             .padding(.top, metrics.traceMidline - SignalTheme.Typography.timer.lineHeight / 2)
+            .padding(.leading, metrics.placardTrailingGap)
         }
         .frame(width: self.geometry.innerWidth, height: metrics.traceRowHeight, alignment: .top)
+    }
+
+    private var placardColor: Color {
+        switch self.placard {
+        case .none, .send: self.palette.accent
+        case .noSend: self.palette.text
+        case .noReturn: self.palette.textDim
+        }
     }
 
     @ViewBuilder
@@ -75,33 +119,47 @@ struct SignalTraceRow: View {
     }
 
     @ViewBuilder
-    private var timer: some View {
-        if let start = self.timerStart {
+    private var timerView: some View {
+        switch self.timer {
+        case let .running(start):
             TimelineView(.periodic(from: start, by: 1)) { context in
-                self.timerText(SignalOverlayModel.formatDuration(context.date.timeIntervalSince(start)))
+                self.timerText(SignalOverlayModel.formatDuration(context.date.timeIntervalSince(start)), color: self.palette.text)
             }
-        } else {
-            self.timerText(self.frozenTimer)
+        case let .frozen(text, dim):
+            self.timerText(text, color: dim ? self.palette.textDim : self.palette.text)
+        case let .countdown(drain):
+            TimelineView(.animation(minimumInterval: 0.05, paused: !drain.isRunning)) { context in
+                self.timerText(
+                    String(format: "%.1f", drain.remaining(at: context.date)),
+                    color: drain.isCanceled ? self.palette.text : self.palette.accent
+                )
+            }
         }
     }
 
-    private func timerText(_ text: String) -> some View {
+    private func timerText(_ text: String, color: Color) -> some View {
         Text(text)
             .font(SignalTheme.Typography.timer.font)
             .monospacedDigit()
-            .foregroundStyle(self.palette.text)
+            .foregroundStyle(color)
             .lineLimit(1)
-            .accessibilityLabel("Recording length \(text)")
+            .accessibilityLabel(text)
     }
 }
 
 /// The microphone, mono uppercase, bottom-centre, the same in every visible state.
 struct SignalMicRow: View {
     let text: String
+    /// NO MICROPHONE reads in full ink.
+    var isEmphasized = false
     @Environment(\.signalPalette) private var palette
 
     var body: some View {
-        SignalMonoLabel(text: self.text, role: SignalTheme.Typography.micLabel, color: self.palette.text2)
+        SignalMonoLabel(
+            text: self.text,
+            role: SignalTheme.Typography.micLabel,
+            color: self.isEmphasized ? self.palette.text : self.palette.text2
+        )
             .truncationMode(.tail)
             .frame(maxWidth: .infinity)
             .frame(height: SignalTheme.Metrics.micRowHeight)

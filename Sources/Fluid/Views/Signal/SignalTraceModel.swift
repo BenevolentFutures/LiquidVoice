@@ -28,7 +28,7 @@ final class SignalTraceModel {
     static let floor = SignalTheme.Metrics.minBarHeight
     static let ceiling = SignalTheme.Metrics.maxBarHeight
 
-    init(barCount: Int = 52, noiseThreshold: CGFloat = 0.4) {
+    init(barCount: Int = 39, noiseThreshold: CGFloat = 0.4) {
         self.barCount = barCount
         self.noiseThreshold = noiseThreshold
         self.previous = Array(repeating: Self.floor, count: barCount)
@@ -129,13 +129,15 @@ final class SignalTraceModel {
         self.lastPush = now
     }
 
-    /// The four printed opacity steps by age (0 = newest).
-    static func bandOpacity(age: Int) -> Double {
-        switch age {
-        case ..<18: 1
-        case ..<29: 0.7
-        case ..<40: 0.45
-        default: 0.25
+    /// The four printed opacity steps by age (0 = newest), as fractions of the trace so a shorter
+    /// trace keeps the same proportions (round 5: 39 bars).
+    static func bandOpacity(age: Int, of count: Int) -> Double {
+        let fraction = Double(age) / Double(max(count, 1))
+        switch fraction {
+        case ..<0.34: return 1
+        case ..<0.56: return 0.7
+        case ..<0.77: return 0.45
+        default: return 0.25
         }
     }
 

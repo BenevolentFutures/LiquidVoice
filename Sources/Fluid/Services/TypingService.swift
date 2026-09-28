@@ -563,6 +563,39 @@ final class TypingService {
         DeliveryFailureOverlayController.shared.show(report)
     }
 
+    /// Where a dictation's delivery outcome goes, on the main actor: the overlay's delivered hold.
+    /// Only deliveries that carry a stop-path trace (dictations) report one. Tests replace it.
+    static var dictationOutcomeHandler: (DictationDeliveryOutcome) -> Void = { outcome in
+        BottomOverlayWindowController.shared.dictationDeliveryFinished(outcome)
+    }
+
+    /// Reports `result` for the dictation traced by `stopTrace`, on the main actor.
+    nonisolated static func reportDictationOutcome(
+        _ result: TextDeliveryResult,
+        path: InsertionPath?,
+        sendKey: SendKeyOutcome?,
+        stopTrace: StopPathTrace?
+    ) {
+        guard let stopTrace else { return }
+        let outcome = DictationDeliveryOutcome(
+            traceID: stopTrace.id,
+            result: result,
+            method: path.map(Self.deliveryMethod),
+            sentReturn: sendKey == .sent
+        )
+        Task { @MainActor in
+            TypingService.dictationOutcomeHandler(outcome)
+        }
+    }
+
+    nonisolated static func deliveryMethod(for path: InsertionPath) -> DictationDeliveryOutcome.Method {
+        switch path {
+        case .clipboardToPID, .clipboardGlobal, .menuPaste: .paste
+        case .directToPID, .directHID, .characterByCharacter: .keystrokes
+        case .accessibility: .accessibility
+        }
+    }
+
     /// Keeps the transcript and tells the user. Safe to call from any thread.
     ///
     /// The transcript is put on the clipboard as an ordinary copy (it is already in history),
@@ -654,6 +687,7 @@ final class TypingService {
             self.decision("request_return reason=empty_text")
             self.log("[TypingService] ERROR: Empty text provided, aborting")
             stopTrace?.finish(outcome: TextDeliveryFailure.emptyText.rawValue)
+            Self.reportDictationOutcome(.recoverableFailure(.emptyText), path: nil, sendKey: nil, stopTrace: stopTrace)
             completion?(.recoverableFailure(.emptyText))
             if sendKey != nil { onSendKey?(.textNotDelivered) }
             return
@@ -665,6 +699,7 @@ final class TypingService {
             self.log("[TypingService] ERROR: Accessibility permissions required for text injection")
             Self.reportDeliveryFailure(.accessibilityNotTrusted, transcript: text, inHistory: transcriptInHistory, pasteSession: self.pasteSession)
             stopTrace?.finish(outcome: TextDeliveryFailure.accessibilityNotTrusted.rawValue)
+            Self.reportDictationOutcome(.recoverableFailure(.accessibilityNotTrusted), path: nil, sendKey: nil, stopTrace: stopTrace)
             completion?(.recoverableFailure(.accessibilityNotTrusted))
             if sendKey != nil { onSendKey?(.textNotDelivered) }
             return
@@ -686,6 +721,7 @@ final class TypingService {
 
             var result: TextDeliveryResult = .recoverableFailure(.targetUnavailable)
             var sendKeyOutcome: SendKeyOutcome = .textNotDelivered
+            var deliveredPath: InsertionPath?
             defer {
                 let completedAt = ProcessInfo.processInfo.systemUptime
                 self.pendingCountLock.lock()
@@ -697,6 +733,12 @@ final class TypingService {
                 )
                 self.log("[TypingService] Typing operation completed")
                 let finalResult = result
+                Self.reportDictationOutcome(
+                    finalResult,
+                    path: deliveredPath,
+                    sendKey: sendKey == nil ? nil : sendKeyOutcome,
+                    stopTrace: stopTrace
+                )
                 if let completion {
                     Task { @MainActor in completion(finalResult) }
                 }
@@ -734,6 +776,7 @@ final class TypingService {
                 )
             }
             result = delivery.result
+            deliveredPath = delivery.path
             sendKeyOutcome = delivery.sendKey ?? .textNotDelivered
             switch result {
             case .dispatched:
@@ -883,7 +926,7 @@ final class TypingService {
         verifiesLanding: Bool,
         transcriptInHistory: Bool,
         sendKey: SendKeyRequest? = nil
-    ) -> (result: TextDeliveryResult, sendKey: SendKeyOutcome?) {
+    ) -> (result: TextDeliveryResult, sendKey: SendKeyOutcome?, path: InsertionPath?) {
         let terminalPID = self.ghosttyTargetPID(preferredTargetPID: preferredTargetPID)
         let route = DeliveryRoute.decide(
             isTerminal: terminalPID != nil,
@@ -918,7 +961,7 @@ final class TypingService {
             let assessment = DeliveryTargetAssessment.assessFocusedElement(messagingTimeout: Self.axMessagingTimeoutSeconds)
             self.decision("focus_assess \(assessment.logDescription) elapsedMs=\(Self.elapsedMs(since: assessStartedAt))")
             if assessment.isCertainlyNotEditable {
-                return (.recoverableFailure(.noEditableTarget), sendKey.map { _ in .textNotDelivered })
+                return (.recoverableFailure(.noEditableTarget), sendKey.map { _ in .textNotDelivered }, nil)
             }
         } else {
             self.decision("focus_assess skipped reason=terminal_target")
@@ -953,7 +996,7 @@ final class TypingService {
         switch outcome {
         case let .failed(failure):
             self.decision("insert_path path=none failure=\(failure.rawValue)")
-            return (.recoverableFailure(failure), sendKey.map { _ in .textNotDelivered })
+            return (.recoverableFailure(failure), sendKey.map { _ in .textNotDelivered }, nil)
         case let .dispatched(path):
             self.decision("insert_path path=\(path.rawValue)")
             if path.usesClipboard, let verificationBaseline {
@@ -966,12 +1009,12 @@ final class TypingService {
                     pasteSession: self.pasteSession
                 )
             }
-            guard let sendKey, let sendStep else { return (.dispatched, sendKeyOutcome) }
+            guard let sendKey, let sendStep else { return (.dispatched, sendKeyOutcome, path) }
             if terminalPID != nil {
                 // The terminal paste pressed the key after its V key-up, or refused to.
-                return (.dispatched, terminalSendKeyOutcome ?? .eventsUnavailable)
+                return (.dispatched, terminalSendKeyOutcome ?? .eventsUnavailable, path)
             }
-            return (.dispatched, Self.pressSendKeyInApp(sendStep, target: sendKey.target, focusAtPaste: focusAtPaste ?? .unreadable))
+            return (.dispatched, Self.pressSendKeyInApp(sendStep, target: sendKey.target, focusAtPaste: focusAtPaste ?? .unreadable), path)
         }
     }
 

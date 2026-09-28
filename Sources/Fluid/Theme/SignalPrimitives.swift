@@ -103,17 +103,18 @@ extension View {
 
 // MARK: - Card buttons
 
-/// The failed card's primary action: a solid orange 88 x 28 square ("Copy"). Its confirmation
-/// ("✓ Copied") swaps in at the same width. Pressed, it inverts.
+/// A recovery card's primary action (DESIGN.md §15): a solid orange square button, at least
+/// 88 x 28, 12 pt side padding. A copy confirmation swaps in at the same width. Pressed, it inverts.
 struct SignalPrimaryButtonStyle: ButtonStyle {
-    var width: CGFloat = SignalTheme.Metrics.copyButtonWidth
     @Environment(\.signalPalette) private var palette
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(SignalTheme.Typography.button.font)
             .foregroundStyle(configuration.isPressed ? self.palette.invForeground : self.palette.onAccent)
-            .frame(width: self.width, height: SignalTheme.Metrics.buttonHeight)
+            .padding(.horizontal, 12)
+            .frame(minWidth: SignalTheme.Metrics.copyButtonWidth)
+            .frame(height: SignalTheme.Metrics.buttonHeight)
             .background(configuration.isPressed ? self.palette.invBackground : self.palette.accent)
             .contentShape(Rectangle())
             .animation(.linear(duration: SignalTheme.Motion.chipPress), value: configuration.isPressed)

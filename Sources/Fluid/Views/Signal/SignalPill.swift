@@ -9,6 +9,7 @@ struct SignalPill<Top: View>: View {
     let topHeight: CGFloat
     let traceRow: SignalTraceRow
     let micText: String
+    var micEmphasized = false
     var marksFailure = false
     var isBracketVisible = false
     @ViewBuilder let top: Top
@@ -25,7 +26,7 @@ struct SignalPill<Top: View>: View {
             }
             self.traceRow
             Color.clear.frame(height: metrics.micGap)
-            SignalMicRow(text: self.micText)
+            SignalMicRow(text: self.micText, isEmphasized: self.micEmphasized)
                 .frame(width: self.geometry.innerWidth)
         }
         .padding(.top, metrics.pillPaddingTop)

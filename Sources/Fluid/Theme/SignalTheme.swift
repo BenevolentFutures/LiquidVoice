@@ -152,6 +152,8 @@ enum SignalTheme {
         static let timer = TypeRole(size: 15, weight: .semibold, isMono: true, lineHeight: 18, tracking: 0)
         /// The microphone, bottom-centre of the pill.
         static let micLabel = TypeRole(size: 10.5, weight: .medium, isMono: true, lineHeight: 13, tracking: 0.63)
+        /// Spoken Send's placard: "SEND" / "NO SEND" (round 5).
+        static let placard = TypeRole(size: 10.5, weight: .semibold, isMono: true, lineHeight: 14, tracking: 0.63)
         /// "118 WORDS", "0:41 · 118 WORDS · C11".
         static let meta = TypeRole(size: 10.5, weight: .medium, isMono: true, lineHeight: 15, tracking: 0.63)
         /// History index "01".
@@ -169,6 +171,8 @@ enum SignalTheme {
         /// Transcripts in the failed card and the history card.
         static let transcript = TypeRole(size: 13, weight: .regular, isMono: false, lineHeight: 17, tracking: 0)
         static let historyTranscript = TypeRole(size: 13, weight: .regular, isMono: false, lineHeight: 18, tracking: 0)
+        /// A recovery card's reason line: at most two lines.
+        static let reason = TypeRole(size: 13, weight: .regular, isMono: false, lineHeight: 17, tracking: 0)
         /// Copy (semibold) and Dismiss (medium) in the failed card.
         static let button = TypeRole(size: 13, weight: .semibold, isMono: false, lineHeight: 28, tracking: 0)
         static let textButton = TypeRole(size: 13, weight: .medium, isMono: false, lineHeight: 28, tracking: 0)
@@ -207,6 +211,17 @@ enum SignalTheme {
         static let recordSquare: CGFloat = 6
         static let recordSquareOutline: CGFloat = 1.5
         static let readoutGap: CGFloat = 4
+        /// Spoken Send's placard (round 5): 10 pt after the icon to the trace, at least 8 pt from
+        /// the trace to the placard, 6 pt from the placard to the square.
+        static let traceLeadingGap: CGFloat = 10
+        static let placardLeadingGap: CGFloat = 8
+        static let placardTrailingGap: CGFloat = 6
+        /// The placard's reserved width: "NO SEND", seven SF Mono characters with their tracking.
+        static let placardWidth: CGFloat = {
+            let role = Typography.placard
+            let advance = ("0" as NSString).size(withAttributes: [.font: role.nsFont]).width
+            return advance * 7 + role.tracking * 6
+        }()
 
         // Voice trace.
         static let barWidth: CGFloat = 2
@@ -243,7 +258,7 @@ enum SignalTheme {
         static let timerBoxWidth: CGFloat = {
             let font = Typography.timer.nsFont
             let advance = ("0" as NSString).size(withAttributes: [.font: font]).width
-            return ceil(advance * 5)
+            return advance * 5
         }()
     }
 

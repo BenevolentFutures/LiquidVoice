@@ -32,6 +32,10 @@ final class SignalOverlayModel: ObservableObject {
     @Published var microphoneName = ""
     /// Fading out (120 ms linear); controls are inert.
     @Published private(set) var isFading = false
+    /// Spoken Send's quiet countdown while it runs, or where a cancel stopped it (held 700 ms).
+    @Published private(set) var sendDrain: SignalDrain?
+    /// Spoken Send's placard as the recording stopped; the post-stop states keep showing it.
+    @Published private(set) var stopPlacard: SignalPlacard = .none
 
     private(set) var trace = SignalTraceModel()
 
@@ -61,6 +65,8 @@ final class SignalOverlayModel: ObservableObject {
     }
 
     func beginRecording(at date: Date = Date(), noiseThreshold: CGFloat) {
+        self.sendDrain = nil
+        self.stopPlacard = .none
         self.trace.noiseThreshold = noiseThreshold
         self.trace.begin(at: date.timeIntervalSinceReferenceDate)
         self.recordingStartedAt = date
@@ -71,8 +77,10 @@ final class SignalOverlayModel: ObservableObject {
     }
 
     /// Input closed: freeze the timer and the preview, flatten the trace (60 ms).
-    func stopRecording(at date: Date = Date(), preview: String) {
+    func stopRecording(at date: Date = Date(), preview: String, placard: SignalPlacard = .none) {
         guard self.phase == .listening else { return }
+        self.sendDrain = nil
+        self.stopPlacard = placard
         self.trace.stop(at: date.timeIntervalSinceReferenceDate)
         let duration = self.recordingStartedAt.map { max(0, date.timeIntervalSince($0)) } ?? 0
         self.frozenDuration = duration
@@ -97,7 +105,38 @@ final class SignalOverlayModel: ObservableObject {
     }
 
     func showDelivered(_ delivery: SignalDelivery) {
+        // "Sent" clears the placard; a canceled send or a terminal without Return keeps it.
+        if delivery.sentReturn || self.stopPlacard == .send {
+            self.stopPlacard = .none
+        }
         self.phase = .delivered(delivery)
+    }
+
+    // MARK: Spoken Send (DESIGN.md §15)
+
+    /// The placard for Spoken Send's current state.
+    static func placard(indicator: SpokenSendController.Indicator, sendsInApp: Bool) -> SignalPlacard {
+        switch indicator {
+        case .hidden: .none
+        case .armed, .countingDown: sendsInApp ? .send : .noReturn
+        case .canceled: .noSend
+        }
+    }
+
+    func startSendCountdown(duration: TimeInterval, at date: Date = Date()) {
+        guard self.phase == .listening else { return }
+        self.sendDrain = SignalDrain(startedAt: date, duration: duration)
+    }
+
+    /// A cancel stops the drain bar in ink where it was.
+    func freezeSendCountdown(at date: Date = Date()) {
+        guard var drain = self.sendDrain, !drain.isCanceled else { return }
+        drain.frozenRemaining = drain.remaining(at: date)
+        self.sendDrain = drain
+    }
+
+    func clearSendCountdown() {
+        if self.sendDrain != nil { self.sendDrain = nil }
     }
 
     func beginFading() {
@@ -106,6 +145,8 @@ final class SignalOverlayModel: ObservableObject {
 
     /// Hidden: nothing to show until the next presentation.
     func reset() {
+        self.sendDrain = nil
+        self.stopPlacard = .none
         self.trace.flatten()
         self.isFading = false
         self.phase = .idle
@@ -131,34 +172,38 @@ final class SignalOverlayModel: ObservableObject {
     }
 }
 
-/// What the delivered state says. The c11 paste is posted, never read back, so the headline
-/// only claims what happened on each path (provisional, awaiting round 5: DESIGN.md's "Delivered
-/// to c11" would overclaim).
+/// What the outcome state says (DESIGN.md §9.4, §15). The paste is posted, never read back, so
+/// the headline names the action taken on each path and claims nothing more.
 struct SignalDelivery: Equatable {
-    enum Proof: Equatable {
-        /// Cmd+V or keystrokes were posted to the app; nothing read the text back.
-        case posted
+    enum Method: Equatable {
+        /// Cmd+V was posted to the app (c11 and Ghostty always).
+        case paste
+        /// Keystrokes were posted to the app.
+        case keystrokes
         /// The Accessibility API accepted the text as the field's value.
-        case inserted
-        /// A read-back found the text in the field.
-        case verified
+        case accessibility
     }
 
     let appName: String?
     let words: Int
-    let proof: Proof
+    let method: Method
+    /// Spoken Send pressed Return after the text: the outcome is "Sent".
+    let sentReturn: Bool
 
     var headline: String {
-        let target = self.appName.map { " \($0)" } ?? ""
-        switch self.proof {
-        case .posted: return self.appName == nil ? "Sent" : "Sent to\(target)"
-        case .inserted: return self.appName == nil ? "Inserted" : "Inserted into\(target)"
-        case .verified: return self.appName == nil ? "Delivered" : "Delivered to\(target)"
+        let app = self.appName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let target = app.flatMap { $0.isEmpty ? nil : $0 }
+        if self.sentReturn { return target.map { "Sent to \($0)" } ?? "Sent" }
+        switch self.method {
+        case .paste: return target.map { "Pasted into \($0)" } ?? "Pasted"
+        case .keystrokes: return target.map { "Typed into \($0)" } ?? "Typed"
+        case .accessibility: return target.map { "Inserted into \($0)" } ?? "Inserted"
         }
     }
 
     var meta: String {
-        "\(self.words) \(self.words == 1 ? "word" : "words")"
+        let words = "\(self.words) \(self.words == 1 ? "word" : "words")"
+        return self.sentReturn ? words + " · Return" : words
     }
 }
 
@@ -212,11 +257,12 @@ struct SignalOverlayGeometry: Equatable {
         self.metrics.recordSquare + self.metrics.readoutGap + self.metrics.timerBoxWidth
     }
 
-    /// Bars that fit between the icon and the readout, leaving at least 10 pt either side: 52 in
-    /// the 340 pill, as in the prototype (SF Mono's timer box is 47 pt, Menlo's 45).
+    /// Bars that fit the row `[icon 20] 10 [trace] >=8 [placard] 6 [readout]` (DESIGN.md §15): 39
+    /// in the 340 pill, 3.25 s of history.
     var traceBars: Int {
-        let available = self.innerWidth - self.metrics.targetIcon - self.readoutWidth - 20
-        return SignalTraceModel.barCount(forWidth: available)
+        let fixed = self.metrics.targetIcon + self.metrics.traceLeadingGap + self.metrics.placardLeadingGap
+            + self.metrics.placardWidth + self.metrics.placardTrailingGap + self.readoutWidth
+        return SignalTraceModel.barCount(forWidth: self.innerWidth - fixed)
     }
 
     /// Rails are the pill's height and hold three 30 pt slots.

@@ -481,9 +481,16 @@ final class BottomOverlayWindowController {
         let screen = self.targetScreen ?? window.screen ?? OverlayScreenResolver.screenForCurrentPointer()
         guard let screen = screen else { return }
 
+        // Apply position directly to avoid implicit frame animations during hover-driven resizes.
+        window.setFrameOrigin(Self.anchoredOrigin(for: window.frame.size, on: screen))
+    }
+
+    /// Where a window of `size` sits when anchored like the overlay: the user's dragged spot
+    /// (center-x, bottom edge) or the default bottom-center offset, clamped into the visible
+    /// frame. The delivery failure card uses it so it appears where the overlay was.
+    static func anchoredOrigin(for windowSize: NSSize, on screen: NSScreen) -> NSPoint {
         let fullFrame = screen.frame
         let visibleFrame = screen.visibleFrame
-        let windowSize = window.frame.size
 
         let x: CGFloat
         var y: CGFloat
@@ -507,9 +514,7 @@ final class BottomOverlayWindowController {
 
         y = max(min(y, maxY), minY)
         let clampedX = max(min(x, visibleFrame.maxX - windowSize.width), visibleFrame.minX)
-
-        // Apply position directly to avoid implicit frame animations during hover-driven resizes.
-        window.setFrameOrigin(NSPoint(x: clampedX, y: y))
+        return NSPoint(x: clampedX, y: y)
     }
 
     // MARK: - User-dragged position
@@ -518,7 +523,7 @@ final class BottomOverlayWindowController {
     /// `x` is the window's center-x, `y` the window's bottom edge. Fractional storage keeps
     /// the anchor meaningful across displays of different sizes; `positionWindow` clamps the
     /// result into the visible frame, so a vanished display falls back safely on-screen.
-    private var savedDragPositionFractions: (x: CGFloat, y: CGFloat)? {
+    private static var savedDragPositionFractions: (x: CGFloat, y: CGFloat)? {
         let defaults = UserDefaults.standard
         guard let x = defaults.object(forKey: Self.dragPositionXFractionKey) as? Double,
               let y = defaults.object(forKey: Self.dragPositionYFractionKey) as? Double
@@ -532,6 +537,15 @@ final class BottomOverlayWindowController {
     /// The live window origin, exposed for the view's drag gesture.
     var frameOriginForDrag: NSPoint? {
         self.window?.frame.origin
+    }
+
+    /// The overlay's on-screen frame while it is presented, else nil. Lets another panel
+    /// (the delivery failure card) sit clear of it.
+    var presentedFrame: NSRect? {
+        guard NotchContentState.shared.isBottomOverlayPresented, let window = self.window, window.isVisible else {
+            return nil
+        }
+        return window.frame
     }
 
     /// Follows the pointer during a drag. Free-form on purpose: clamping happens on

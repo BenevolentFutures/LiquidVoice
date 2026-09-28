@@ -651,8 +651,19 @@ struct SettingsView: View {
                                             }
                                         }
                                         .pickerStyle(.menu)
-                                        .frame(width: 170, alignment: .trailing)
+                                        .fixedSize(horizontal: true, vertical: false)
+                                        .frame(minWidth: 170, alignment: .trailing)
                                     }
+                                    Divider().opacity(0.2)
+
+                                    self.optionToggleRow(
+                                        title: "Return to Starting Field",
+                                        description: "Paste dictation into the field where you started recording, even if you switch apps. When off, it lands where your cursor is when you stop.",
+                                        isOn: Binding(
+                                            get: { self.settings.returnDictationToStartingField },
+                                            set: { self.settings.returnDictationToStartingField = $0 }
+                                        )
+                                    )
                                     Divider().opacity(0.2)
 
                                     self.optionToggleRow(
@@ -892,6 +903,17 @@ struct SettingsView: View {
                                             MicrophoneChangeOverlayController.shared.hide()
                                         }
                                     }
+                                )
+                            )
+
+                            Divider().opacity(0.2)
+
+                            self.optionToggleRow(
+                                title: "Paste Check",
+                                description: "Show a card when Liquid Voice can't confirm that pasted text landed. Failures it can see for certain always show a card.",
+                                isOn: Binding(
+                                    get: { self.settings.showPasteCheckAlerts },
+                                    set: { self.settings.showPasteCheckAlerts = $0 }
                                 )
                             )
                         }

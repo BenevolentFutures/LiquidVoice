@@ -4983,11 +4983,19 @@ final class ASRService: ObservableObject {
         self.typeOutputPlanToActiveField(.plain(text), preferredTargetPID: preferredTargetPID, textReadyAt: textReadyAt)
     }
 
+    /// - Parameters:
+    ///   - verifiesLanding: pass `false` when a send key follows the paste (see
+    ///     `TypingService.typeOutputPlanInstantly`).
+    ///   - completion: the delivery result, on the main actor. Failures are already shown to
+    ///     the user and the transcript kept on the clipboard by the time it runs.
     func typeOutputPlanToActiveField(
         _ plan: DictationLiteralOutputPlan,
         preferredTargetPID: pid_t?,
         textReadyAt: TimeInterval? = nil,
-        tracksDictionaryCorrections: Bool = false
+        tracksDictionaryCorrections: Bool = false,
+        verifiesLanding: Bool = true,
+        transcriptInHistory: Bool = false,
+        completion: ((TextDeliveryResult) -> Void)? = nil
     ) {
         let requestedAt = ProcessInfo.processInfo.systemUptime
         let textReadyAge = textReadyAt.map { Int(((requestedAt - $0) * 1000).rounded()) }
@@ -5001,7 +5009,10 @@ final class ASRService: ObservableObject {
             plan,
             preferredTargetPID: preferredTargetPID,
             textReadyAt: textReadyAt,
-            tracksDictionaryCorrections: tracksDictionaryCorrections
+            tracksDictionaryCorrections: tracksDictionaryCorrections,
+            verifiesLanding: verifiesLanding,
+            transcriptInHistory: transcriptInHistory,
+            completion: completion
         )
         let dispatchedAt = ProcessInfo.processInfo.systemUptime
         let textReadyToDispatchMs = textReadyAt.map {

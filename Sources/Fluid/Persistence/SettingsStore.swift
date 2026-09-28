@@ -3147,6 +3147,31 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    /// Whether a card is shown when a paste could not be confirmed in the target field.
+    /// Off by default: the read-back is a guess, and a wrong guess interrupts for nothing.
+    /// Ported from altic-dev/FluidVoice@b1d14044 (make the paste check card opt-in).
+    var showPasteCheckAlerts: Bool {
+        get {
+            let value = self.defaults.object(forKey: Keys.showPasteCheckAlerts)
+            return value as? Bool ?? false
+        }
+        set {
+            objectWillChange.send()
+            self.defaults.set(newValue, forKey: Keys.showPasteCheckAlerts)
+        }
+    }
+
+    /// Opt in to sending dictation back to the field where recording started, even after
+    /// switching apps. Off by default: dictation lands where the cursor is when you stop.
+    /// Ported from altic-dev/FluidVoice@adf0216e (make starting-field restoration optional).
+    var returnDictationToStartingField: Bool {
+        get { self.defaults.bool(forKey: Keys.returnDictationToStartingField) }
+        set {
+            objectWillChange.send()
+            self.defaults.set(newValue, forKey: Keys.returnDictationToStartingField)
+        }
+    }
+
     func makeBackupPayload() -> SettingsBackupPayload {
         SettingsBackupPayload(
             selectedProviderID: self.selectedProviderID,
@@ -3215,6 +3240,8 @@ final class SettingsStore: ObservableObject {
             audioHistoryBudgetGB: self.audioHistoryBudgetGB,
             notifyAIProcessingFailures: self.notifyAIProcessingFailures,
             showMicrophoneChangeAlerts: self.showMicrophoneChangeAlerts,
+            showPasteCheckAlerts: self.showPasteCheckAlerts,
+            returnDictationToStartingField: self.returnDictationToStartingField,
             weekendsDontBreakStreak: self.weekendsDontBreakStreak,
             fillerWords: self.fillerWords,
             removeFillerWordsEnabled: self.removeFillerWordsEnabled,
@@ -3350,6 +3377,12 @@ final class SettingsStore: ObservableObject {
         }
         if let showMicrophoneChangeAlerts = payload.showMicrophoneChangeAlerts {
             self.showMicrophoneChangeAlerts = showMicrophoneChangeAlerts
+        }
+        if let showPasteCheckAlerts = payload.showPasteCheckAlerts {
+            self.showPasteCheckAlerts = showPasteCheckAlerts
+        }
+        if let returnDictationToStartingField = payload.returnDictationToStartingField {
+            self.returnDictationToStartingField = returnDictationToStartingField
         }
         self.weekendsDontBreakStreak = payload.weekendsDontBreakStreak
         self.fillerWords = payload.fillerWords
@@ -5190,6 +5223,8 @@ private extension SettingsStore {
         // Keep the original persisted key so existing installs migrate in place.
         static let microphoneSelectionMigrationVersion = "AppOnlyMicrophoneSelectionMigrationVersion"
         static let showMicrophoneChangeAlerts = "ShowMicrophoneChangeAlerts"
+        static let showPasteCheckAlerts = "ShowPasteCheckAlerts"
+        static let returnDictationToStartingField = "ReturnDictationToStartingField"
         static let visualizerNoiseThreshold = "VisualizerNoiseThreshold"
         static let launchAtStartup = "LaunchAtStartup"
         static let showInDock = "ShowInDock"
@@ -5356,9 +5391,9 @@ extension SettingsStore {
         var description: String {
             switch self {
             case .standard:
-                return "Fastest path. Inserts text without changing the clipboard, with paste fallback if direct insertion is unavailable."
+                return "Fastest path. Inserts text without changing the clipboard, with paste fallback if direct insertion is unavailable. Terminals like c11 and Ghostty always use Clipboard Paste."
             case .reliablePaste:
-                return "Compatibility path. Uses a temporary clipboard paste and restores your previous clipboard after insertion."
+                return "Compatibility path. Uses a temporary clipboard paste, hidden from clipboard managers, and restores your previous clipboard (including images and files) after insertion."
             }
         }
     }

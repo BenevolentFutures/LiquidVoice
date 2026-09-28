@@ -248,6 +248,9 @@ struct ContentView: View {
     @State private var previousSidebarItem: SidebarItem? = nil // Track previous for mode transitions
     @State private var playgroundUsed: Bool = SettingsStore.shared.playgroundUsed
     @State private var recordingAppInfo: (name: String, bundleId: String, windowTitle: String)? = nil
+    /// The focused field when recording started; the destination when "Return to Starting
+    /// Field" is on, or when Liquid Voice's own UI holds focus at stop.
+    @State private var recordingStartTarget: DictationTarget? = nil
     @State private var recordingPrecedingText: String = ""
 
     // Command Mode State
@@ -1654,6 +1657,16 @@ struct ContentView: View {
         let focusedPID = TypingService.captureSystemFocusedPID()
             ?? NSWorkspace.shared.frontmostApplication?.processIdentifier
         NotchContentState.shared.recordingTargetPID = focusedPID
+        // When the focused field can't be read, keep the app itself as the starting target.
+        let capturedStart = TypingService.lastCapturedDictationTarget()
+        self.recordingStartTarget = capturedStart?.pid == focusedPID ? capturedStart : focusedPID.map {
+            DictationTarget(
+                pid: $0,
+                bundleIdentifier: NSRunningApplication(processIdentifier: $0)?.bundleIdentifier,
+                window: nil,
+                element: nil
+            )
+        }
 
         let info = self.getCurrentAppInfo()
         self.recordingAppInfo = info
@@ -1680,6 +1693,31 @@ struct ContentView: View {
     private func captureRecordingContext() {
         self.captureRecordingTargetContext()
         self.captureRecordingFormattingContextIfNeeded()
+    }
+
+    /// Starts capturing the dictation destination as dictation stops (see
+    /// `DictationTargetPolicy`). The settings and the starting target are read now; only the
+    /// Accessibility read of the focused field runs in the background.
+    private func beginDictationStopTargetCapture() -> Task<DictationTarget?, Never> {
+        let original = self.recordingStartTarget
+        let returnToStartingField = self.settings.returnDictationToStartingField
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        let ownFocusIsOverlay = NSApp.keyWindow == nil || NSApp.keyWindow is NSPanel
+        return Task.detached(priority: .userInitiated) {
+            let startedAt = ProcessInfo.processInfo.systemUptime
+            let target = DictationTargetPolicy.selectStopTarget(
+                current: TypingService.captureDictationTarget(),
+                original: original,
+                returnToStartingField: returnToStartingField,
+                ownPID: ownPID,
+                ownFocusIsOverlay: ownFocusIsOverlay
+            )
+            DeliveryLog.bench(
+                "stop_target_capture pid=\(target.map { String($0.pid) } ?? "nil") element=\(target?.element != nil) " +
+                    "elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))"
+            )
+            return target
+        }
     }
 
     private func resolveTypingTargetPID() -> (pid: pid_t?, shouldRestoreOriginalFocus: Bool) {
@@ -2035,6 +2073,12 @@ struct ContentView: View {
             !promptTest.isActive &&
             !shouldUseAIOnStop
         var didRequestOverlayHideOnStop = false
+        // Where the text lands is decided now, before transcription finishes, so switching
+        // apps while it completes cannot redirect it (ported from altic-dev/FluidVoice@5a67d658).
+        // The Accessibility read runs off the main thread and never delays the stop.
+        let stopTargetCapture: Task<DictationTarget?, Never>? = route == .normal && !wasRewriteMode && !wasCommandMode && !promptTest.isActive
+            ? self.beginDictationStopTargetCapture()
+            : nil
         DebugLogger.shared.info(
             "Routing decision snapshot | activeMode=\(modeAtStop.rawValue) | rewrite=\(wasRewriteMode) | command=\(wasCommandMode) | overlay=\(NotchContentState.shared.mode.rawValue)",
             source: "ContentView"
@@ -2308,7 +2352,11 @@ struct ContentView: View {
 
         let frontmostApp = NSWorkspace.shared.frontmostApplication
         let frontmostName = frontmostApp?.localizedName ?? "Unknown"
-        let isFluidFrontmost = frontmostApp?.bundleIdentifier == Bundle.main.bundleIdentifier
+        let stopTarget = await stopTargetCapture?.value
+        // With a destination chosen at stop, clicking into Liquid Voice while it transcribes
+        // must not swallow the text: the stop target decides, not the app in front now.
+        let isFluidFrontmost = stopTarget.map { $0.pid == ProcessInfo.processInfo.processIdentifier }
+            ?? (frontmostApp?.bundleIdentifier == Bundle.main.bundleIdentifier)
 
         // Save to transcription history (transcription mode only, if enabled)
         if shouldPersistOutputs, SettingsStore.shared.saveTranscriptionHistory {
@@ -2332,14 +2380,15 @@ struct ContentView: View {
                 model: transcriptionModelInfo.model
             )
         }
-        // When FluidVoice itself is frontmost, the bound editor already receives `finalText`.
-        // Avoid re-inserting or overwriting the clipboard in that self-target case.
+        // "Copy to Clipboard" is a backup the user asked for, so it applies even when Liquid Voice
+        // itself is frontmost and nothing is typed externally (ported from
+        // altic-dev/FluidVoice@7d6d0e7c).
         let shouldCopyToClipboard = shouldPersistOutputs &&
-            SettingsStore.shared.copyTranscriptionToClipboard &&
-            !isFluidFrontmost
+            SettingsStore.shared.copyTranscriptionToClipboard
 
         if shouldCopyToClipboard {
-            ClipboardService.copyToClipboard(finalText)
+            // Through the paste session, so a clipboard restore still in flight cannot undo it.
+            ClipboardPasteSession.shared.keepTranscript(finalText)
         }
 
         var didTypeExternally = false
@@ -2351,21 +2400,39 @@ struct ContentView: View {
         )
 
         if shouldTypeExternally {
-            let typingTarget = self.resolveTypingTargetPID()
             // Dispatch insertion as soon as the destination app is ready; the
             // overlay hides asynchronously after output so it cannot delay paste.
-            if typingTarget.shouldRestoreOriginalFocus {
-                await self.restoreFocusToRecordingTarget()
+            let typingTargetPID: pid_t?
+            var isTargetReady = true
+            if let stopTarget, stopTarget.pid != ProcessInfo.processInfo.processIdentifier {
+                typingTargetPID = stopTarget.pid
+                let preparation = await TypingService.prepareTargetForDelivery(stopTarget)
+                isTargetReady = preparation.isReady
+                self.appBench("stop_target_prepare pid=\(stopTarget.pid) result=\(preparation.rawValue)")
+            } else {
+                let typingTarget = self.resolveTypingTargetPID()
+                typingTargetPID = typingTarget.pid
+                if typingTarget.shouldRestoreOriginalFocus {
+                    await self.restoreFocusToRecordingTarget()
+                }
             }
             self.appBench(
                 "text_ready_to_type_request elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - finalTextReadyAt) * 1000).rounded()))"
             )
-            self.asr.typeOutputPlanToActiveField(
-                finalOutputPlan,
-                preferredTargetPID: typingTarget.pid,
-                textReadyAt: finalTextReadyAt,
-                tracksDictionaryCorrections: true
-            )
+            let isInHistory = shouldPersistOutputs && SettingsStore.shared.saveTranscriptionHistory
+            if isTargetReady {
+                self.asr.typeOutputPlanToActiveField(
+                    finalOutputPlan,
+                    preferredTargetPID: typingTargetPID,
+                    textReadyAt: finalTextReadyAt,
+                    tracksDictionaryCorrections: true,
+                    transcriptInHistory: isInHistory
+                )
+            } else {
+                // The field chosen at stop could not be brought back. Typing into whatever
+                // has focus now could land the text in the wrong place, so keep it instead.
+                TypingService.reportDeliveryFailure(.targetRestoreFailed, transcript: finalText, inHistory: isInHistory)
+            }
             didTypeExternally = true
             if !shouldShowAIProcessingFailure, !didRequestOverlayHideOnStop {
                 self.hideOverlayAfterOutput()
@@ -2572,7 +2639,7 @@ struct ContentView: View {
                 bundleID: appInfo.bundleId,
                 windowTitle: appInfo.windowTitle
             )
-            self.asr.typeOutputPlanToActiveField(outputPlan, preferredTargetPID: typingTarget.pid)
+            self.asr.typeOutputPlanToActiveField(outputPlan, preferredTargetPID: typingTarget.pid, transcriptInHistory: true)
             DebugLogger.shared.info("Actions: Pasted latest transcription into focused field", source: "ContentView")
         }
     }
@@ -2668,7 +2735,8 @@ struct ContentView: View {
         let isFluidFrontmost = frontmostApp?.bundleIdentifier == Bundle.main.bundleIdentifier
 
         if SettingsStore.shared.copyTranscriptionToClipboard, !isFluidFrontmost {
-            ClipboardService.copyToClipboard(finalText)
+            // Through the paste session, so a clipboard restore still in flight cannot undo it.
+            ClipboardPasteSession.shared.keepTranscript(finalText)
         }
 
         let focusedPID = TypingService.captureSystemFocusedPID()
@@ -2683,7 +2751,9 @@ struct ContentView: View {
             }
             self.asr.typeOutputPlanToActiveField(
                 outputPlan,
-                preferredTargetPID: typingTarget.pid
+                preferredTargetPID: typingTarget.pid,
+                // The text comes from a history entry.
+                transcriptInHistory: true
             )
         }
     }
@@ -2781,7 +2851,8 @@ struct ContentView: View {
         }
 
         if SettingsStore.shared.copyTranscriptionToClipboard {
-            ClipboardService.copyToClipboard(finalText)
+            // Through the paste session, so a clipboard restore still in flight cannot undo it.
+            ClipboardPasteSession.shared.keepTranscript(finalText)
         }
 
         let focusedPID = TypingService.captureSystemFocusedPID()
@@ -2798,7 +2869,8 @@ struct ContentView: View {
             }
             self.asr.typeOutputPlanToActiveField(
                 outputPlan,
-                preferredTargetPID: typingTarget.pid
+                preferredTargetPID: typingTarget.pid,
+                transcriptInHistory: SettingsStore.shared.saveTranscriptionHistory
             )
         }
 
@@ -2833,7 +2905,8 @@ struct ContentView: View {
 
             // Copy to clipboard as backup
             if SettingsStore.shared.copyTranscriptionToClipboard {
-                ClipboardService.copyToClipboard(self.rewriteModeService.rewrittenText)
+                // Through the paste session, so a clipboard restore still in flight cannot undo it.
+                ClipboardPasteSession.shared.keepTranscript(self.rewriteModeService.rewrittenText)
             }
 
             // Type the rewritten text

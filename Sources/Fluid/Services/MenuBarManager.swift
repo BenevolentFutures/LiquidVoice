@@ -154,6 +154,9 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         }
 
         if isRunning {
+            // A new recording supersedes an earlier delivery failure card.
+            DeliveryFailureOverlayController.shared.hide()
+
             // Cancel any pending hide operation
             self.pendingHideOperation?.cancel()
             self.pendingHideOperation = nil

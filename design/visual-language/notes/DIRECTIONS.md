@@ -32,6 +32,10 @@ Atin chose **Signal**. He wants it to carry the "diagram aesthetic" he uses in S
 
 What round 2 adds: orange corner ticks as the recording frame while listening, SF Mono for every number and label, a graticule under the trace, bracketed chips as an option beside the keyed ones, the history card as an engineering table with a title-block footer, a bracketed menu bar mark. Two live toggles in the prototype (Density: Quiet | Drawn; Chips: Keys | Brackets) so Atin can compare in place.
 
+## Rounds 3 and 4, and the lock (2026-09-28)
+
+Round 3: corners became a hover affordance, the LISTENING strip went, the timer moved to the trace row opposite the app icon, the mic name went bottom-centre. Round 4: square corners throughout, brackets outside the box. Atin: "Awesome. This looks great. Let's go." **Design locked.** See `../DESIGN.md`.
+
 ## Decisions so far
 
 - Anatomy stays; the language changes. (Atin, round 1)

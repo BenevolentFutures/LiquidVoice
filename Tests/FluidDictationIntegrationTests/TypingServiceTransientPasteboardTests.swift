@@ -1139,7 +1139,7 @@ final class DeliveryFailureReportingTests: XCTestCase {
         let typing = TypingService(pasteSession: self.session)
         var result: TextDeliveryResult?
 
-        typing.typeOutputPlanInstantly(.plain("dictated words"), preferredTargetPID: nil, textReadyAt: nil) { result = $0 }
+        typing.typeOutputPlanInstantly(.plain("dictated words"), preferredTargetPID: nil, textReadyAt: nil, completion: { result = $0 })
         await self.waitForReports(1)
         self.session.waitUntilIdle()
 
@@ -1426,6 +1426,207 @@ final class TerminalPasteTests: XCTestCase {
         for failure in TextDeliveryFailure.allCases where failure != .clipboardSnapshotFailed && failure != .clipboardWriteFailed {
             XCTAssertFalse(TypingService.TerminalPaster.isClipboardRace(failure), failure.rawValue)
         }
+    }
+}
+
+// MARK: - Spoken Send in c11: the Return follows the paste, never without it
+
+/// What the fake terminal received, in order, from any thread.
+private final class TerminalEventLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var entries: [(event: String, at: TimeInterval)] = []
+    func append(_ event: String) {
+        let now = ProcessInfo.processInfo.systemUptime
+        self.lock.withLock { self.entries.append((event, now)) }
+    }
+
+    var events: [String] { self.lock.withLock { self.entries.map(\.event) } }
+    func time(of event: String) -> TimeInterval? { self.lock.withLock { self.entries.first { $0.event == event }?.at } }
+}
+
+final class TerminalPasteThenSendTests: XCTestCase {
+    private let terminalPID: pid_t = 4242
+    private var pasteboard: NSPasteboard!
+
+    override func setUp() {
+        super.setUp()
+        self.pasteboard = TypingServiceTransientPasteboardTests.makePasteboard()
+        self.pasteboard.setString("before", forType: .string)
+    }
+
+    override func tearDown() {
+        self.pasteboard.releaseGlobally()
+        super.tearDown()
+    }
+
+    private func makePaster(
+        _ session: ClipboardPasteSession,
+        log: TerminalEventLog,
+        pasteSucceeds: Bool = true,
+        broughtForward: CallCounter = CallCounter(),
+        isInFront: @escaping (pid_t) -> Bool
+    ) -> TypingService.TerminalPaster {
+        var paster = TypingService.TerminalPaster(session: session) { pid in
+            // Stands in for V down, 10 ms, V up posted to the PID.
+            log.append("paste \(pid)")
+            return pasteSucceeds
+        }
+        paster.isInFront = isInFront
+        paster.bringToFront = { _ in broughtForward.increment() }
+        paster.frontmostWaitLimit = 0.1
+        paster.pollInterval = 0.005
+        paster.retryDelay = 0
+        return paster
+    }
+
+    private func makeStep(log: TerminalEventLog, delay: TimeInterval = 0, modifiersReleased: Bool = true) -> SendKeyStep {
+        var step = SendKeyStep(key: .enter)
+        step.delay = delay
+        step.modifiersReleased = { modifiersReleased }
+        step.post = { pid, key in
+            log.append("key \(pid) \(key.rawValue)")
+            return true
+        }
+        return step
+    }
+
+    private func pasteThenSend(
+        _ paster: TypingService.TerminalPaster,
+        _ step: SendKeyStep
+    ) -> (failure: TextDeliveryFailure?, sendKey: SendKeyOutcome) {
+        paster.pasteThenSend("fix the typo", to: self.terminalPID, activateFirst: true, send: step, beforeDispatch: {}, makeConsumptionWait: { {} })
+    }
+
+    private func session(_ pasteboard: PasteboardManaging? = nil) -> ClipboardPasteSession {
+        ClipboardPasteSession(pasteboard: pasteboard ?? SystemPasteboardManager(pasteboard: self.pasteboard), label: "TerminalPasteThenSendTests")
+    }
+
+    func testTheReturnFollowsThePasteToTheSamePIDExactlyOnce() {
+        let session = self.session()
+        let log = TerminalEventLog()
+        let paster = self.makePaster(session, log: log) { _ in true }
+
+        let result = self.pasteThenSend(paster, self.makeStep(log: log, delay: 0.05))
+        session.waitUntilIdle()
+
+        XCTAssertNil(result.failure)
+        XCTAssertEqual(result.sendKey, .sent)
+        XCTAssertEqual(log.events, ["paste 4242", "key 4242 enter"], "Return strictly after the paste, to the same PID, once")
+        let gap = (log.time(of: "key 4242 enter") ?? 0) - (log.time(of: "paste 4242") ?? 0)
+        XCTAssertGreaterThanOrEqual(gap, 0.045, "the terminal gets time to take the paste in first")
+        XCTAssertEqual(self.pasteboard.string(forType: .string), "before", "the clipboard still comes back")
+    }
+
+    func testARefusedPasteSendsNoReturn() {
+        let session = self.session()
+        let log = TerminalEventLog()
+        let broughtForward = CallCounter()
+        let paster = self.makePaster(session, log: log, broughtForward: broughtForward) { _ in false }
+
+        let result = self.pasteThenSend(paster, self.makeStep(log: log))
+        session.waitUntilIdle()
+
+        XCTAssertEqual(result.failure, .targetRestoreFailed, "the caller shows the failure card")
+        XCTAssertEqual(result.sendKey, .textNotDelivered)
+        XCTAssertEqual(log.events, [])
+        XCTAssertEqual(broughtForward.count, 1)
+    }
+
+    func testATerminalLeavingAtDispatchGetsNeitherPasteNorReturn() {
+        let session = self.session()
+        let log = TerminalEventLog()
+        // In front until the transcript is on the clipboard, then gone (a Cmd-Tab mid-paste).
+        let paster = self.makePaster(session, log: log) { _ in self.pasteboard.string(forType: .string) != "fix the typo" }
+
+        let result = self.pasteThenSend(paster, self.makeStep(log: log))
+        session.waitUntilIdle()
+
+        XCTAssertEqual(result.failure, .targetRestoreFailed)
+        XCTAssertEqual(result.sendKey, .textNotDelivered)
+        XCTAssertEqual(log.events, [])
+        XCTAssertEqual(self.pasteboard.string(forType: .string), "before")
+    }
+
+    func testTheGateIsCheckedAgainBeforeTheReturn() {
+        let session = self.session()
+        let log = TerminalEventLog()
+        // In front for the paste, gone right after it (a Cmd-Tab between paste and Return).
+        let paster = self.makePaster(session, log: log) { _ in !log.events.contains("paste 4242") }
+
+        let result = self.pasteThenSend(paster, self.makeStep(log: log))
+        session.waitUntilIdle()
+
+        XCTAssertNil(result.failure, "the text landed")
+        XCTAssertEqual(result.sendKey, .targetNotInFront)
+        XCTAssertEqual(log.events, ["paste 4242"], "no Return into whatever is in front now")
+    }
+
+    func testAFailedPasteCommandSendsNoReturn() {
+        let session = self.session()
+        let log = TerminalEventLog()
+        let paster = self.makePaster(session, log: log, pasteSucceeds: false) { _ in true }
+
+        let result = self.pasteThenSend(paster, self.makeStep(log: log))
+        session.waitUntilIdle()
+
+        XCTAssertEqual(result.failure, .pasteCommandFailed)
+        XCTAssertEqual(result.sendKey, .textNotDelivered)
+        XCTAssertEqual(log.events, ["paste 4242"])
+    }
+
+    func testTheClipboardRaceRetryStillSendsOneReturn() {
+        let flaky = FlakySnapshotPasteboard(self.pasteboard, failures: 1)
+        let session = self.session(flaky)
+        let log = TerminalEventLog()
+        let paster = self.makePaster(session, log: log) { _ in true }
+
+        let result = self.pasteThenSend(paster, self.makeStep(log: log))
+        session.waitUntilIdle()
+
+        XCTAssertEqual(flaky.snapshotAttempts, 2, "the race was retried")
+        XCTAssertNil(result.failure)
+        XCTAssertEqual(result.sendKey, .sent)
+        XCTAssertEqual(log.events, ["paste 4242", "key 4242 enter"], "one paste, one Return")
+    }
+
+    func testAPersistentClipboardFailureSendsNoReturn() {
+        let flaky = FlakySnapshotPasteboard(self.pasteboard, failures: 10)
+        let session = self.session(flaky)
+        let log = TerminalEventLog()
+        let paster = self.makePaster(session, log: log) { _ in true }
+
+        let result = self.pasteThenSend(paster, self.makeStep(log: log))
+
+        XCTAssertEqual(result.failure, .clipboardSnapshotFailed)
+        XCTAssertEqual(result.sendKey, .textNotDelivered)
+        XCTAssertEqual(log.events, [])
+    }
+
+    func testAHeldModifierDropsTheReturnButNotTheText() {
+        let session = self.session()
+        let log = TerminalEventLog()
+        let paster = self.makePaster(session, log: log) { _ in true }
+
+        let result = self.pasteThenSend(paster, self.makeStep(log: log, modifiersReleased: false))
+        session.waitUntilIdle()
+
+        XCTAssertNil(result.failure)
+        XCTAssertEqual(result.sendKey, .modifiersHeld)
+        XCTAssertEqual(log.events, ["paste 4242"])
+    }
+
+    func testThePhraseOnlyReturnIsBehindTheSameGate() {
+        let session = self.session()
+        let log = TerminalEventLog()
+        let broughtForward = CallCounter()
+        let away = self.makePaster(session, log: log, broughtForward: broughtForward) { _ in false }
+        XCTAssertEqual(away.pressSendKeyAlone(self.makeStep(log: log), to: self.terminalPID), .targetNotInFront)
+        XCTAssertEqual(broughtForward.count, 1, "asked to come forward first, like a paste")
+        XCTAssertEqual(log.events, [])
+
+        let inFront = self.makePaster(session, log: log) { _ in true }
+        XCTAssertEqual(inFront.pressSendKeyAlone(self.makeStep(log: log), to: self.terminalPID), .sent)
+        XCTAssertEqual(log.events, ["key 4242 enter"], "nothing pasted, one Return")
     }
 }
 

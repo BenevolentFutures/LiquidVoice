@@ -601,6 +601,10 @@ final class TypingService {
     ///     (ported from altic-dev/FluidVoice@98b5a278).
     ///   - transcriptInHistory: whether the text is already in transcription history, so the
     ///     failure card can say where it is kept.
+    ///   - sendKey: Spoken Send. The key is pressed in `sendKey.target` strictly after the
+    ///     text was dispatched there, at most once, and never when the delivery failed. It
+    ///     turns the paste read-back off (see `verifiesLanding`).
+    ///   - onSendKey: called on the main actor with the send key's outcome, when one was asked for.
     ///   - completion: called on the main actor once the attempt finishes. A failure has
     ///     already been reported to the user (card + transcript kept) by then.
     func typeOutputPlanInstantly(
@@ -610,8 +614,11 @@ final class TypingService {
         tracksDictionaryCorrections: Bool = false,
         verifiesLanding: Bool = true,
         transcriptInHistory: Bool = false,
+        sendKey: SendKeyRequest? = nil,
+        onSendKey: ((SendKeyOutcome) -> Void)? = nil,
         completion: ((TextDeliveryResult) -> Void)? = nil
     ) {
+        let verifiesLanding = verifiesLanding && sendKey == nil
         let requestedAt = ProcessInfo.processInfo.systemUptime
         let text = plan.plainText
         let mode = self.textInsertionMode
@@ -632,6 +639,7 @@ final class TypingService {
             self.bench("request_return reason=empty_text")
             self.log("[TypingService] ERROR: Empty text provided, aborting")
             completion?(.recoverableFailure(.emptyText))
+            if sendKey != nil { onSendKey?(.textNotDelivered) }
             return
         }
 
@@ -641,6 +649,7 @@ final class TypingService {
             self.log("[TypingService] ERROR: Accessibility permissions required for text injection")
             Self.reportDeliveryFailure(.accessibilityNotTrusted, transcript: text, inHistory: transcriptInHistory, pasteSession: self.pasteSession)
             completion?(.recoverableFailure(.accessibilityNotTrusted))
+            if sendKey != nil { onSendKey?(.textNotDelivered) }
             return
         }
 
@@ -659,6 +668,7 @@ final class TypingService {
             self.bench("worker_start queueDelayMs=\(Self.elapsedMs(from: requestedAt, to: workerStartedAt))")
 
             var result: TextDeliveryResult = .recoverableFailure(.targetUnavailable)
+            var sendKeyOutcome: SendKeyOutcome = .textNotDelivered
             defer {
                 let completedAt = ProcessInfo.processInfo.systemUptime
                 self.pendingCountLock.lock()
@@ -666,11 +676,16 @@ final class TypingService {
                 self.pendingCountLock.unlock()
                 self.bench(
                     "complete result=\(Self.describe(result)) totalMs=\(Self.elapsedMs(from: requestedAt, to: completedAt)) textReadyToCompleteMs=\(textReadyAt.map { String(Self.elapsedMs(from: $0, to: completedAt)) } ?? "nil")"
+                        + (sendKey != nil ? " sendKey=\(sendKeyOutcome.rawValue)" : "")
                 )
                 self.log("[TypingService] Typing operation completed")
                 let finalResult = result
                 if let completion {
                     Task { @MainActor in completion(finalResult) }
+                }
+                let finalSendKeyOutcome = sendKeyOutcome
+                if sendKey != nil, let onSendKey {
+                    Task { @MainActor in onSendKey(finalSendKeyOutcome) }
                 }
             }
 
@@ -691,24 +706,57 @@ final class TypingService {
 
             let insertStartedAt = ProcessInfo.processInfo.systemUptime
             self.bench("insert_call")
-            result = self.deliver(
+            let delivery = self.deliver(
                 text,
                 preferredTargetPID: preferredTargetPID,
                 verifiesLanding: verifiesLanding,
-                transcriptInHistory: transcriptInHistory
+                transcriptInHistory: transcriptInHistory,
+                sendKey: sendKey
             )
+            result = delivery.result
+            sendKeyOutcome = delivery.sendKey ?? .textNotDelivered
             self.bench(
                 "insert_return result=\(Self.describe(result)) elapsedMs=\(Self.elapsedMs(since: insertStartedAt)) totalMs=\(Self.elapsedMs(since: requestedAt))"
             )
             if case let .recoverableFailure(failure) = result {
                 Self.reportDeliveryFailure(failure, transcript: text, inHistory: transcriptInHistory, pasteSession: self.pasteSession)
-            } else if tracksDictionaryCorrections {
+            } else if tracksDictionaryCorrections, sendKey == nil {
+                // Not after a send key: the field empties on submit and the tracker would misread it.
                 Task { @MainActor in
                     AutomaticDictionaryCorrectionTracker.shared.beginObservingInsertion(
                         text,
                         targetPID: preferredTargetPID
                     )
                 }
+            }
+        }
+    }
+
+    /// Spoken Send with nothing to type (the dictation was only the phrase): presses the send
+    /// key in `request.target`, submitting what is already there. It queues behind any delivery
+    /// still in flight, and goes only while the target is in front.
+    func pressSendKey(_ request: SendKeyRequest, completion: ((SendKeyOutcome) -> Void)? = nil) {
+        let requestedAt = ProcessInfo.processInfo.systemUptime
+        self.bench("send_key_request pid=\(request.target.pid) key=\(request.key.rawValue)")
+        guard AXIsProcessTrusted() else {
+            self.bench("send_key_return reason=accessibility_not_trusted")
+            completion?(.eventsUnavailable)
+            return
+        }
+        Self.typingWorkQueue.async {
+            let isTerminal = Self.isGhosttyFamily(bundleIdentifier: request.target.bundleIdentifier)
+            var step = SendKeyStep(key: request.key)
+            // Nothing was pasted, so there is nothing to wait for.
+            step.delay = 0
+            let outcome: SendKeyOutcome = if isTerminal {
+                TerminalPaster(session: self.pasteSession) { _ in false }
+                    .pressSendKeyAlone(step, to: request.target.pid)
+            } else {
+                Self.pressSendKeyInApp(step, target: request.target)
+            }
+            self.bench("send_key_return outcome=\(outcome.rawValue) terminal=\(isTerminal) elapsedMs=\(Self.elapsedMs(since: requestedAt))")
+            if let completion {
+                Task { @MainActor in completion(outcome) }
             }
         }
     }
@@ -750,6 +798,15 @@ final class TypingService {
         return true
     }
 
+    /// `awaitModifierKeyRelease` for the send key. Blocks; call off the main thread.
+    nonisolated static func waitForPhysicalModifierRelease(timeout: TimeInterval) -> Bool {
+        let released = self.awaitModifierKeyRelease(timeoutMs: Int(timeout * 1000))
+        if !released {
+            DeliveryLog.warning("Send key suppressed: modifiers still held after \(Int(timeout * 1000))ms held=\(self.heldPhysicalModifiers())")
+        }
+        return released
+    }
+
     private func bench(_ message: String) {
         DebugLogger.shared.benchmark("TYPING_BENCH", message: message, source: "TypingBenchmark")
     }
@@ -785,8 +842,9 @@ final class TypingService {
         _ text: String,
         preferredTargetPID: pid_t?,
         verifiesLanding: Bool,
-        transcriptInHistory: Bool
-    ) -> TextDeliveryResult {
+        transcriptInHistory: Bool,
+        sendKey: SendKeyRequest? = nil
+    ) -> (result: TextDeliveryResult, sendKey: SendKeyOutcome?) {
         let terminalPID = self.ghosttyTargetPID(preferredTargetPID: preferredTargetPID)
         let route = DeliveryRoute.decide(
             isTerminal: terminalPID != nil,
@@ -797,8 +855,21 @@ final class TypingService {
         self.bench(
             "delivery_route terminal=\(terminalPID != nil) refusesNonEditable=\(route.refusesNonEditableFocus) " +
                 "pastesFirst=\(route.pastesFirst) globalFallback=\(route.fallsBackToGlobalPaste) " +
-                "directFallback=\(route.fallsBackToDirectTyping) readBack=\(route.readsPasteBack)"
+                "directFallback=\(route.fallsBackToDirectTyping) readBack=\(route.readsPasteBack)" +
+                (sendKey.map { " sendKey=\($0.key.rawValue)" } ?? "")
         )
+        // The key goes only to the process the text goes to.
+        let deliveryPID = terminalPID ?? preferredTargetPID
+        var sendStep: SendKeyStep?
+        var sendKeyOutcome: SendKeyOutcome?
+        if let sendKey {
+            if deliveryPID == sendKey.target.pid {
+                sendStep = SendKeyStep(key: sendKey.key)
+            } else {
+                self.bench("send_key_skipped reason=target_mismatch deliveryPID=\(deliveryPID.map { String($0) } ?? "nil") sendPID=\(sendKey.target.pid)")
+                sendKeyOutcome = .targetMismatch
+            }
+        }
 
         // Ported from altic-dev/FluidVoice@51e62364 / @a1a65772: refuse only when the focused
         // element certainly cannot take text (a button, a menu, static text). Terminals are
@@ -808,7 +879,7 @@ final class TypingService {
             let assessment = DeliveryTargetAssessment.assessFocusedElement(messagingTimeout: Self.axMessagingTimeoutSeconds)
             self.bench("focus_assess \(assessment.logDescription) elapsedMs=\(Self.elapsedMs(since: assessStartedAt))")
             if assessment.isCertainlyNotEditable {
-                return .recoverableFailure(.noEditableTarget)
+                return (.recoverableFailure(.noEditableTarget), sendKey.map { _ in .textNotDelivered })
             }
         } else {
             self.bench("focus_assess skipped reason=terminal_target")
@@ -818,11 +889,15 @@ final class TypingService {
         // will run, and inside the paste session (after earlier queued pastes have landed),
         // just before this paste is sent.
         var verificationBaseline: PasteVerifier.Snapshot?
+        // A terminal paste presses the send key itself, behind its own frontmost gate.
+        var terminalSendKeyOutcome: SendKeyOutcome?
         let outcome = self.insertTextInstantly(
             text,
             preferredTargetPID: preferredTargetPID,
             terminalPID: terminalPID,
             route: route,
+            terminalSendKey: terminalPID != nil ? sendStep : nil,
+            terminalSendKeyOutcome: &terminalSendKeyOutcome,
             beforeClipboardDispatch: {
                 if route.readsPasteBack {
                     verificationBaseline = PasteVerifier.capture()
@@ -832,7 +907,7 @@ final class TypingService {
         switch outcome {
         case let .failed(failure):
             self.bench("insert_path path=none failure=\(failure.rawValue)")
-            return .recoverableFailure(failure)
+            return (.recoverableFailure(failure), sendKey.map { _ in .textNotDelivered })
         case let .dispatched(path):
             self.bench("insert_path path=\(path.rawValue)")
             if path.usesClipboard, let verificationBaseline {
@@ -845,8 +920,58 @@ final class TypingService {
                     pasteSession: self.pasteSession
                 )
             }
-            return .dispatched
+            guard let sendKey, let sendStep else { return (.dispatched, sendKeyOutcome) }
+            if terminalPID != nil {
+                // The terminal paste pressed the key after its V key-up, or refused to.
+                return (.dispatched, terminalSendKeyOutcome ?? .eventsUnavailable)
+            }
+            return (.dispatched, Self.pressSendKeyInApp(sendStep, target: sendKey.target))
         }
+    }
+
+    /// The send key in an ordinary app, after its text was dispatched: only while focus is still
+    /// in the target app, not on a password field, and not on something that certainly takes no
+    /// text (Return would press a focused button). Blocks; runs on the typing worker.
+    private nonisolated static func pressSendKeyInApp(_ step: SendKeyStep, target: DictationTarget) -> SendKeyOutcome {
+        if step.delay > 0 {
+            usleep(useconds_t(step.delay * 1_000_000))
+        }
+        guard step.modifiersReleased() else { return .modifiersHeld }
+        let focus = self.focusedElementForSendKey()
+        let verdict = self.sendKeyVerdict(targetPID: target.pid, focusedPID: self.currentFocusedPID(), focus: focus)
+        if let verdict {
+            DeliveryLog.bench("send_key_refused reason=\(verdict.rawValue) pid=\(target.pid) focus=\(focus.assessment.logDescription)")
+            return verdict
+        }
+        return step.post(target.pid, step.key) ? .sent : .eventsUnavailable
+    }
+
+    /// Why the send key may not go into an ordinary app, or nil when it may. Pure, so it is tested.
+    nonisolated static func sendKeyVerdict(
+        targetPID: pid_t,
+        focusedPID: pid_t?,
+        focus: (assessment: DeliveryTargetAssessment, isSecure: Bool)
+    ) -> SendKeyOutcome? {
+        guard focusedPID == targetPID else { return .targetNotInFront }
+        if focus.isSecure { return .secureField }
+        if focus.assessment.isCertainlyNotEditable { return .focusNotEditable }
+        return nil
+    }
+
+    /// The focused element's editability and whether it is a password field. Bounded AX reads.
+    private nonisolated static func focusedElementForSendKey() -> (assessment: DeliveryTargetAssessment, isSecure: Bool) {
+        let assessment = DeliveryTargetAssessment.assessFocusedElement(messagingTimeout: self.axMessagingTimeoutSeconds)
+        guard AXIsProcessTrusted() else { return (assessment, false) }
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(self.boundedSystemWideElement(), kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
+              let focusedRef, CFGetTypeID(focusedRef) == AXUIElementGetTypeID()
+        else { return (assessment, false) }
+        let element = self.boundedAXElement(unsafeBitCast(focusedRef, to: AXUIElement.self))
+        var subroleRef: CFTypeRef?
+        let subrole = AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subroleRef) == .success
+            ? subroleRef as? String
+            : nil
+        return (assessment, subrole == (kAXSecureTextFieldSubrole as String))
     }
 
     private enum InsertionOutcome {
@@ -940,6 +1065,8 @@ final class TypingService {
         preferredTargetPID: pid_t?,
         terminalPID: pid_t?,
         route: DeliveryRoute,
+        terminalSendKey: SendKeyStep?,
+        terminalSendKeyOutcome: inout SendKeyOutcome?,
         beforeClipboardDispatch: () -> Void
     ) -> InsertionOutcome {
         self.log("[TypingService] insertTextInstantly called with \(text.count) characters")
@@ -955,6 +1082,8 @@ final class TypingService {
                 text,
                 preferredTargetPID: pastePID,
                 allowsGlobalFallback: route.fallsBackToGlobalPaste,
+                terminalSendKey: terminalSendKey,
+                terminalSendKeyOutcome: &terminalSendKeyOutcome,
                 beforeDispatch: beforeClipboardDispatch
             )
             if let path = attempt.path {
@@ -1049,12 +1178,20 @@ final class TypingService {
         _ text: String,
         preferredTargetPID: pid_t?,
         allowsGlobalFallback: Bool = true,
+        terminalSendKey: SendKeyStep?,
+        terminalSendKeyOutcome: inout SendKeyOutcome?,
         beforeDispatch: () -> Void
     ) -> (path: InsertionPath?, failure: TextDeliveryFailure?) {
         var lastFailure: TextDeliveryFailure?
         if let preferredTargetPID, preferredTargetPID > 0 {
             self.log("[TypingService] Trying clipboard-to-PID insertion first")
-            lastFailure = self.insertTextViaClipboardToPid(text, targetPID: preferredTargetPID, beforeDispatch: beforeDispatch)
+            lastFailure = self.insertTextViaClipboardToPid(
+                text,
+                targetPID: preferredTargetPID,
+                terminalSendKey: terminalSendKey,
+                terminalSendKeyOutcome: &terminalSendKeyOutcome,
+                beforeDispatch: beforeDispatch
+            )
             if lastFailure == nil {
                 self.log("[TypingService] Reliable Paste dispatched via clipboard-to-PID")
                 return (.clipboardToPID, nil)
@@ -1194,6 +1331,8 @@ final class TypingService {
         _ text: String,
         targetPID: pid_t,
         activateTargetFirst: Bool = true,
+        terminalSendKey: SendKeyStep? = nil,
+        terminalSendKeyOutcome: inout SendKeyOutcome?,
         beforeDispatch: () -> Void = {}
     ) -> TextDeliveryFailure? {
         self.log("[TypingService] Starting clipboard-to-PID insertion to PID \(targetPID)")
@@ -1218,13 +1357,25 @@ final class TypingService {
                 events[1].postToPid(pid)
                 return true
             }
-            return paster.paste(
+            guard let terminalSendKey else {
+                return paster.paste(
+                    text,
+                    to: targetPID,
+                    activateFirst: activateTargetFirst,
+                    beforeDispatch: beforeDispatch,
+                    makeConsumptionWait: { self.pasteConsumptionWait(isTerminalTarget: true, expectedText: text) }
+                )
+            }
+            let pasted = paster.pasteThenSend(
                 text,
                 to: targetPID,
                 activateFirst: activateTargetFirst,
+                send: terminalSendKey,
                 beforeDispatch: beforeDispatch,
                 makeConsumptionWait: { self.pasteConsumptionWait(isTerminalTarget: true, expectedText: text) }
             )
+            terminalSendKeyOutcome = pasted.sendKey
+            return pasted.failure
         }
         if activateTargetFirst, NSWorkspace.shared.frontmostApplication?.processIdentifier != targetPID {
             _ = Self.activateApp(pid: targetPID)
@@ -1293,6 +1444,56 @@ final class TypingService {
 
         static func isClipboardRace(_ failure: TextDeliveryFailure) -> Bool {
             failure == .clipboardSnapshotFailed || failure == .clipboardWriteFailed
+        }
+
+        /// Spoken Send in c11: the paste, then the send key, strictly after the paste's V key-up,
+        /// to the same PID, behind the same frontmost gate, at most once. No paste, no key: a
+        /// refused or failed paste returns its failure and `.textNotDelivered`. The clipboard
+        /// race retry cannot double the key either: a race fails before anything is sent, and the
+        /// key follows only the one paste that went out.
+        func pasteThenSend(
+            _ text: String,
+            to pid: pid_t,
+            activateFirst: Bool,
+            send: SendKeyStep,
+            beforeDispatch: () -> Void,
+            makeConsumptionWait: () -> () -> Void
+        ) -> (failure: TextDeliveryFailure?, sendKey: SendKeyOutcome) {
+            if let failure = self.paste(
+                text,
+                to: pid,
+                activateFirst: activateFirst,
+                beforeDispatch: beforeDispatch,
+                makeConsumptionWait: makeConsumptionWait
+            ) {
+                return (failure, .textNotDelivered)
+            }
+            return (nil, self.pressSendKey(send, to: pid))
+        }
+
+        /// The send key with nothing pasted first (the dictation was only the phrase): brought
+        /// forward like a paste, then the same gate.
+        func pressSendKeyAlone(_ send: SendKeyStep, to pid: pid_t) -> SendKeyOutcome {
+            if !self.isInFront(pid) {
+                self.bringToFront(pid)
+            }
+            let wait = self.waitUntilInFront(pid)
+            TypingService.logFrontmostCheck(stage: "before_send_key_alone", target: pid, waitedMs: wait.waitedMs, inFront: wait.inFront)
+            guard wait.inFront else { return .targetNotInFront }
+            return self.pressSendKey(send, to: pid)
+        }
+
+        private func pressSendKey(_ send: SendKeyStep, to pid: pid_t) -> SendKeyOutcome {
+            if send.delay > 0 {
+                usleep(useconds_t(send.delay * 1_000_000))
+            }
+            guard send.modifiersReleased() else { return .modifiersHeld }
+            // The paste's gate, looked at again right before the key: never press Return blind.
+            guard self.isInFront(pid) else {
+                TypingService.logFrontmostCheck(stage: "before_send_key", target: pid, waitedMs: 0, inFront: false)
+                return .targetNotInFront
+            }
+            return send.post(pid, send.key) ? .sent : .eventsUnavailable
         }
 
         private func attempt(

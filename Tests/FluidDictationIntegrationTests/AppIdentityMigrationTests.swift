@@ -83,7 +83,7 @@ final class AppIdentityMigrationTests: XCTestCase {
             destination: destination ?? self.destination,
             legacyFolder: self.legacyFolder,
             destinationFolder: self.destinationFolder,
-            displacedDefaultsBackupFolder: backupFolder ?? self.backupFolder,
+            backupRoot: backupFolder ?? self.backupFolder,
             // The production reader (CFPreferencesCopyMultiple), pointed at the test suites.
             readLegacyDefaults: readLegacyDefaults ?? { AppIdentityMigration.readPreferencesDomain(sourceSuite) },
             readDestinationDefaults: { AppIdentityMigration.readPreferencesDomain(destinationSuite) },
@@ -237,6 +237,42 @@ final class AppIdentityMigrationTests: XCTestCase {
         XCTAssertNil(self.destination.object(forKey: AppIdentityMigration.defaultsMarkerKey))
     }
 
+    func testAFirstFailureRetriesOnceAndARetryThatDisplacedDataStops() throws {
+        try self.seedSource(["TranscriptionHistoryEntries": Data("old history".utf8), "UserTypingWPM": 40])
+        let lossy = LossyDefaults(backing: self.destination, droppedKeys: ["TranscriptionHistoryEntries"])
+
+        // Attempt 1 fails; nothing had to be displaced, so it will be retried.
+        let first = self.makeMigration(destination: lossy).runIfNeeded()
+        guard case .failed = first.defaults else { return XCTFail("expected a failure, got \(first.defaults)") }
+        XCTAssertNil(first.haltAlert)
+
+        // The app ran on and dictated; attempt 2 displaces that and fails again: it stops.
+        self.destination.set(Data("newer history".utf8), forKey: "TranscriptionHistoryEntries")
+        self.destination.set(41, forKey: "UserTypingWPM")
+        XCTAssertTrue(self.destination.synchronize())
+        let second = self.makeMigration(destination: lossy).runIfNeeded()
+        guard case let .halted(_, backups) = second.defaults else { return XCTFail("expected a halt, got \(second.defaults)") }
+        XCTAssertEqual(backups.count, 1)
+        let saved = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: Data(contentsOf: backups[0]), format: nil) as? [String: Any]
+        )
+        XCTAssertEqual(saved["TranscriptionHistoryEntries"] as? Data, Data("newer history".utf8))
+        XCTAssertNotNil(self.destination.object(forKey: AppIdentityMigration.defaultsHaltedKey))
+        XCTAssertNil(self.destination.object(forKey: AppIdentityMigration.defaultsMarkerKey))
+
+        let alert = try XCTUnwrap(second.haltAlert)
+        XCTAssertTrue(alert.message.contains("~/Library/Logs/LiquidVoice/Fluid.log"))
+        XCTAssertTrue(alert.message.contains(backups[0].path))
+        XCTAssertTrue(self.logLines.contains { $0.0 == .error && $0.1.contains("step=defaults outcome=halted") })
+
+        // Later launches do not copy again: the app's values stay, and the alert comes back.
+        self.destination.set(42, forKey: "UserTypingWPM")
+        let third = self.makeMigration().runIfNeeded()
+        guard case .halted = third.defaults else { return XCTFail("expected a halt, got \(third.defaults)") }
+        XCTAssertEqual(self.destination.integer(forKey: "UserTypingWPM"), 42)
+        XCTAssertNotNil(third.haltAlert)
+    }
+
     func testAnUnreadableSourceIsNeverMarkedDone() {
         let unreadable = self.makeMigration(readLegacyDefaults: { nil }).runIfNeeded()
         XCTAssertEqual(unreadable.defaults, .failed("could not read \(self.sourceSuite!)"))
@@ -306,7 +342,7 @@ final class AppIdentityMigrationTests: XCTestCase {
 
         let report = self.makeMigration().runIfNeeded()
 
-        XCTAssertEqual(report.folder, .copied(files: 3, bytes: Int64(19 + 9 + 6)))
+        XCTAssertEqual(report.folder, .copied(files: 3, bytes: Int64(19 + 9 + 6), skipped: 0))
         for (path, expected) in [
             ("parakeet_custom_vocabulary.json", "{\"words\":[\"Cairn\"]}"),
             ("KeptDictation/kept-1.wav", "RIFF-kept"),
@@ -322,22 +358,84 @@ final class AppIdentityMigrationTests: XCTestCase {
         XCTAssertTrue(self.logLines.contains { $0.1.contains("step=folder outcome=copied files=3") })
     }
 
-    func testAnExistingFolderGetsOnlyTheFilesItLacksAndIsNeverOverwritten() throws {
+    private let fiveBoostTerms = #"{"terms":["Cairn","c11","Gregorovich","Atlas","Hyperion"]}"#
+    private let defaultVocabulary = #"{"terms":["Liquid Voice"]}"#
+
+    /// The reviewer's case: opening Custom Dictionary writes a default vocabulary file into the
+    /// new folder. Atin's own five boost terms must still win, and the default is kept aside.
+    func testTheOldFileWinsOverADefaultOneTheNewAppAlreadyWrote() throws {
         try self.seedSource(["OnboardingCompleted": true])
-        try self.writeFile("parakeet_custom_vocabulary.json", "old", under: self.legacyFolder)
+        try self.writeFile("parakeet_custom_vocabulary.json", self.fiveBoostTerms, under: self.legacyFolder)
         try self.writeFile("KeptDictation/kept-1.wav", "RIFF-kept", under: self.legacyFolder)
-        try self.writeFile("parakeet_custom_vocabulary.json", "new app's own", under: self.destinationFolder)
+        try self.writeFile("pronunciations.json", "same", under: self.legacyFolder)
+        try self.writeFile("parakeet_custom_vocabulary.json", self.defaultVocabulary, under: self.destinationFolder)
+        try self.writeFile("pronunciations.json", "same", under: self.destinationFolder)
+        try self.writeFile("OnlyNew/notes.txt", "the new app's own", under: self.destinationFolder)
 
         let report = self.makeMigration().runIfNeeded()
 
-        XCTAssertEqual(report.folder, .merged(added: 1, kept: 1))
+        guard case let .merged(added, replaced, identical, skipped, backup?) = report.folder else {
+            return XCTFail("expected a merge with a backup, got \(report.folder)")
+        }
+        XCTAssertEqual([added, replaced, identical, skipped], [1, 1, 1, 0])
         XCTAssertTrue(report.copiedData)
-        XCTAssertEqual(self.contents(of: "parakeet_custom_vocabulary.json", under: self.destinationFolder), "new app's own")
+        XCTAssertEqual(self.contents(of: "parakeet_custom_vocabulary.json", under: self.destinationFolder), self.fiveBoostTerms)
         XCTAssertEqual(self.contents(of: "KeptDictation/kept-1.wav", under: self.destinationFolder), "RIFF-kept")
-        XCTAssertEqual(self.contents(of: "parakeet_custom_vocabulary.json", under: self.legacyFolder), "old")
-        XCTAssertEqual(self.contents(of: "KeptDictation/kept-1.wav", under: self.legacyFolder), "RIFF-kept")
+        XCTAssertEqual(self.contents(of: "OnlyNew/notes.txt", under: self.destinationFolder), "the new app's own")
+        // The displaced default is kept, under the same relative path, in ~/Backups.
+        XCTAssertEqual(backup.deletingLastPathComponent().standardizedFileURL, self.backupFolder.standardizedFileURL)
+        XCTAssertTrue(backup.lastPathComponent.hasPrefix("liquid-voice-displaced-folder-"))
+        XCTAssertEqual(self.contents(of: "parakeet_custom_vocabulary.json", under: backup), self.defaultVocabulary)
+        XCTAssertNil(self.contents(of: "pronunciations.json", under: backup), "identical files are not displaced")
+        // The old folder is untouched.
+        XCTAssertEqual(self.contents(of: "parakeet_custom_vocabulary.json", under: self.legacyFolder), self.fiveBoostTerms)
         XCTAssertNotNil(self.destination.object(forKey: AppIdentityMigration.folderMarkerKey))
-        XCTAssertTrue(self.logLines.contains { $0.0 == .warning && $0.1.contains("outcome=merged added=1 kept=1") })
+        XCTAssertTrue(self.logLines.contains { $0.0 == .warning && $0.1.contains("displaced=parakeet_custom_vocabulary.json") })
+        XCTAssertTrue(self.logLines.contains { $0.1.contains("outcome=merged added=1 replaced=1 identical=1 skipped=0") })
+        let recorded = self.destination.stringArray(forKey: AppIdentityMigration.displacedBackupsKey) ?? []
+        XCTAssertEqual(recorded, [backup.path])
+    }
+
+    func testSymbolicLinksAreNotFollowed() throws {
+        try self.seedSource(["OnboardingCompleted": true])
+        try self.writeFile("parakeet_custom_vocabulary.json", "vocabulary", under: self.legacyFolder)
+        let outside = self.root.appendingPathComponent("outside", isDirectory: true)
+        try self.writeFile("secret.txt", "outside the folder", under: outside)
+        try FileManager.default.createSymbolicLink(
+            at: self.legacyFolder.appendingPathComponent("linked-dir"),
+            withDestinationURL: outside
+        )
+        try FileManager.default.createSymbolicLink(
+            at: self.legacyFolder.appendingPathComponent("linked-file.txt"),
+            withDestinationURL: outside.appendingPathComponent("secret.txt")
+        )
+
+        let report = self.makeMigration().runIfNeeded()
+
+        XCTAssertEqual(report.folder, .copied(files: 1, bytes: 10, skipped: 2))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: self.destinationFolder.appendingPathComponent("linked-dir").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: self.destinationFolder.appendingPathComponent("linked-file.txt").path))
+        XCTAssertNil(self.contents(of: "linked-dir/secret.txt", under: self.destinationFolder))
+        XCTAssertTrue(self.logLines.contains { $0.1.contains("skipped_symlink=linked-dir") })
+        XCTAssertTrue(self.logLines.contains { $0.1.contains("outcome=copied_with_warnings") })
+    }
+
+    func testAnUnreadableOldFileIsSkippedWithAWarningNotRetriedForever() throws {
+        try self.seedSource(["OnboardingCompleted": true])
+        try self.writeFile("parakeet_custom_vocabulary.json", "vocabulary", under: self.legacyFolder)
+        try self.writeFile("locked.json", "locked", under: self.legacyFolder)
+        let locked = self.legacyFolder.appendingPathComponent("locked.json")
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: locked.path) }
+
+        let report = self.makeMigration().runIfNeeded()
+
+        XCTAssertEqual(report.folder, .copied(files: 1, bytes: 10, skipped: 1))
+        XCTAssertEqual(self.contents(of: "parakeet_custom_vocabulary.json", under: self.destinationFolder), "vocabulary")
+        XCTAssertTrue(self.logLines.contains { $0.0 == .warning && $0.1.contains("skipped_unreadable=locked.json") })
+        let marker = try XCTUnwrap(self.destination.dictionary(forKey: AppIdentityMigration.folderMarkerKey))
+        XCTAssertEqual(marker["outcome"] as? String, "copied_with_warnings")
+        XCTAssertEqual(self.makeMigration().runIfNeeded().folder, .alreadyDone)
     }
 
     func testAStagingFolderLeftByAnInterruptedCopyIsRemoved() throws {
@@ -348,7 +446,7 @@ final class AppIdentityMigrationTests: XCTestCase {
 
         let report = self.makeMigration().runIfNeeded()
 
-        XCTAssertEqual(report.folder, .copied(files: 1, bytes: 10))
+        XCTAssertEqual(report.folder, .copied(files: 1, bytes: 10, skipped: 0))
         XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
     }
 
@@ -369,7 +467,7 @@ final class AppIdentityMigrationTests: XCTestCase {
 
         let retried = self.makeMigration().runIfNeeded()
         XCTAssertEqual(retried.defaults, .alreadyDone)
-        XCTAssertEqual(retried.folder, .copied(files: 1, bytes: 10))
+        XCTAssertEqual(retried.folder, .copied(files: 1, bytes: 10, skipped: 0))
     }
 
     func testAFailedFolderCopyIsStillCompletedAfterTheAppCreatedItsOwnFolder() throws {
@@ -384,9 +482,13 @@ final class AppIdentityMigrationTests: XCTestCase {
         try self.writeFile("parakeet_custom_vocabulary.json", "written by the new app", under: self.destinationFolder)
         let retried = self.makeMigration().runIfNeeded()
 
-        XCTAssertEqual(retried.folder, .merged(added: 1, kept: 1))
+        guard case let .merged(added, replaced, _, _, backup?) = retried.folder else {
+            return XCTFail("expected a merge with a backup, got \(retried.folder)")
+        }
+        XCTAssertEqual([added, replaced], [1, 1])
         XCTAssertEqual(self.contents(of: "DictationAudioHistory/a.wav", under: self.destinationFolder), "RIFF-a")
-        XCTAssertEqual(self.contents(of: "parakeet_custom_vocabulary.json", under: self.destinationFolder), "written by the new app")
+        XCTAssertEqual(self.contents(of: "parakeet_custom_vocabulary.json", under: self.destinationFolder), "vocabulary")
+        XCTAssertEqual(self.contents(of: "parakeet_custom_vocabulary.json", under: backup), "written by the new app")
     }
 
     // MARK: The new identity

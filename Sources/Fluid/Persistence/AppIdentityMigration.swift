@@ -1,3 +1,4 @@
+import AppKit
 import CoreFoundation
 import Foundation
 import ServiceManagement
@@ -19,28 +20,40 @@ nonisolated extension UserDefaults: AppIdentityMigrationDefaults {}
 /// first launch of the installed app it:
 ///
 /// 1. copies every UserDefaults key of the old domain (transcription history, custom dictionary,
-///    hotkeys, settings) into this app's domain, checks each one landed, and only then sets a
-///    marker, so it never runs twice. A partial copy is logged and left unmarked, to be redone.
-///    Values already in this app's domain that it would replace (a failed earlier attempt the
-///    app kept running after) are saved to a plist in `~/Backups` first.
+///    hotkeys, settings) into this app's domain, checks each one, and only then sets a marker, so
+///    it never runs twice. The old values win: anything this app's domain already held that the
+///    copy changes is saved to a plist in `~/Backups` first. A failed copy is logged and retried
+///    once on the next launch; a retry that displaced data and still failed stops retrying and
+///    says so in an alert before the app starts (see `haltAlert`).
 /// 2. copies (never moves) the old Application Support folder, kept dictation and saved audio
-///    included. When this app already has a folder, it adds only the files that folder lacks:
-///    nothing there is ever overwritten.
+///    included. The old files win here too: a different file already in this app's folder is
+///    moved to `~/Backups/liquid-voice-displaced-folder-*` before the old one replaces it. Files
+///    only this app has stay. Symbolic links are not followed, and an unreadable old file is
+///    skipped with a warning rather than retried forever.
 /// 3. registers this app as a login item when the old one launched at startup. The old app's
 ///    registration belongs to its bundle identifier; only the user can remove it.
 ///
 /// It never writes to the old domain or folder, so the previous app still runs from a backup
 /// (rollback). Model caches (`Application Support/FluidAudio`) belong to the FluidAudio library,
 /// are not tied to the bundle identifier, and stay where they are. Log lines carry counts,
-/// outcomes and at most a few key or file names, never content: grep for `IDENTITY_MIGRATION`.
+/// outcomes and key or file names, never content: grep for `IDENTITY_MIGRATION`.
 nonisolated struct AppIdentityMigration {
     /// Set once every UserDefaults key has been copied and checked.
     static let defaultsMarkerKey = "LiquidVoiceIdentityMigrationDefaults"
-    /// Set once the Application Support step is settled (copied, merged, or nothing to copy).
+    /// Set once the Application Support step is settled.
     static let folderMarkerKey = "LiquidVoiceIdentityMigrationFolder"
+    /// How many times the defaults step has started.
+    static let defaultsAttemptsKey = "LiquidVoiceIdentityMigrationDefaultsAttempts"
+    /// Set when the defaults step stopped retrying (a retry displaced data and still failed).
+    static let defaultsHaltedKey = "LiquidVoiceIdentityMigrationDefaultsHalted"
+    /// Every file that values or files displaced by the migration were saved to.
+    static let displacedBackupsKey = "LiquidVoiceIdentityMigrationDisplacedBackups"
     static let launchAtStartupKey = "LaunchAtStartup"
     static let logPrefix = "IDENTITY_MIGRATION"
-    private static let markerKeys: Set<String> = [defaultsMarkerKey, folderMarkerKey]
+    static let logPath = "~/Library/Logs/LiquidVoice/Fluid.log"
+    private static let bookkeepingKeys: Set<String> = [
+        defaultsMarkerKey, folderMarkerKey, defaultsAttemptsKey, defaultsHaltedKey, displacedBackupsKey,
+    ]
 
     enum DefaultsOutcome: Equatable {
         case alreadyDone
@@ -48,14 +61,20 @@ nonisolated struct AppIdentityMigration {
         /// earlier values were saved to, when any of them differed.
         case copied(keys: Int, replaced: Int, displacedBackup: URL?)
         case nothingToCopy
+        /// Failed; retried on the next launch.
         case failed(String)
+        /// Failed after a retry displaced data: no more automatic retries. `backups` holds every
+        /// displaced-values file so far.
+        case halted(reason: String, backups: [URL])
     }
 
     enum FolderOutcome: Equatable {
         case alreadyDone
-        case copied(files: Int, bytes: Int64)
-        /// This app already had a folder: `added` files it lacked, `kept` its own where both had one.
-        case merged(added: Int, kept: Int)
+        /// This app had no folder: the old one was copied (`skipped`: symlinks and unreadable files).
+        case copied(files: Int, bytes: Int64, skipped: Int)
+        /// This app already had a folder: `added` files it lacked, `replaced` differing files
+        /// (moved to `displacedBackup` first), `identical` files left as they were.
+        case merged(added: Int, replaced: Int, identical: Int, skipped: Int, displacedBackup: URL?)
         case nothingToCopy
         case failed(String)
     }
@@ -81,6 +100,35 @@ nonisolated struct AppIdentityMigration {
             default: return false
             }
         }
+
+        /// What to tell the user before the app starts, when the migration stopped retrying.
+        var haltAlert: HaltAlert? {
+            guard case let .halted(reason, backups) = self.defaults else { return nil }
+            return HaltAlert(reason: reason, backups: backups)
+        }
+    }
+
+    struct HaltAlert: Equatable {
+        let reason: String
+        let backups: [URL]
+
+        var title: String {
+            "Liquid Voice couldn't finish bringing over your settings"
+        }
+
+        var message: String {
+            var lines = [
+                "Copying your settings, history and dictionary from the previous version failed twice, so Liquid Voice has stopped retrying. Nothing was deleted: the previous version's data is untouched.",
+            ]
+            if self.backups.isEmpty {
+                lines.append("Nothing had to be set aside.")
+            } else {
+                lines.append("What this version had saved before the retry (newer history included) is kept in:")
+                lines.append(contentsOf: self.backups.map { "  \($0.path)" })
+            }
+            lines.append("Details: \(AppIdentityMigration.logPath) (search for IDENTITY_MIGRATION). Ask Cairn before dictating a lot.")
+            return lines.joined(separator: "\n")
+        }
     }
 
     let legacyDomain: String
@@ -89,11 +137,13 @@ nonisolated struct AppIdentityMigration {
     let destination: any AppIdentityMigrationDefaults
     let legacyFolder: URL
     let destinationFolder: URL
-    /// Where values this app's domain already had are saved before being replaced.
-    let displacedDefaultsBackupFolder: URL
+    /// Where displaced values and files are saved before being replaced (`~/Backups`).
+    let backupRoot: URL
     /// Every key of the old domain, or nil when it cannot be read.
     var readLegacyDefaults: () -> [String: Any]?
-    /// Every key persisted in this app's own domain (not the global or argument domains).
+    /// Every key this process's preferences (cfprefsd) hold for this app's own domain, not the
+    /// global or argument domains. The check after the copy compares against this in memory;
+    /// it is not a read of the plist on disk.
     var readDestinationDefaults: () -> [String: Any]?
     /// Whether the old domain has a preferences file, which tells "nothing there" apart from a
     /// read that came back empty.
@@ -112,11 +162,38 @@ nonisolated struct AppIdentityMigration {
     /// test host, a build with another bundle identifier, or one outside Applications).
     @MainActor private(set) static var launchReport: Report?
 
+    /// Shows the halt alert. Replaced in tests; the app shows a modal `NSAlert`.
+    @MainActor static var presentHaltAlert: (HaltAlert) -> Void = { alert in
+        Self.runModalHaltAlert(alert)
+    }
+
     /// Runs before SwiftUI, AppKit or `SettingsStore` read a single default (see `LiquidVoiceMain`).
     @MainActor
     static func runAtLaunch() {
         guard let migration = self.forInstalledApp() else { return }
-        self.launchReport = migration.runIfNeeded()
+        let report = migration.runIfNeeded()
+        self.launchReport = report
+        if let alert = report.haltAlert {
+            self.presentHaltAlert(alert)
+        }
+    }
+
+    /// A modal alert before the SwiftUI app starts, so the stopped migration cannot go unnoticed.
+    @MainActor
+    private static func runModalHaltAlert(_ halt: HaltAlert) {
+        guard !TestHostQuietMode.isActive else { return }
+        NSApplication.shared.activate()
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = halt.title
+        alert.informativeText = halt.message
+        alert.addButton(withTitle: "Continue")
+        if !halt.backups.isEmpty {
+            alert.addButton(withTitle: "Show Backup in Finder")
+        }
+        if alert.runModal() == .alertSecondButtonReturn {
+            NSWorkspace.shared.activateFileViewerSelecting(halt.backups)
+        }
     }
 
     /// Only an app installed in an Applications folder migrates. A Release product launched from
@@ -164,7 +241,7 @@ nonisolated struct AppIdentityMigration {
             destination: UserDefaults.standard,
             legacyFolder: applicationSupport.appendingPathComponent(LegacyAppIdentity.folderName, isDirectory: true),
             destinationFolder: applicationSupport.appendingPathComponent(AppStorageLocation.folderName, isDirectory: true),
-            displacedDefaultsBackupFolder: home.appendingPathComponent("Backups", isDirectory: true),
+            backupRoot: home.appendingPathComponent("Backups", isDirectory: true),
             readLegacyDefaults: { Self.readPreferencesDomain(legacyDomain) },
             readDestinationDefaults: { Self.readPreferencesDomain(destinationDomain) },
             legacyDefaultsFileExists: { fileManager.fileExists(atPath: legacyPlist.path) },
@@ -234,30 +311,52 @@ nonisolated struct AppIdentityMigration {
 
     // MARK: UserDefaults
 
-    /// Copies every key, then checks each one reads back equal from this app's own domain
-    /// before setting the marker.
+    /// Copies every key, then checks each one against what this process now holds for this app's
+    /// domain (an in-memory comparison through cfprefsd, not a read of the file on disk; the
+    /// marker is written to the same domain once the check passes).
     private func migrateDefaults() -> (DefaultsOutcome, launchedAtStartup: Bool) {
+        if let halted = self.destination.object(forKey: Self.defaultsHaltedKey) as? [String: Any] {
+            let reason = halted["reason"] as? String ?? "unknown"
+            let backups = self.recordedBackups()
+            self.log(
+                .error,
+                "\(Self.logPrefix) step=defaults outcome=halted reason=\(reason) backups=\(backups.count) "
+                    + "(not retried; clear \(Self.defaultsHaltedKey) to retry)"
+            )
+            return (.halted(reason: reason, backups: backups), false)
+        }
+        let attempt = ((self.destination.object(forKey: Self.defaultsAttemptsKey) as? Int) ?? 0) + 1
+        self.destination.set(attempt, forKey: Self.defaultsAttemptsKey)
+        _ = self.destination.synchronize()
+
         guard let legacy = self.readLegacyDefaults() else {
-            return (self.defaultsFailed("could not read \(self.legacyDomain)"), false)
+            return (self.defaultsFailed("could not read \(self.legacyDomain)", attempt: attempt, displacedBackup: nil), false)
         }
         if legacy.isEmpty {
             if self.legacyDefaultsFileExists() {
                 // The file is there but the read came back empty: never mark that as done.
-                return (self.defaultsFailed("\(self.legacyDomain) has a preferences file but no keys were read"), false)
+                return (
+                    self.defaultsFailed(
+                        "\(self.legacyDomain) has a preferences file but no keys were read",
+                        attempt: attempt,
+                        displacedBackup: nil
+                    ),
+                    false
+                )
             }
             self.markDefaultsDone(keys: 0)
             self.log(.info, "\(Self.logPrefix) step=defaults outcome=nothing_to_copy from=\(self.legacyDomain)")
             return (.nothingToCopy, false)
         }
 
-        // What this app's domain already holds, from a failed earlier attempt the app kept
-        // running after. Anything the copy would change is saved first, never just dropped.
-        let existing = (self.readDestinationDefaults() ?? [:]).filter { !Self.markerKeys.contains($0.key) }
+        // What this app's domain already holds (a failed earlier attempt the app kept running
+        // after). The old values win, but anything they change is saved first, never dropped.
+        let existing = (self.readDestinationDefaults() ?? [:]).filter { !Self.bookkeepingKeys.contains($0.key) }
         let replaced = legacy.keys.filter { existing[$0] != nil }.count
         let changing = legacy.compactMap { key, value -> String? in
             guard let current = existing[key] else { return nil }
             return Self.isEqual(current, value) ? nil : key
-        }
+        }.sorted()
         var displacedBackup: URL?
         if !changing.isEmpty {
             do {
@@ -266,15 +365,18 @@ nonisolated struct AppIdentityMigration {
                 return (
                     self.defaultsFailed(
                         "could not save \(existing.count) existing keys before replacing \(changing.count) of them: "
-                            + "\((error as NSError).domain) code=\((error as NSError).code)"
+                            + "\((error as NSError).domain) code=\((error as NSError).code)",
+                        attempt: attempt,
+                        displacedBackup: nil
                     ),
                     false
                 )
             }
+            self.recordBackup(displacedBackup)
             self.log(
                 .warning,
                 "\(Self.logPrefix) step=defaults displaced=\(changing.count) existing=\(existing.count) "
-                    + "backup=\(displacedBackup?.path ?? "none")"
+                    + "keys=[\(changing.prefix(8).joined(separator: ","))] backup=\(displacedBackup?.path ?? "none")"
             )
         }
 
@@ -284,7 +386,14 @@ nonisolated struct AppIdentityMigration {
         let flushed = self.destination.synchronize()
 
         guard let stored = self.readDestinationDefaults() else {
-            return (self.defaultsFailed("could not read \(self.destinationDomain) back after the copy"), false)
+            return (
+                self.defaultsFailed(
+                    "could not read \(self.destinationDomain) back after the copy",
+                    attempt: attempt,
+                    displacedBackup: displacedBackup
+                ),
+                false
+            )
         }
         let missing = legacy.keys.filter { stored[$0] == nil }.sorted()
         let differing = legacy.compactMap { key, value -> String? in
@@ -297,7 +406,9 @@ nonisolated struct AppIdentityMigration {
             return (
                 self.defaultsFailed(
                     "copy incomplete keys=\(legacy.count) missing=\(missing.count) differing=\(differing.count) "
-                        + "flushed=\(flushed) sample=[\(sample)]"
+                        + "flushed=\(flushed) sample=[\(sample)]",
+                    attempt: attempt,
+                    displacedBackup: displacedBackup
                 ),
                 false
             )
@@ -306,7 +417,8 @@ nonisolated struct AppIdentityMigration {
         self.markDefaultsDone(keys: legacy.count)
         self.log(
             .info,
-            "\(Self.logPrefix) step=defaults outcome=copied keys=\(legacy.count) replaced=\(replaced) from=\(self.legacyDomain)"
+            "\(Self.logPrefix) step=defaults outcome=copied keys=\(legacy.count) replaced=\(replaced) "
+                + "attempt=\(attempt) from=\(self.legacyDomain)"
         )
         return (
             .copied(keys: legacy.count, replaced: replaced, displacedBackup: displacedBackup),
@@ -318,13 +430,17 @@ nonisolated struct AppIdentityMigration {
         (lhs as AnyObject).isEqual(rhs)
     }
 
-    private func backUpDisplacedDefaults(_ values: [String: Any]) throws -> URL {
+    private func timestamp() -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
-        try self.fileManager.createDirectory(at: self.displacedDefaultsBackupFolder, withIntermediateDirectories: true)
-        let url = self.displacedDefaultsBackupFolder.appendingPathComponent(
-            "liquid-voice-displaced-defaults-\(formatter.string(from: self.now()))-\(UUID().uuidString.prefix(8)).plist",
+        return "\(formatter.string(from: self.now()))-\(UUID().uuidString.prefix(8))"
+    }
+
+    private func backUpDisplacedDefaults(_ values: [String: Any]) throws -> URL {
+        try self.fileManager.createDirectory(at: self.backupRoot, withIntermediateDirectories: true)
+        let url = self.backupRoot.appendingPathComponent(
+            "liquid-voice-displaced-defaults-\(self.timestamp()).plist",
             isDirectory: false
         )
         let data = try PropertyListSerialization.data(fromPropertyList: values, format: .binary, options: 0)
@@ -332,8 +448,40 @@ nonisolated struct AppIdentityMigration {
         return url
     }
 
-    private func defaultsFailed(_ reason: String) -> DefaultsOutcome {
-        self.log(.error, "\(Self.logPrefix) step=defaults outcome=failed reason=\(reason) marker=unset (retried next launch)")
+    private func recordBackup(_ url: URL?) {
+        guard let url else { return }
+        var paths = (self.destination.object(forKey: Self.displacedBackupsKey) as? [String]) ?? []
+        paths.append(url.path)
+        self.destination.set(paths, forKey: Self.displacedBackupsKey)
+        _ = self.destination.synchronize()
+    }
+
+    private func recordedBackups() -> [URL] {
+        ((self.destination.object(forKey: Self.displacedBackupsKey) as? [String]) ?? [])
+            .map { URL(fileURLWithPath: $0) }
+    }
+
+    /// A failure is retried on the next launch, except when a retry already displaced data:
+    /// then another retry would copy the old values over the app's newer ones again, so it stops.
+    private func defaultsFailed(_ reason: String, attempt: Int, displacedBackup: URL?) -> DefaultsOutcome {
+        if attempt >= 2, displacedBackup != nil {
+            self.destination.set(
+                ["reason": reason, "at": self.now(), "attempt": attempt] as [String: Any],
+                forKey: Self.defaultsHaltedKey
+            )
+            _ = self.destination.synchronize()
+            let backups = self.recordedBackups()
+            self.log(
+                .error,
+                "\(Self.logPrefix) step=defaults outcome=halted reason=\(reason) attempt=\(attempt) "
+                    + "backups=\(backups.map(\.path).joined(separator: ",")) (no more automatic retries)"
+            )
+            return .halted(reason: reason, backups: backups)
+        }
+        self.log(
+            .error,
+            "\(Self.logPrefix) step=defaults outcome=failed reason=\(reason) attempt=\(attempt) marker=unset (retried next launch)"
+        )
         return .failed(reason)
     }
 
@@ -347,9 +495,20 @@ nonisolated struct AppIdentityMigration {
 
     // MARK: Application Support
 
-    /// Copies the old folder into place through a staging folder, so an interrupted copy never
-    /// leaves a half-filled destination. When the destination already exists (the app created
-    /// it after an earlier attempt failed), only the files it lacks are added.
+    private struct TreeCopy {
+        var files = 0
+        var bytes: Int64 = 0
+        var added = 0
+        var replaced = 0
+        var identical = 0
+        var skipped: [String] = []
+        var displacedBackup: URL?
+    }
+
+    /// Copies the old folder. Into a staging folder first when this app has none, so an
+    /// interrupted copy never leaves a half-filled destination; straight into the existing
+    /// folder otherwise, where old files replace different ones (saved first) and files only
+    /// this app has stay.
     private func migrateFolder() -> FolderOutcome {
         let from = self.legacyFolder.lastPathComponent
         let to = self.destinationFolder.lastPathComponent
@@ -361,73 +520,122 @@ nonisolated struct AppIdentityMigration {
             self.log(.info, "\(Self.logPrefix) step=folder outcome=nothing_to_copy from=\(from)")
             return .nothingToCopy
         }
+
         if self.fileManager.fileExists(atPath: self.destinationFolder.path) {
-            return self.mergeMissingFiles()
+            let result: TreeCopy
+            do {
+                result = try self.copyTree(into: self.destinationFolder)
+            } catch {
+                return self.folderFailed("merge into existing \(to): \((error as NSError).domain) code=\((error as NSError).code)")
+            }
+            let outcome = result.skipped.isEmpty ? "merged" : "merged_with_warnings"
+            self.markFolderDone(outcome: outcome, files: result.files)
+            self.log(
+                result.replaced > 0 || !result.skipped.isEmpty ? .warning : .info,
+                "\(Self.logPrefix) step=folder outcome=\(outcome) added=\(result.added) replaced=\(result.replaced) "
+                    + "identical=\(result.identical) skipped=\(result.skipped.count) from=\(from) to=\(to) "
+                    + "backup=\(result.displacedBackup?.path ?? "none") (\(to) already existed; \(from) left in place)"
+            )
+            return .merged(
+                added: result.added,
+                replaced: result.replaced,
+                identical: result.identical,
+                skipped: result.skipped.count,
+                displacedBackup: result.displacedBackup
+            )
         }
 
         let staging = self.stagingFolder(named: UUID().uuidString)
         do {
-            try self.fileManager.copyItem(at: self.legacyFolder, to: staging)
-            let source = self.fileCount(at: self.legacyFolder)
-            let copied = self.fileCount(at: staging)
-            guard copied.files == source.files, copied.bytes == source.bytes else {
-                try? self.fileManager.removeItem(at: staging)
-                return self.folderFailed(
-                    "copy incomplete files=\(copied.files)/\(source.files) bytes=\(copied.bytes)/\(source.bytes)"
-                )
-            }
+            try self.fileManager.createDirectory(at: staging, withIntermediateDirectories: true)
+            let result = try self.copyTree(into: staging)
             try self.fileManager.moveItem(at: staging, to: self.destinationFolder)
-            self.markFolderDone(outcome: "copied", files: copied.files)
+            let outcome = result.skipped.isEmpty ? "copied" : "copied_with_warnings"
+            self.markFolderDone(outcome: outcome, files: result.files)
             self.log(
-                .info,
-                "\(Self.logPrefix) step=folder outcome=copied files=\(copied.files) bytes=\(copied.bytes) from=\(from) to=\(to) "
-                    + "(\(from) left in place)"
+                result.skipped.isEmpty ? .info : .warning,
+                "\(Self.logPrefix) step=folder outcome=\(outcome) files=\(result.files) bytes=\(result.bytes) "
+                    + "skipped=\(result.skipped.count) from=\(from) to=\(to) (\(from) left in place)"
             )
-            return .copied(files: copied.files, bytes: copied.bytes)
+            return .copied(files: result.files, bytes: result.bytes, skipped: result.skipped.count)
         } catch {
             try? self.fileManager.removeItem(at: staging)
             return self.folderFailed("\((error as NSError).domain) code=\((error as NSError).code)")
         }
     }
 
-    /// Adds every file of the old folder that the existing destination lacks. A file both have
-    /// keeps the destination's version: nothing is overwritten.
-    private func mergeMissingFiles() -> FolderOutcome {
-        let from = self.legacyFolder.lastPathComponent
-        let to = self.destinationFolder.lastPathComponent
-        guard let relativePaths = self.fileManager.enumerator(atPath: self.legacyFolder.path)?.allObjects as? [String] else {
-            return self.folderFailed("could not list \(from)")
+    /// Copies every regular file of the old folder into `target`, without following symbolic
+    /// links. A file `target` already has is left alone when identical; otherwise it is moved to
+    /// a displaced-files backup and the old file takes its place. An unreadable old file is
+    /// skipped with a warning (it would fail the same way on every launch). A failure to write
+    /// throws, and the step is retried next launch.
+    private func copyTree(into target: URL) throws -> TreeCopy {
+        var result = TreeCopy()
+        let keys: [URLResourceKey] = [.isDirectoryKey, .isSymbolicLinkKey, .isRegularFileKey, .fileSizeKey]
+        let log = self.log
+        let legacyName = self.legacyFolder.lastPathComponent
+        // A folder that cannot be listed is logged and passed over, like an unreadable file.
+        let enumerator = self.fileManager.enumerator(at: self.legacyFolder, includingPropertiesForKeys: keys, options: []) { url, error in
+            log(.warning, "\(Self.logPrefix) step=folder skipped_unlistable=\(url.lastPathComponent) code=\((error as NSError).code) (left in \(legacyName))")
+            return true
         }
-        var added = 0
-        var kept: [String] = []
-        do {
-            for relativePath in relativePaths.sorted() {
-                let source = self.legacyFolder.appendingPathComponent(relativePath)
-                let target = self.destinationFolder.appendingPathComponent(relativePath)
-                var isDirectory: ObjCBool = false
-                guard self.fileManager.fileExists(atPath: source.path, isDirectory: &isDirectory) else { continue }
-                if isDirectory.boolValue {
-                    try self.fileManager.createDirectory(at: target, withIntermediateDirectories: true)
-                    continue
-                }
-                if self.fileManager.fileExists(atPath: target.path) {
-                    kept.append(relativePath)
-                    continue
-                }
-                try self.fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try self.fileManager.copyItem(at: source, to: target)
-                added += 1
+        guard let enumerator else { throw CocoaError(.fileReadUnknown) }
+        for case let source as URL in enumerator {
+            // `level` is the depth below the old folder, so the last `level` components are the
+            // path inside it, whatever form (/var or /private/var) the URLs come back in.
+            let relative = source.pathComponents.suffix(enumerator.level).joined(separator: "/")
+            let destination = target.appendingPathComponent(relative)
+            let values = try source.resourceValues(forKeys: Set(keys))
+
+            if values.isSymbolicLink == true {
+                result.skipped.append(relative)
+                self.log(.warning, "\(Self.logPrefix) step=folder skipped_symlink=\(relative) (not followed)")
+                continue
             }
-        } catch {
-            return self.folderFailed("merge stopped after added=\(added): \((error as NSError).domain) code=\((error as NSError).code)")
+            if values.isDirectory == true {
+                try self.fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+                continue
+            }
+            guard values.isRegularFile == true else {
+                result.skipped.append(relative)
+                self.log(.warning, "\(Self.logPrefix) step=folder skipped_special_file=\(relative)")
+                continue
+            }
+            guard self.fileManager.isReadableFile(atPath: source.path) else {
+                result.skipped.append(relative)
+                self.log(.warning, "\(Self.logPrefix) step=folder skipped_unreadable=\(relative) (left in \(self.legacyFolder.lastPathComponent))")
+                continue
+            }
+
+            if self.fileManager.fileExists(atPath: destination.path) {
+                if self.fileManager.contentsEqual(atPath: source.path, andPath: destination.path) {
+                    result.identical += 1
+                    continue
+                }
+                let backup = try self.displacedFolderBackup(&result)
+                let saved = backup.appendingPathComponent(relative)
+                try self.fileManager.createDirectory(at: saved.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try self.fileManager.moveItem(at: destination, to: saved)
+                self.log(.warning, "\(Self.logPrefix) step=folder displaced=\(relative) backup=\(backup.path)")
+                result.replaced += 1
+            } else {
+                result.added += 1
+            }
+            try self.fileManager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try self.fileManager.copyItem(at: source, to: destination)
+            result.files += 1
+            result.bytes += Int64(values.fileSize ?? 0)
         }
-        self.markFolderDone(outcome: "merged", files: added)
-        self.log(
-            .warning,
-            "\(Self.logPrefix) step=folder outcome=merged added=\(added) kept=\(kept.count) from=\(from) to=\(to) "
-                + "(\(to) already existed; nothing overwritten; kept=[\(kept.prefix(5).joined(separator: ","))])"
-        )
-        return .merged(added: added, kept: kept.count)
+        return result
+    }
+
+    private func displacedFolderBackup(_ result: inout TreeCopy) throws -> URL {
+        if let existing = result.displacedBackup { return existing }
+        let url = self.backupRoot.appendingPathComponent("liquid-voice-displaced-folder-\(self.timestamp())", isDirectory: true)
+        try self.fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+        result.displacedBackup = url
+        self.recordBackup(url)
+        return url
     }
 
     private func stagingFolder(named suffix: String) -> URL {
@@ -457,24 +665,6 @@ nonisolated struct AppIdentityMigration {
             forKey: Self.folderMarkerKey
         )
         _ = self.destination.synchronize()
-    }
-
-    private func fileCount(at root: URL) -> (files: Int, bytes: Int64) {
-        guard let enumerator = self.fileManager.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
-            options: []
-        ) else { return (0, 0) }
-        var files = 0
-        var bytes: Int64 = 0
-        for case let url as URL in enumerator {
-            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
-                  values.isRegularFile == true
-            else { continue }
-            files += 1
-            bytes += Int64(values.fileSize ?? 0)
-        }
-        return (files, bytes)
     }
 
     // MARK: Launch at startup
@@ -513,8 +703,10 @@ nonisolated struct AppIdentityMigration {
 
 private nonisolated extension AppIdentityMigration.DefaultsOutcome {
     var isFailure: Bool {
-        if case .failed = self { return true }
-        return false
+        switch self {
+        case .failed, .halted: true
+        default: false
+        }
     }
 
     var logValue: String {
@@ -523,6 +715,7 @@ private nonisolated extension AppIdentityMigration.DefaultsOutcome {
         case let .copied(keys, _, _): "copied(\(keys))"
         case .nothingToCopy: "nothing_to_copy"
         case .failed: "failed"
+        case .halted: "halted"
         }
     }
 }
@@ -536,8 +729,8 @@ private nonisolated extension AppIdentityMigration.FolderOutcome {
     var logValue: String {
         switch self {
         case .alreadyDone: "already_done"
-        case let .copied(files, _): "copied(\(files))"
-        case let .merged(added, kept): "merged(added=\(added),kept=\(kept))"
+        case let .copied(files, _, skipped): skipped == 0 ? "copied(\(files))" : "copied(\(files),skipped=\(skipped))"
+        case let .merged(added, replaced, _, skipped, _): "merged(added=\(added),replaced=\(replaced),skipped=\(skipped))"
         case .nothingToCopy: "nothing_to_copy"
         case .failed: "failed"
         }

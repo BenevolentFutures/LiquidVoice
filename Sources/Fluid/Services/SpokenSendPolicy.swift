@@ -178,14 +178,9 @@ nonisolated struct SendKeyStep {
     var inputCutoff: TimeInterval = ProcessInfo.processInfo.systemUptime
     /// Waits briefly for the physical modifier keys to be released; false when still held.
     var modifiersReleased: () -> Bool = { TypingService.waitForPhysicalModifierRelease(timeout: SendKeyStep.modifierReleaseTimeout) }
-    /// Whether the user pressed a key or clicked since the given system uptime. Modifier presses
-    /// and mouse moves do not count; keystrokes posted to a process do not either.
-    var userActedSince: (TimeInterval) -> Bool = { cutoff in
-        PasteVerifier.userActedAfterPaste(
-            secondsSinceLastInput: PasteVerifier.secondsSinceLastUserInput(),
-            secondsSincePaste: ProcessInfo.processInfo.systemUptime - cutoff
-        )
-    }
+    /// Whether the user pressed a key or clicked since the given system uptime. Modifier presses,
+    /// mouse moves, keystrokes posted to a process, and Liquid Voice's own hotkeys do not count.
+    var userActedSince: (TimeInterval) -> Bool = { InputSinceStop.userActed(since: $0) }
     /// Whether the element focused at stop is still focused. Unconfigured, it is never shown to
     /// be, so a step built without a target presses nothing.
     var targetFocus: () -> TargetFocus = { .unreadable }
@@ -202,5 +197,63 @@ nonisolated struct SendKeyStep {
         self.inputCutoff = request.stoppedAt
         let target = request.target
         self.targetFocus = { TypingService.stopTimeFocus(of: target) }
+    }
+}
+
+/// Key-downs Liquid Voice's own hotkeys consumed (recorded on the hotkey tap), so starting the
+/// next dictation right after a quiet-countdown stop does not read as the user moving elsewhere.
+nonisolated enum ConsumedHotkeyKeyDowns {
+    private static let lock = NSLock()
+    private nonisolated(unsafe) static var times: [TimeInterval] = []
+    private static let kept = 8
+
+    static func record(at time: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+        self.lock.withLock {
+            self.times.append(time)
+            if self.times.count > self.kept { self.times.removeFirst(self.times.count - self.kept) }
+        }
+    }
+
+    static func recent() -> [TimeInterval] {
+        self.lock.withLock { self.times }
+    }
+
+    /// For tests.
+    static func removeAll() {
+        self.lock.withLock { self.times.removeAll() }
+    }
+}
+
+/// Whether the user pressed a key or clicked after dictation stopped. Pure core, so it is tested.
+nonisolated enum InputSinceStop {
+    /// Input this soon after the cutoff is treated as before it (the stop key itself).
+    static let slack: TimeInterval = 0.05
+    /// A key-down's HID time comes this much before the hotkey tap sees it, at most.
+    static let hotkeyMatchWindow: TimeInterval = 0.25
+
+    /// Only the latest key-down and click are known. When the latest key-down is one of our own
+    /// hotkeys it is ignored; a pane switch typed before it is still caught by the stop-time
+    /// element check.
+    static func userActed(
+        stoppedAt: TimeInterval,
+        lastKeyDownAt: TimeInterval,
+        lastClickAt: TimeInterval,
+        hotkeyKeyDowns: [TimeInterval]
+    ) -> Bool {
+        let clicked = lastClickAt > stoppedAt + self.slack
+        let typed = lastKeyDownAt > stoppedAt + self.slack && !hotkeyKeyDowns.contains { consumedAt in
+            lastKeyDownAt >= consumedAt - self.hotkeyMatchWindow && lastKeyDownAt <= consumedAt + self.slack
+        }
+        return clicked || typed
+    }
+
+    static func userActed(since stoppedAt: TimeInterval) -> Bool {
+        let now = ProcessInfo.processInfo.systemUptime
+        return self.userActed(
+            stoppedAt: stoppedAt,
+            lastKeyDownAt: now - CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: .keyDown),
+            lastClickAt: now - CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: .leftMouseDown),
+            hotkeyKeyDowns: ConsumedHotkeyKeyDowns.recent()
+        )
     }
 }

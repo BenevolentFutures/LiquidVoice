@@ -1578,8 +1578,27 @@ final class TerminalPasteThenSendTests: XCTestCase {
 
         XCTAssertEqual(result.failure, .targetRestoreFailed)
         XCTAssertEqual(result.sendKey, .textNotDelivered)
-        XCTAssertEqual(log.events, [])
+        XCTAssertFalse(log.events.contains { $0.hasPrefix("paste") || $0.hasPrefix("key") })
         XCTAssertEqual(self.pasteboard.string(forType: .string), "before")
+    }
+
+    /// The pane look (an AX read that can be slow) comes before the dispatch instant's frontmost
+    /// look, so nothing sits between that look and the Cmd+V.
+    func testTheLastFrontmostLookIsRightBeforeTheCmdV() {
+        let session = self.session()
+        let log = TerminalEventLog()
+        let paster = self.makePaster(session, log: log) { _ in
+            log.append("front")
+            return true
+        }
+
+        let result = self.pasteThenSend(paster, self.makeStep(log: log))
+        session.waitUntilIdle()
+
+        XCTAssertEqual(result.sendKey, .sent)
+        let events = log.events
+        let paste = try? XCTUnwrap(events.firstIndex(of: "paste 4242"))
+        XCTAssertEqual(paste.map { Array(events[($0 - 2)..<$0]) }, ["focus same", "front"])
     }
 
     func testTheGateIsCheckedAgainBeforeTheReturn() {

@@ -8,7 +8,7 @@
 # project.pbxproj; this hook keeps that edit out of a commit.
 
 if git diff --cached --name-only | grep -q "project.pbxproj"; then
-  if git diff --cached Fluid.xcodeproj/project.pbxproj | grep -q "^[+-].*DEVELOPMENT_TEAM"; then
+  if git diff --cached --no-color --no-ext-diff Fluid.xcodeproj/project.pbxproj | grep -q "^[+-].*DEVELOPMENT_TEAM"; then
     echo "ERROR: DEVELOPMENT_TEAM changes detected in Fluid.xcodeproj/project.pbxproj"
     echo ""
     echo "Don't commit a signing team change. build.sh passes your team at build time."

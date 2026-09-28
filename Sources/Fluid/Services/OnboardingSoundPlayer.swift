@@ -9,7 +9,14 @@ final class OnboardingSoundPlayer {
 
     private init() {}
 
+    /// Whether a player was ever created. The XCTest host must never create one.
+    var hasCreatedPlayer: Bool {
+        self.welcomePlayer != nil
+    }
+
     func playWelcomeSound() {
+        // The XCTest host is silent: no player is created and nothing plays.
+        guard !TestHostQuietMode.isActive else { return }
         let settings = SettingsStore.shared
         guard settings.enableTranscriptionSounds, settings.transcriptionStartSound != .none else { return }
         guard let url = Bundle.main.url(forResource: "onboarding_welcome", withExtension: "m4a") else {

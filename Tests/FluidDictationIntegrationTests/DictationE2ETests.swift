@@ -2652,6 +2652,10 @@ final class StopPathLatencyBenchmarkTests: XCTestCase {
         defer {
             history.restore(from: originalHistory)
             history.flushPendingWrites()
+            // Audio saved for benchmark dictations (when the Debug build keeps audio) belonged to
+            // entries that are gone now.
+            let referenced = Set(history.entries.compactMap { $0.audio?.fileName })
+            _ = DictationAudioHistoryStore.shared.deleteUnreferencedAudioFiles(referencedFileNames: referenced)
         }
 
         let fixture = try AudioFixtureLoader.load16kMonoFloatSamples(named: "dictation_fixture", ext: "wav")

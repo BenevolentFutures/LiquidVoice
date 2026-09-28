@@ -3172,6 +3172,94 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    // MARK: Spoken Send (ported from altic-dev/FluidVoice@c679506d)
+
+    /// The key Spoken Send presses after the text. c11 always gets a plain Return (see
+    /// `SpokenSendPolicy.effectiveKey`).
+    nonisolated enum SpokenSendKey: String, CaseIterable, Identifiable, Codable, Sendable {
+        case enter
+        case shiftEnter
+        case commandEnter
+
+        var id: String {
+            self.rawValue
+        }
+
+        var displayName: String {
+            switch self {
+            case .enter:
+                return "Return"
+            case .shiftEnter:
+                return "Shift + Return"
+            case .commandEnter:
+                return "Command + Return"
+            }
+        }
+
+        var eventFlags: CGEventFlags {
+            switch self {
+            case .enter:
+                return []
+            case .shiftEnter:
+                return .maskShift
+            case .commandEnter:
+                return .maskCommand
+            }
+        }
+    }
+
+    /// Say the send phrase at the end of a dictation and Return follows the text. Off by default.
+    var spokenSendEnabled: Bool {
+        get { self.defaults.object(forKey: Keys.spokenSendEnabled) as? Bool ?? false }
+        set {
+            objectWillChange.send()
+            self.defaults.set(newValue, forKey: Keys.spokenSendEnabled)
+        }
+    }
+
+    /// Once the phrase ends what was said, stop listening after a short quiet countdown and send,
+    /// without waiting for the stop hotkey. Upstream's "Send Immediately"; on by default.
+    var spokenSendImmediatelyEnabled: Bool {
+        get { self.defaults.object(forKey: Keys.spokenSendImmediatelyEnabled) as? Bool ?? true }
+        set {
+            objectWillChange.send()
+            self.defaults.set(newValue, forKey: Keys.spokenSendImmediatelyEnabled)
+        }
+    }
+
+    var spokenSendPhrase: String {
+        get { self.defaults.string(forKey: Keys.spokenSendPhrase) ?? "send it" }
+        set {
+            objectWillChange.send()
+            self.defaults.set(newValue, forKey: Keys.spokenSendPhrase)
+        }
+    }
+
+    var spokenSendKey: SpokenSendKey {
+        get {
+            guard let raw = self.defaults.string(forKey: Keys.spokenSendKey),
+                  let key = SpokenSendKey(rawValue: raw)
+            else {
+                return .enter
+            }
+            return key
+        }
+        set {
+            objectWillChange.send()
+            self.defaults.set(newValue.rawValue, forKey: Keys.spokenSendKey)
+        }
+    }
+
+    /// Spoken Send may press Return in c11 (Claude Code prompts). Every other terminal is
+    /// blocked, because Return there runs a shell command. On by default once Spoken Send is on.
+    var spokenSendAllowsC11: Bool {
+        get { self.defaults.object(forKey: Keys.spokenSendAllowsC11) as? Bool ?? true }
+        set {
+            objectWillChange.send()
+            self.defaults.set(newValue, forKey: Keys.spokenSendAllowsC11)
+        }
+    }
+
     func makeBackupPayload() -> SettingsBackupPayload {
         SettingsBackupPayload(
             selectedProviderID: self.selectedProviderID,
@@ -3242,6 +3330,11 @@ final class SettingsStore: ObservableObject {
             showMicrophoneChangeAlerts: self.showMicrophoneChangeAlerts,
             showPasteCheckAlerts: self.showPasteCheckAlerts,
             returnDictationToStartingField: self.returnDictationToStartingField,
+            spokenSendEnabled: self.spokenSendEnabled,
+            spokenSendImmediatelyEnabled: self.spokenSendImmediatelyEnabled,
+            spokenSendPhrase: self.spokenSendPhrase,
+            spokenSendKey: self.spokenSendKey,
+            spokenSendAllowsC11: self.spokenSendAllowsC11,
             weekendsDontBreakStreak: self.weekendsDontBreakStreak,
             fillerWords: self.fillerWords,
             removeFillerWordsEnabled: self.removeFillerWordsEnabled,
@@ -3383,6 +3476,21 @@ final class SettingsStore: ObservableObject {
         }
         if let returnDictationToStartingField = payload.returnDictationToStartingField {
             self.returnDictationToStartingField = returnDictationToStartingField
+        }
+        if let spokenSendEnabled = payload.spokenSendEnabled {
+            self.spokenSendEnabled = spokenSendEnabled
+        }
+        if let spokenSendImmediatelyEnabled = payload.spokenSendImmediatelyEnabled {
+            self.spokenSendImmediatelyEnabled = spokenSendImmediatelyEnabled
+        }
+        if let spokenSendPhrase = payload.spokenSendPhrase {
+            self.spokenSendPhrase = spokenSendPhrase
+        }
+        if let spokenSendKey = payload.spokenSendKey {
+            self.spokenSendKey = spokenSendKey
+        }
+        if let spokenSendAllowsC11 = payload.spokenSendAllowsC11 {
+            self.spokenSendAllowsC11 = spokenSendAllowsC11
         }
         self.weekendsDontBreakStreak = payload.weekendsDontBreakStreak
         self.fillerWords = payload.fillerWords
@@ -5225,6 +5333,11 @@ private extension SettingsStore {
         static let showMicrophoneChangeAlerts = "ShowMicrophoneChangeAlerts"
         static let showPasteCheckAlerts = "ShowPasteCheckAlerts"
         static let returnDictationToStartingField = "ReturnDictationToStartingField"
+        static let spokenSendEnabled = "SpokenSendEnabled"
+        static let spokenSendImmediatelyEnabled = "SpokenSendImmediatelyEnabled"
+        static let spokenSendPhrase = "SpokenSendPhrase"
+        static let spokenSendKey = "SpokenSendKey"
+        static let spokenSendAllowsC11 = "SpokenSendAllowsC11"
         static let visualizerNoiseThreshold = "VisualizerNoiseThreshold"
         static let launchAtStartup = "LaunchAtStartup"
         static let showInDock = "ShowInDock"

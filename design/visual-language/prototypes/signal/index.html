@@ -165,20 +165,36 @@
 .sg-top { position: relative; height: 54px; }           /* reserved: the 3-line preview, all non-failed states */
 .sg-gap { height: 6px; flex: none; }                     /* + the trace's own 2 pt top margin = 8 */
 
-/* trace row: [target-app icon 20] [trace] [■ 6] [timer, 5ch reserved], centred on the trace midline */
-.sg-trace-row { height: 50px; flex: none; display: flex; align-items: flex-start; justify-content: space-between; }
+/* trace row: [target-app icon 20] [trace] [placard, 7ch reserved] [■ 6] [timer, 5ch reserved], centred on the
+   trace midline. The trace width is computed from the measured placard and timer so the right group ends on the
+   text column's right edge; under ?send=chip there is no placard and the trace takes the room back. */
+.sg-trace-row { height: 50px; flex: none; display: flex; align-items: flex-start; }
 .sg-app { width: 20px; height: 20px; flex: none; margin-top: 12px; }
 .sg-app svg { display: block; }
-.sg-trace { display: block; flex: none; height: 50px; }  /* 44 trace + 6 age ruler below; width set from the bar count */
+.sg-trace { display: block; flex: none; height: 50px; margin-left: 10px; }  /* 44 trace + 6 age ruler below; width from the bar count */
+/* Spoken Send placard: empty at rest, width reserved for "NO SEND". */
+.sg-placard {
+  flex: none; margin-left: auto; margin-top: 15px; height: 14px; width: calc(7 * (1ch + 0.06em)); overflow: hidden;
+  font: 600 10.5px/14px var(--sg-mono); letter-spacing: 0.06em; text-transform: uppercase; text-align: right; white-space: nowrap;
+  color: var(--sg-text);
+}
+.sg[data-send="armed"] .sg-placard, .sg[data-send="countdown"] .sg-placard { color: var(--sg-accent); }
+.sg[data-send="noreturn"] .sg-placard { color: var(--sg-text-dim); }
+.sg[data-sendui="chip"] .sg-placard { display: none; }
 .sg-readout {
-  flex: none; margin-top: 13px; height: 18px;
+  flex: none; margin-top: 13px; height: 18px; margin-left: 6px;
   display: flex; align-items: center; gap: 4px;
   font: 600 15px/18px var(--sg-mono); color: var(--sg-text);
 }
+.sg[data-sendui="chip"] .sg-readout { margin-left: auto; }
 .sg-time { display: inline-block; width: 5ch; text-align: right; }   /* reserved for "99:59": never shifts */
 .sg-dot { width: 6px; height: 6px; flex: none; box-sizing: border-box; }
-.sg[data-state="listening"] .sg-dot, .sg[data-state="history"] .sg-dot { background: var(--sg-accent); }
-.sg[data-state="transcribing"] .sg-dot { box-shadow: inset 0 0 0 1.5px var(--sg-accent); }
+.sg[data-family="live"] .sg-dot { background: var(--sg-accent); }                                   /* mic open */
+.sg[data-state="transcribing"] .sg-dot, .sg[data-state="countdown"] .sg-dot,
+.sg[data-state="micoff"] .sg-dot { box-shadow: inset 0 0 0 1.5px var(--sg-accent); }                /* mic closed or unavailable */
+.sg[data-state="countdown"] .sg-time { color: var(--sg-accent); }                                    /* the send countdown, 1.5 → 0.0 */
+.sg[data-state="countdown"][data-send="canceled"] .sg-time { color: var(--sg-text); }
+.sg[data-state="micoff"] .sg-time { color: var(--sg-text-dim); }
 
 /* mic row: bottom centre, the same in every visible state */
 .sg-mic {
@@ -190,6 +206,7 @@
 .sg-preview { height: 54px; overflow: hidden; }
 .sg-preview p { margin: 0; font: 500 13.5px/18px var(--sg-font); color: var(--sg-text); overflow-wrap: break-word; }
 .sg[data-state="transcribing"] .sg-preview p { color: var(--sg-text-dim); }
+.sg[data-state="micoff"] .sg-mic { color: var(--sg-text); }
 
 /* delivered: swaps the preview for one statement of equal height */
 .sg-rec { position: relative; height: 54px; }
@@ -198,34 +215,41 @@
 .sg-done-text { display: flex; flex-direction: column; gap: 3px; }
 .sg-done-text b { font: 600 16px/20px var(--sg-font); color: var(--sg-text); }
 .sg-done-text span { font: 500 10.5px/14px var(--sg-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--sg-text-2); }
-.sg[data-state="delivered"] .sg-rec { visibility: hidden; }
-.sg[data-state="delivered"] .sg-done { display: flex; }
+.sg[data-family="outcome"] .sg-rec { visibility: hidden; }          /* delivered (pasted) and sent */
+.sg[data-family="outcome"] .sg-done { display: flex; }
 
-/* failed: the pill grows upward; rails (fixed height, bottom-aligned) and trace stay put */
-.sg-fail { display: none; }
+/* Recovery card family (failed, timedout, asrback, micoff): one anatomy. The pill grows upward; the trace row,
+   the mic row, the rails and the chips stay put. Headline, reason line, [transcript, failed only], action row. */
+.sg-card { display: none; }
 .sg-fail-rule { position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--sg-accent); display: none; }
-.sg[data-state="failed"] .sg-top { height: auto; }
-.sg[data-state="failed"] .sg-rec { display: none; }
-.sg[data-state="failed"] .sg-fail { display: block; }
-.sg[data-state="failed"] .sg-fail-rule { display: block; }
-.sg-fail h3 { margin: 0; font: 600 13.5px/18px var(--sg-font); color: var(--sg-text); }
-.sg-fail p {
+.sg[data-family="card"] .sg-top { height: auto; }
+.sg[data-family="card"] .sg-rec { display: none; }
+.sg[data-family="card"] .sg-card { display: block; }
+.sg[data-family="card"] .sg-fail-rule { display: block; }
+.sg-card h3 { margin: 0; font: 600 13.5px/18px var(--sg-font); color: var(--sg-text); }
+.sg-reason {
+  margin: 4px 0 0; min-height: 17px; font: 400 13px/17px var(--sg-font); color: var(--sg-text-2);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.sg-card-text {
   margin: 6px 0 0; height: 51px; font: 400 13px/17px var(--sg-font); color: var(--sg-text);
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
 }
+.sg-card-text[hidden] { display: none; }
 .sg-actions { margin-top: 12px; height: 28px; display: flex; align-items: center; gap: 16px; }
-.sg-copy {
-  width: 88px; height: 28px; padding: 0; border: 0; border-radius: 0;
+.sg-primary {
+  min-width: 88px; height: 28px; padding: 0 12px; border: 0; border-radius: 0; box-sizing: border-box;
   background: var(--sg-accent); color: var(--sg-on-accent);
-  font: 600 13px/28px var(--sg-font); cursor: default; outline: none;
+  font: 600 13px/28px var(--sg-font); cursor: default; outline: none; white-space: nowrap;
   display: grid; place-items: center;
   transition: background-color 60ms linear, color 60ms linear;
 }
-.sg-copy > span { grid-area: 1 / 1; display: inline-flex; align-items: center; gap: 5px; }
-.sg-copy .b { visibility: hidden; }
-.sg-copy.is-copied .a { visibility: hidden; }
-.sg-copy.is-copied .b { visibility: visible; }
-.sg-copy.is-pressed { background: var(--sg-inv-bg); color: var(--sg-inv-fg); }
+.sg-primary > span { grid-area: 1 / 1; display: inline-flex; align-items: center; gap: 6px; }
+.sg-primary svg { display: block; width: 13px; height: 13px; flex: none; }
+.sg-primary .b { visibility: hidden; }
+.sg-primary.is-copied .a { visibility: hidden; }
+.sg-primary.is-copied .b { visibility: visible; }
+.sg-primary.is-pressed { background: var(--sg-inv-bg); color: var(--sg-inv-fg); }
 .sg-dismiss {
   height: 28px; padding: 0; border: 0; background: none; color: var(--sg-text);
   font: 500 13px/28px var(--sg-font); cursor: default; outline: none;
@@ -248,8 +272,8 @@
 .sg-hist > .tk { --tk-gap: 4px; }   /* absolute children start at the padding edge: 1 pt border + 3 pt clear */
 .sg-hist:hover > .tk { opacity: 1; }
 .sg-hist.is-open { display: flex; }
-/* The failed card grows the pill 61 pt above the rail (210 vs 149); a history card opened then clears it. */
-.sg[data-state="failed"] .sg-hist { bottom: calc(100% + 6px + 61px); }
+/* A recovery card grows the pill above the rail by --grow (measured per state); a history card opened then clears it. */
+.sg-hist { bottom: calc(100% + 6px + var(--grow, 0px)); }
 .sg-hist header, .sg-hist footer {
   flex: none; padding: 0 19px; display: flex; align-items: center; justify-content: space-between;
   font: 500 10px/1 var(--sg-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--sg-text-2);
@@ -283,6 +307,17 @@
 .sg-hmeta { margin-top: 6px; display: flex; align-items: center; font: 500 10.5px/15px var(--sg-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--c2); }
 .sg-flag { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; font-weight: 600; color: var(--c1); }
 .sg-flag i { width: 6px; height: 6px; background: var(--sg-accent); }
+
+/* ---------- Spoken Send, alternative (?send=chip): a fifth chip in the trailing rail's reserved middle slot ---------- */
+.sg-chip[data-chip="send"] { position: absolute; left: 0; top: 60px; visibility: hidden; }
+.sg[data-sendui="chip"]:not([data-send="none"]) .sg-chip[data-chip="send"] { visibility: visible; }
+.sg-chip[data-chip="send"] .g-main { color: var(--sg-accent); }
+.sg[data-send="canceled"] .sg-chip[data-chip="send"] .g-main { color: var(--sg-glyph); }
+.sg[data-send="noreturn"] .sg-chip[data-chip="send"] .g-main { color: var(--sg-glyph-off); }
+.sg-chip .sg-ring { position: absolute; left: 0; top: 0; width: 30px; height: 30px; pointer-events: none; overflow: visible; }
+.sg-ring path { fill: none; stroke: var(--sg-accent); stroke-width: 1.5; stroke-linecap: butt; stroke-linejoin: miter; }
+.sg[data-send="canceled"] .sg-ring path { stroke: var(--sg-bracket); }
+.sg[data-send="noreturn"] .sg-ring { display: none; }
 
 /* ---------- menu bar item + menu ---------- */
 #lv-menubar-slot .lv-status { justify-content: center; color: inherit; }
@@ -340,8 +375,23 @@
   const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const HISTORY_TOTAL = 247;                      // entries in the store; the card lists the newest 12
 
-  // Prototype option, persisted in the URL: density=quiet|drawn (the age ruler under the trace).
-  const OPT = { density: params.get("density") === "quiet" ? "quiet" : "drawn" };
+  // Prototype options, persisted in the URL. Defaults are the recommendation; each alternative costs one click.
+  //   density = quiet | drawn        the age ruler under the trace
+  //   send    = row | chip           Spoken Send in the trace row (placard + drain bar) or as a fifth chip
+  //   wording = pasted | delivered   "Pasted into c11" (truthful: the paste is posted, not verified) or "Delivered to"
+  //   reason  = nofocus | clipboard | clipboardkept     the failed card's reason line (TextDelivery)
+  //   target  = return | noreturn    a terminal that never gets a Return: the placard reads NO SEND, dim
+  const pick = (k, vals, d) => (vals.includes(params.get(k)) ? params.get(k) : d);
+  const OPT = {
+    density: pick("density", ["quiet", "drawn"], "drawn"),
+    send: pick("send", ["row", "chip"], "row"),
+    wording: pick("wording", ["pasted", "delivered"], "pasted"),
+    reason: pick("reason", ["nofocus", "clipboard", "clipboardkept"], "nofocus"),
+    target: params.get("noreturn") === "1" ? "noreturn" : pick("target", ["return", "noreturn"], "return"),
+  };
+  const ARMED = params.get("armed") === "1";                    // inspection: the send phrase was heard
+  const T_FIXED = params.has("t") ? Math.max(0, Math.min(1.5, parseFloat(params.get("t")) || 0)) : null;   // countdown remaining, held
+  const CANCELED = params.get("canceled") === "1";              // inspection: the countdown was canceled at t
 
   // ---------------------------------------------------------------- timing tokens
   const T_BAR = 60;          // bar morph, linear
@@ -351,6 +401,8 @@
   const T_PRESS = 60;        // minimum visible press
   const T_COPIED = 900;      // copy feedback
   const PREROLL_S = 37;      // the state picker opens mid-dictation so the steady state is visible
+  const T_SEND = 1500;       // Spoken Send quiet countdown after you stop, linear, stepped on the 4 pt pitch
+  const T_CANCELED = 700;    // canceled send: hold NO SEND, then the text lands without the phrase
 
   // Live streaming preview: LV_MOCK.livePreview[0], continued as the same raw ASR draft of history[0].
   const STREAM = (M.livePreview[0] + " worker sees the same job id land twice inside the lease window we are admitting both and the second one clobbers the first ones checkpoint so i think the fix is to key the admission set on job id plus lease epoch instead of just job id write a failing test first that reproduces the double admission then fix it then run the whole queue suite and do not touch the scheduler when you are done give me a one line summary and the diff stat and if the suite takes longer than a minute tell me which tests are slow so we can look at them after this lands and then close the worktree").split(" ");
@@ -368,6 +420,14 @@
     reprocess: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12.9 6.1 A5.25 5.25 0 1 1 8 3.1"/><path d="M6.4 0.9 L8.6 3.1 L6.4 5.3"/></svg>',
     // SF Symbol: checkmark
     check: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 8.4 L6.6 11.3 L12.4 4.7"/></svg>',
+    // SF Symbol: gearshape
+    gear: (() => { let d = ""; const n = 8, ro = 6.6, ri = 5.0, cx = 8, cy = 8;
+      for (let i = 0; i < n * 4; i++) { const a = (i / (n * 4)) * Math.PI * 2 - Math.PI / 2 + Math.PI / (n * 4); const r = (i % 4 < 2) ? ro : ri;
+        d += (i ? "L" : "M") + (cx + r * Math.cos(a)).toFixed(2) + " " + (cy + r * Math.sin(a)).toFixed(2); }
+      return `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="${d}Z"/><circle cx="8" cy="8" r="2.1"/></svg>`; })(),
+    // SF Symbol: paperplane.fill (armed) / paperplane (hollow: no key will follow)
+    plane: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M14.7 1.3 L1.3 7.3 L6.2 9.2 Z"/><path d="M14.7 1.3 L7.1 10.0 L9.1 14.7 Z"/></svg>',
+    planeHollow: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M14.6 1.4 L1.6 7.3 L6.3 9.2 Z"/><path d="M14.6 1.4 L7.1 10.1 L9.0 14.5 Z"/></svg>',
     // SF Symbol: chevron.right (menu submenu arrow)
     chev: '<svg width="8" height="10" viewBox="0 0 8 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 1.5 L6 5 L2.5 8.5"/></svg>',
   };
@@ -394,7 +454,7 @@
         html += `<li class="sg-hday" aria-hidden="true">${day} · ${date}</li>`;
         lastDay = day;
       }
-      const flag = h.delivered ? "" : '<span class="sg-flag"><i></i>Not delivered</span>';
+      const flag = h.delivered ? "" : `<span class="sg-flag"><i></i><span class="sg-flag-t">${OPT.wording === "delivered" ? "Not delivered" : "Not pasted"}</span></span>`;
       html += `<li class="sg-hrow" data-i="${i}" role="button" title="Insert this dictation into the focused app">
         <div class="sg-hidx"><b>${pad2(i + 1)}</b><span>${LV.fmtTime(h.when)}</span></div>
         <div class="sg-hbody"><p>${esc(h.text)}</p><div class="sg-hmeta">${LV.fmtDuration(h.seconds)} · ${h.words} words · ${esc(h.target)}${flag}</div></div>
@@ -407,6 +467,8 @@
   const root = document.createElement("div");
   root.className = "sg is-hidden is-gone";
   root.dataset.density = OPT.density;
+  root.dataset.sendui = OPT.send;
+  root.dataset.send = "none";
   root.innerHTML = `
     <div class="sg-rail sg-lead">
       ${chip("history", "Recent Dictations", G.history)}
@@ -427,15 +489,16 @@
         </div>
         <div class="sg-done" aria-live="polite">
           <span class="sg-stamp">${G.check.replace('viewBox', 'width="18" height="18" viewBox').replace('stroke-width="2"', 'stroke-width="2.25"')}</span>
-          <span class="sg-done-text"><b>Delivered to ${esc(TARGET)}</b><span class="sg-done-meta"></span></span>
+          <span class="sg-done-text"><b class="sg-done-head"></b><span class="sg-done-meta"></span></span>
         </div>
-        <div class="sg-fail" role="alert">
-          <h3>Couldn’t paste into ${esc(TARGET)}</h3>
-          <p>${esc(H0.text)}</p>
+        <div class="sg-card" role="alert">
+          <h3 class="sg-card-head"></h3>
+          <p class="sg-reason"></p>
+          <p class="sg-card-text">${esc(H0.text)}</p>
           <div class="sg-actions">
-            <button class="sg-copy" title="Copy the transcription to the clipboard"><span class="a">Copy</span><span class="b">${G.check.replace('viewBox', 'width="13" height="13" viewBox').replace('stroke-width="2"', 'stroke-width="2.25"')}Copied</span></button>
+            <button class="sg-primary"><span class="a"></span><span class="b"></span></button>
             <button class="sg-dismiss">Dismiss</button>
-            <span class="sg-fail-meta">${H0.words} words</span>
+            <span class="sg-fail-meta"></span>
           </div>
         </div>
       </div>
@@ -443,32 +506,51 @@
       <div class="sg-trace-row">
         <span class="sg-app" title="Dictation target app">${APP_C11}</span>
         <canvas class="sg-trace"></canvas>
+        <span class="sg-placard" title="Spoken Send" aria-live="polite"></span>
         <span class="sg-readout"><i class="sg-dot"></i><span class="sg-time">0:00</span></span>
       </div>
       <div class="sg-mic" title="Microphone">${esc(MIC)}</div>
     </div>
     <div class="sg-rail sg-trail">
       ${chip("cancel", "Cancel Dictation (Esc)", G.cancel)}
+      ${chip("send", "Spoken Send: click to cancel the Return", G.plane)}
       ${chip("reprocess", "Reprocess Last Dictation", G.reprocess)}
     </div>`;
+  // The alternative send chip carries a square ring that drains clockwise (pathLength 100, from top centre).
+  root.querySelector('[data-chip="send"]').insertAdjacentHTML("beforeend",
+    '<svg class="sg-ring" viewBox="0 0 30 30" aria-hidden="true"><path pathLength="100" d="M15 0.75H29.25V29.25H0.75V0.75H15"/></svg>');
 
   const $ = (s) => root.querySelector(s);
   const el = {
-    time: $(".sg-time"), preview: $(".sg-preview p"),
-    doneMeta: $(".sg-done-meta"), hist: $(".sg-hist"), canvas: $(".sg-trace"),
-    copyBtn: $(".sg-copy"), dismissBtn: $(".sg-dismiss"),
+    time: $(".sg-time"), preview: $(".sg-preview p"), placard: $(".sg-placard"), readout: $(".sg-readout"), mic: $(".sg-mic"),
+    doneHead: $(".sg-done-head"), doneMeta: $(".sg-done-meta"), hist: $(".sg-hist"), canvas: $(".sg-trace"),
+    cardHead: $(".sg-card-head"), reason: $(".sg-reason"), cardText: $(".sg-card-text"), cardMeta: $(".sg-fail-meta"),
+    primary: $(".sg-primary"), dismissBtn: $(".sg-dismiss"), pill: $(".sg-pill"), ring: $(".sg-ring path"),
     chips: Object.fromEntries([...root.querySelectorAll(".sg-chip")].map((b) => [b.dataset.chip, b])),
   };
 
   // ---------------------------------------------------------------- voice trace + graticule (one Canvas)
-  // 52 bars on the 4 pt pitch (2 pt bars, 2 pt gaps) = 206 pt: the row now also holds the timer, so the trace
-  // keeps its grain and gets shorter (4.3 s of history) rather than finer.
-  const N = 52, BAR = 2, PITCH = 4, TW = N * PITCH - 2, TH = 44, CH = 50, MID = 22, HMIN = 2, HMAX = 40, HEAD = 6, SWEEP_W = 24;
+  // Bars on the 4 pt pitch (2 pt bars, 2 pt gaps). The count is whatever fits the row after the icon, the Spoken
+  // Send placard and the timer: 39 bars (3.25 s) with the placard, 52 (4.3 s) under ?send=chip. The trace keeps its
+  // grain and gets shorter rather than finer.
+  const BAR = 2, PITCH = 4, TH = 44, CH = 50, MID = 22, HMIN = 2, HMAX = 40, HEAD = 6, SWEEP_W = 24;
   const PER_S = 12;          // bars per second of history (T_SAMPLE = 1000 / 12)
+  let N = 52, TW = N * PITCH - 2;
   const tr = {
     prev: new Float32Array(N).fill(HMIN), cur: new Float32Array(N).fill(HMIN),
     lastPush: 0, n: 0, acc: 0, accT: 0, live: false, sweep: false, sweepT0: 0,
   };
+  function layoutTrace() {
+    // Content width 304 = icon 20 + 10 + trace + (8 + placard + 6 | 12) + readout. Keep the newest samples.
+    const pw = OPT.send === "row" ? el.placard.offsetWidth + 8 : 12;
+    const avail = 304 - 20 - 10 - pw - el.readout.offsetWidth - (OPT.send === "row" ? 6 : 0);
+    const n = Math.max(20, Math.floor((avail + 2) / PITCH));
+    if (n !== N || !el.canvas.width) {
+      const keep = (a) => { const b = new Float32Array(n).fill(HMIN); const k = Math.min(n, a.length); b.set(a.subarray(a.length - k), n - k); return b; };
+      tr.prev = keep(tr.prev); tr.cur = keep(tr.cur); N = n; TW = N * PITCH - 2;
+    }
+    sizeCanvas();
+  }
   const ctx = el.canvas.getContext("2d");
   let dpr = 1, C = {};
   function sizeCanvas() {
@@ -482,7 +564,7 @@
     C = { ink: v("--sg-ink"), accent: v("--sg-accent"), mid: v("--sg-midline"), grat: v("--sg-grat") };
   }
   // Four printed opacity steps by age band (age 0 = newest). Newest 6 are the accent write head.
-  function band(age) { return age < 18 ? 1 : age < 29 ? 0.7 : age < 40 ? 0.45 : 0.25; }
+  function band(age) { const f = age / N; return f < 0.34 ? 1 : f < 0.56 ? 0.7 : f < 0.77 ? 0.45 : 0.25; }
   function heightFor(level) {
     const adjusted = clamp01((level - 0.4) / 0.6);
     const amp = Math.pow(adjusted, 1.15);
@@ -536,6 +618,13 @@
       ctx.globalAlpha = 1; ctx.fillStyle = C.accent;
       ctx.fillRect(x, MID - 2, SWEEP_W, 4);
     }
+    if (LVStage.state === "countdown" && OPT.send === "row") {
+      // Drain bar: solid, 4 pt, the full trace width along the midline, shrinking from the right toward the left over
+      // 1.5 s, linear, stepped on the 4 pt pitch. Orange while the send is live; ink and stopped once canceled.
+      const w = Math.floor((sendRemain(now) / (T_SEND / 1000)) * (TW + 2) / PITCH) * PITCH;
+      ctx.globalAlpha = 1; ctx.fillStyle = send.phase === "canceled" ? C.ink : C.accent;
+      if (w > 0) ctx.fillRect(0, MID - 2, Math.min(TW, w), 4);
+    }
     if (OPT.density === "drawn") {
       // Age ruler: static, on the bar grid (a tick at each bar's centre), between the trace and the mic row.
       // Minor every 0.25 s (3 bars), 1 s ticks taller. Rule colour, never animated. Quiet keeps the 6 pt empty.
@@ -572,7 +661,65 @@
   }
   function renderTimer() { el.time.textContent = fmt(elapsed()); }
 
+  // ---------------------------------------------------------------- Spoken Send model
+  // phase: none | armed (the phrase was heard; Return follows the paste) | countdown | canceled | noreturn
+  const send = { phase: "none", t0: 0, frozen: null, timer: null };
+  function sendRemain(now) {
+    if (T_FIXED != null) return T_FIXED;
+    if (send.frozen != null) return send.frozen;
+    return Math.max(0, T_SEND / 1000 - (now - send.t0) / 1000);
+  }
+  function paintSend() {
+    root.dataset.send = send.phase;
+    el.placard.textContent = send.phase === "armed" || send.phase === "countdown" ? "Send"
+      : send.phase === "canceled" || send.phase === "noreturn" ? "No send" : "";
+    const planeHollow = send.phase === "noreturn";
+    const g = el.chips.send.querySelector(".g-main"); g.innerHTML = planeHollow ? G.planeHollow : G.plane;
+  }
+  function cancelSend() {
+    if (LVStage.state !== "countdown" || send.phase !== "countdown") return false;
+    send.frozen = sendRemain(performance.now()); send.phase = "canceled"; paintSend();
+    el.time.textContent = send.frozen.toFixed(1);
+    clearTimeout(send.timer);
+    if (!HOLD && T_FIXED == null) send.timer = setTimeout(() => { if (LVStage.state === "countdown") LVStage.setState("delivered"); }, T_CANCELED);
+    return true;
+  }
+
   // ---------------------------------------------------------------- state
+  const FAMILY = { idle: "idle", listening: "live", history: "live", transcribing: "work", countdown: "countdown",
+    delivered: "outcome", sent: "outcome", failed: "card", timedout: "card", asrback: "card", micoff: "card" };
+  const REASONS = { nofocus: "No text field focused", clipboard: "The text is on your clipboard",
+    clipboardkept: "Your newer clipboard was left alone, the text is in History" };
+  const CARDS = {
+    failed:   { head: () => `Couldn’t paste into ${TARGET}`, reason: () => REASONS[OPT.reason], text: true, action: "copy", meta: () => `${H0.words} words` },
+    // No meta on these two: the frozen timer below already shows the duration (each fact appears once).
+    timedout: { head: () => "Transcription timed out", reason: () => "Your audio is kept", action: "reprocess", meta: () => "" },
+    asrback:  { head: () => "Speech recognition is back", reason: () => "A kept dictation is waiting", action: "reprocess", meta: () => "" },
+    micoff:   { head: () => "Microphone access is off", reason: () => "Allow Liquid Voice in Privacy & Security", action: "settings", meta: () => "" },
+  };
+  const ACTIONS = {
+    copy: { label: "Copy", glyph: G.copy, done: "Copied", title: "Copy the transcription to the clipboard" },
+    reprocess: { label: "Reprocess", glyph: G.reprocess, title: "Transcribe the kept audio again" },
+    settings: { label: "Open System Settings", glyph: G.gear, title: "Privacy & Security › Microphone" },
+  };
+  function renderCard(state) {
+    const c = CARDS[state], a = ACTIONS[c.action];
+    el.cardHead.textContent = c.head(); el.reason.textContent = c.reason();
+    el.cardText.hidden = !c.text; el.cardMeta.textContent = c.meta();
+    el.primary.dataset.action = c.action; el.primary.title = a.title;
+    el.primary.classList.remove("is-copied");
+    el.primary.querySelector(".a").innerHTML = a.glyph + esc(a.label);
+    el.primary.querySelector(".b").innerHTML = a.done ? G.check.replace('stroke-width="2"', 'stroke-width="2.25"') + esc(a.done) : "";
+  }
+  function renderOutcome(state) {
+    const s = rec.frozen != null ? rec.frozen : H0.seconds, words = Math.max(1, wordsAt(s));
+    el.doneHead.textContent = state === "sent" ? `Sent to ${TARGET}` : OPT.wording === "delivered" ? `Delivered to ${TARGET}` : `Pasted into ${TARGET}`;
+    el.doneMeta.textContent = state === "sent" ? `${words} words · Return` : `${words} words`;   // the duration is the frozen timer
+  }
+  function updateGrow() {
+    // How far the pill rises above the rails (0 except under a recovery card); the history card clears it.
+    root.style.setProperty("--grow", Math.max(0, el.pill.offsetHeight - 149) + "px");
+  }
   let doneTimer = null, rafId = null;
   function show() {
     root.classList.remove("is-hidden", "is-gone");      // entrance: instant, the panel is simply there
@@ -596,6 +743,12 @@
         if (now - tr.accT >= T_SAMPLE) { push(heightFor(tr.acc), now); tr.acc = 0; tr.accT = now; }
         renderTimer(); renderPreview();
       }
+      if (st === "countdown" && send.phase === "countdown") {
+        const r = sendRemain(now);
+        el.time.textContent = r.toFixed(1);
+        if (OPT.send === "chip") el.ring.style.strokeDasharray = `${(r / (T_SEND / 1000)) * 100} 100`, el.ring.style.strokeDashoffset = `${-(1 - r / (T_SEND / 1000)) * 100}`;
+        if (r <= 0 && T_FIXED == null && !send.done) { send.done = true; LVStage.setState("sent"); }
+      }
       draw(now);
       rafId = requestAnimationFrame(step);
     };
@@ -604,13 +757,29 @@
 
   function onState(next, prev) {
     mount();
-    clearTimeout(doneTimer);
-    root.dataset.state = next;
+    clearTimeout(doneTimer); clearTimeout(send.timer);
+    root.dataset.state = next; root.dataset.family = FAMILY[next];
     setMenubar(next);
-    if (next === "idle") { closeHistory(false); hide(); LVStage.clearInserted(); return; }
-    const live = next === "listening" || next === "history";
+    el.mic.textContent = next === "micoff" ? "No microphone" : MIC;
+    if (next === "idle") { closeHistory(false); hide(); LVStage.clearInserted(); send.phase = "none"; paintSend(); updateGrow(); return; }
+    const live = FAMILY[next] === "live";
+    // Spoken Send phase for this state.
+    const wasLive = FAMILY[prev] === "live";
     if (live) {
-      const continuing = (prev === "listening" || prev === "history") && !wantFresh;
+      if (!wasLive || wantFresh) send.phase = ARMED ? (OPT.target === "noreturn" ? "noreturn" : "armed") : "none";
+    } else if (next === "transcribing") {
+      if (!wasLive) send.phase = "none";                        // keep armed / noreturn from the dictation
+    } else if (next === "countdown") {
+      send.frozen = null; send.done = false; send.t0 = performance.now();
+      if (OPT.target === "noreturn") send.phase = "noreturn";
+      else if (CANCELED) { send.phase = "canceled"; send.frozen = T_FIXED != null ? T_FIXED : 0.9; }
+      else send.phase = "countdown";
+    } else if (next === "delivered") {
+      if (!(prev === "countdown" && (send.phase === "canceled" || send.phase === "noreturn"))) send.phase = "none";
+    } else send.phase = "none";
+    paintSend();
+    if (live) {
+      const continuing = wasLive && !wantFresh;
       if (!continuing) startRecording(wantFresh);
       wantFresh = false;
       tr.live = true; tr.sweep = false;
@@ -628,16 +797,25 @@
       tr.sweep = next === "transcribing";
       tr.sweepT0 = performance.now();
       setChipsEnabled(next !== "transcribing");
+      if (next === "micoff") { el.time.textContent = "0:00"; }
+      if (next === "countdown") {
+        if (send.phase === "canceled") el.time.textContent = send.frozen.toFixed(1);
+        else if (send.phase === "countdown") el.time.textContent = sendRemain(performance.now()).toFixed(1);
+        el.ring.style.strokeDasharray = send.phase === "canceled" ? `${(send.frozen / 1.5) * 100} 100` : "100 100";
+        el.ring.style.strokeDashoffset = send.phase === "canceled" ? `${-(1 - send.frozen / 1.5) * 100}` : "0";
+        // No Return will follow in this target: nothing to count down, the text simply lands.
+        if (send.phase === "noreturn" && !HOLD && T_FIXED == null) send.timer = setTimeout(() => { if (LVStage.state === "countdown") LVStage.setState("delivered"); }, 500);
+      } else { el.ring.style.strokeDasharray = "100 100"; el.ring.style.strokeDashoffset = "0"; }
     }
     if (next === "history") openHistory(); else closeHistory(false);
-    if (next === "delivered") {
-      const s = rec.frozen != null ? rec.frozen : H0.seconds;
-      el.doneMeta.textContent = `${Math.max(1, wordsAt(s))} words`;      // the duration is the frozen timer beside the trace
-      LVStage.insertText(esc(H0.text.slice(0, 90)) + "…");
-      if (!HOLD) doneTimer = setTimeout(() => { if (LVStage.state === "delivered") LVStage.setState("idle"); }, T_DELIVERED);
+    if (FAMILY[next] === "outcome") {
+      renderOutcome(next);
+      LVStage.insertText(esc(H0.text.slice(0, 90)) + "…" + (next === "sent" ? " ⏎" : ""));
+      if (!HOLD) doneTimer = setTimeout(() => { if (LVStage.state === next) LVStage.setState("idle"); }, T_DELIVERED);
     }
-    if (next === "failed") { el.copyBtn.classList.remove("is-copied"); }
+    if (FAMILY[next] === "card") renderCard(next);
     show();
+    updateGrow();
   }
   function setChipsEnabled(on) {
     // Copy and Reprocess are disabled while processing (current app behaviour); they dim, never disappear.
@@ -670,7 +848,7 @@
     const up = () => { if (!btn.classList.contains("is-pressed")) return; tm = setTimeout(() => btn.classList.remove("is-pressed"), Math.max(0, T_PRESS - (performance.now() - t0))); };
     ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => btn.addEventListener(ev, up));
   }
-  Object.values(el.chips).forEach(pressable); pressable(el.copyBtn); pressable(el.dismissBtn);
+  Object.values(el.chips).forEach(pressable); pressable(el.primary); pressable(el.dismissBtn);
   function toClipboard(text) { try { const p = navigator.clipboard && navigator.clipboard.writeText(text); if (p && p.catch) p.catch(() => {}); } catch (_) {} }
   let copyTm = null, copyBtnTm = null;
   function copiedChip() {
@@ -682,25 +860,45 @@
     else { if (LVStage.state === "listening") LVStage.setState("history"); else openHistory(); }
   });
   el.chips.copy.addEventListener("click", () => { toClipboard(H0.text); copiedChip(); });
-  el.chips.cancel.addEventListener("click", () => { LVStage.stopSequence(); LVStage.setState("idle"); });
+  // Cancel: during a send countdown it cancels the Return (the text still lands); otherwise it cancels the dictation.
+  el.chips.cancel.addEventListener("click", () => { if (cancelSend()) return; LVStage.stopSequence(); LVStage.setState("idle"); });
+  el.chips.send.addEventListener("click", () => { cancelSend(); });
+  // Clicking anywhere on the pill during the countdown cancels the send.
+  el.pill.addEventListener("click", (e) => { if (e.target.closest("button")) return; cancelSend(); });
   let reprocTm = null;
-  el.chips.reprocess.addEventListener("click", () => {
+  function reprocess() {
     LVStage.stopSequence(); clearTimeout(reprocTm);
     LVStage.setState("transcribing");
     reprocTm = setTimeout(() => { if (LVStage.state === "transcribing") LVStage.setState("delivered"); }, 1100);
-  });
-  el.copyBtn.addEventListener("click", () => {
-    toClipboard(H0.text); el.copyBtn.classList.add("is-copied"); clearTimeout(copyBtnTm);
-    copyBtnTm = setTimeout(() => el.copyBtn.classList.remove("is-copied"), 1400);
+  }
+  el.chips.reprocess.addEventListener("click", reprocess);                 // the card's Reprocess does the same thing
+  el.primary.addEventListener("click", () => {
+    const a = el.primary.dataset.action;
+    if (a === "copy") {
+      toClipboard(H0.text); el.primary.classList.add("is-copied"); clearTimeout(copyBtnTm);
+      copyBtnTm = setTimeout(() => el.primary.classList.remove("is-copied"), 1400);
+    } else if (a === "reprocess") reprocess();
+    else if (a === "settings") setTimeout(() => LVStage.setState("idle"), 120);   // native: open x-apple.systempreferences:…Privacy_Microphone
   });
   el.dismissBtn.addEventListener("click", () => LVStage.setState("idle"));
+
+  // Spoken Send demo (S): dictate, the phrase is heard at 2.6 s, stop at 3.8 s, transcribe, count down, send.
+  let demo = 0;
+  function playSend() {
+    const id = ++demo, at = (ms, f) => setTimeout(() => { if (id === demo) f(); }, ms);
+    LVStage.stopSequence(); wantFresh = true; LVStage.setState("listening");
+    at(2600, () => { if (LVStage.state === "listening") { send.phase = OPT.target === "noreturn" ? "noreturn" : "armed"; paintSend(); } });
+    at(3800, () => { if (LVStage.state === "listening") LVStage.setState("transcribing"); });
+    at(4700, () => { if (LVStage.state === "transcribing") LVStage.setState(OPT.target === "noreturn" ? "delivered" : "countdown"); });
+  }
 
   // A real dictation (Space, Play, menu) starts at 0:00. Capture phase runs before the stage's handlers.
   window.addEventListener("keydown", (e) => {
     if (e.target && /input|textarea/i.test(e.target.tagName)) return;
     if (e.key === " " && !e.repeat) wantFresh = true;
     if ((e.key === "p" || e.key === "P") && !e.repeat) wantFresh = true;
-    if (e.key === "Escape") { closeMenu(); if (LVStage.state !== "idle") { LVStage.stopSequence(); LVStage.setState("idle"); } }
+    if (e.key === "Escape") { closeMenu(); if (cancelSend()) return; if (LVStage.state !== "idle") { LVStage.stopSequence(); LVStage.setState("idle"); } }
+    if ((e.key === "s" || e.key === "S") && !e.repeat) playSend();
     if ((e.key === "d" || e.key === "D") && !e.repeat) setOption("density", OPT.density === "drawn" ? "quiet" : "drawn");
   }, true);
   document.addEventListener("click", (e) => { if (e.target.closest("#lv-play")) wantFresh = true; }, true);
@@ -724,7 +922,8 @@
   let statusEl = null;
   let mbKind = "idle", mbLast = 0, mbKey = "";
   function setMenubar(state) {
-    mbKind = state === "listening" || state === "history" ? "listening" : state === "transcribing" ? "transcribing" : "idle";
+    // Countdown keeps the listening mark (the solid square): the dictation is not finished until the send resolves.
+    mbKind = state === "listening" || state === "history" || state === "countdown" ? "listening" : state === "transcribing" ? "transcribing" : "idle";
     mbKey = ""; paintMenubar();
     renderMenuHead();
   }
@@ -735,7 +934,7 @@
   }
   LVStage.onTick(() => {
     const now = performance.now();
-    if (mbKind !== "listening" || now - mbLast < 125) return;
+    if (mbKind !== "listening" || LVStage.state === "countdown" || now - mbLast < 125) return;
     mbLast = now;
     // The bars read three recent trace samples, quantised to 2 pt steps. The floor keeps the mark's own
     // silhouette in silence (never three dots, which would read as an overflow "…").
@@ -761,7 +960,7 @@
     const st = LVStage.state, live = st === "listening" || st === "history";
     const head = menu.querySelector(".sg-mh b");
     head.classList.toggle("on", live);
-    menu.querySelector(".sg-mh-state").textContent = live ? `Listening ${fmt(elapsed())}` : st === "transcribing" ? "Working" : "Ready";
+    menu.querySelector(".sg-mh-state").textContent = live ? `Listening ${fmt(elapsed())}` : st === "transcribing" ? "Working" : st === "countdown" ? "Sending" : "Ready";
     menu.querySelector(".sg-mi-toggle").textContent = live ? "Stop Dictation" : "Start Dictation";
   }
   function openMenu() {
@@ -796,7 +995,15 @@
     <h1>Signal options</h1>
     <div class="row"><label>Density</label><div class="seg" data-opt="density">
       <button data-v="quiet">Quiet</button><button data-v="drawn">Drawn</button></div></div>
-    <p class="hint"><b>D</b> toggles density: Drawn shows the age ruler under the trace. It stays in the URL.</p>`;
+    <div class="row"><label>Send</label><div class="seg" data-opt="send">
+      <button data-v="row">Trace row</button><button data-v="chip">Chip</button></div></div>
+    <div class="row"><label>Target</label><div class="seg" data-opt="target">
+      <button data-v="return">Return</button><button data-v="noreturn">No Return</button></div></div>
+    <div class="row"><label>Wording</label><div class="seg" data-opt="wording">
+      <button data-v="pasted">Pasted</button><button data-v="delivered">Delivered</button></div></div>
+    <div class="row"><label>Reason</label><div class="seg" data-opt="reason">
+      <button data-v="nofocus">No focus</button><button data-v="clipboard">Clipboard</button><button data-v="clipboardkept">Kept</button></div></div>
+    <p class="hint"><b>S</b> plays a Spoken Send dictation. <b>D</b> toggles density. Options stay in the URL.</p>`;
   opts.querySelector("h1").addEventListener("click", () => opts.classList.toggle("collapsed"));
   opts.addEventListener("click", (e) => {
     const b = e.target.closest(".seg button"); if (!b) return;
@@ -808,7 +1015,11 @@
   }
   function setOption(key, value) {
     OPT[key] = value;
-    root.dataset[key] = value;
+    if (key === "density") root.dataset.density = value;
+    if (key === "send") { root.dataset.sendui = value; layoutTrace(); }
+    if (key === "wording") { root.querySelectorAll(".sg-flag-t").forEach((t) => { t.textContent = value === "delivered" ? "Not delivered" : "Not pasted"; });
+      if (FAMILY[LVStage.state] === "outcome") renderOutcome(LVStage.state); }
+    if (key === "reason" && LVStage.state === "failed") { renderCard("failed"); updateGrow(); }
     paintOptions();
     try {
       const q = new URLSearchParams(location.search); q.set(key, value);
@@ -831,8 +1042,8 @@
     slot.innerHTML = `<span class="lv-status" role="button" aria-label="Liquid Voice" title="Liquid Voice"></span>`;
     statusEl = slot.firstElementChild;
     statusEl.addEventListener("mousedown", (e) => { e.stopPropagation(); menu.classList.contains("is-open") ? closeMenu() : openMenu(); });
-    sizeCanvas(); readColours();
-    window.addEventListener("resize", () => { sizeCanvas(); placeOptions(); });
+    readColours(); layoutTrace();
+    window.addEventListener("resize", () => { layoutTrace(); placeOptions(); });
     document.body.appendChild(opts); paintOptions();
     const ctl = document.getElementById("lv-controls");
     if (ctl && window.ResizeObserver) new ResizeObserver(placeOptions).observe(ctl);
@@ -841,9 +1052,12 @@
 
   LVStage.init({
     name: "Signal",
+    // Digits 1–9 reach the first nine; the buttons reach all eleven.
     states: [
       { id: "idle", label: "Idle" }, { id: "listening", label: "Listening" }, { id: "transcribing", label: "Transcribing" },
-      { id: "delivered", label: "Delivered" }, { id: "failed", label: "Failed → Copy" }, { id: "history", label: "History" },
+      { id: "delivered", label: "Pasted" }, { id: "failed", label: "Failed → Copy" }, { id: "history", label: "History" },
+      { id: "countdown", label: "Send countdown" }, { id: "sent", label: "Sent" }, { id: "timedout", label: "Timed out" },
+      { id: "asrback", label: "ASR is back" }, { id: "micoff", label: "Mic off" },
     ],
     defaultState: "listening",
     sequence: [["listening", 4200], ["transcribing", 1100], ["delivered", 1300], ["idle", 0]],
@@ -854,11 +1068,13 @@
   placeOptions();
 
   // Inspection hooks for screenshots: ?menu=1 opens the menu, ?copied=1 shows copy feedback, ?hoverRow=n,
-  // ?hover=1 holds the overlay in its hover state (corners drawn), ?hoverChip=<id> holds one chip hovered.
+  // ?hover=1 holds the overlay in its hover state (brackets drawn), ?hoverChip=<id> holds one chip hovered,
+  // ?armed=1 shows the send phrase heard while listening, ?t=<s> holds the send countdown at s seconds remaining,
+  // ?canceled=1 shows a canceled countdown, ?hold=1 keeps Pasted / Sent up.
   if (params.get("hover") === "1") root.classList.add("is-hover");
   if (params.get("hoverChip") && el.chips[params.get("hoverChip")]) el.chips[params.get("hoverChip")].classList.add("is-hover");
   if (params.get("menu") === "1") setTimeout(openMenu, 50);
-  if (params.get("copied") === "1") { el.chips.copy.classList.add("is-copied"); el.copyBtn.classList.add("is-copied"); }
+  if (params.get("copied") === "1") { el.chips.copy.classList.add("is-copied"); el.primary.classList.add("is-copied"); }
   if (params.get("hoverRow")) { const r = root.querySelector(`.sg-hrow[data-i="${+params.get("hoverRow") - 1}"]`); if (r) r.classList.add("is-hover"); }
 })();
 </script>

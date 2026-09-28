@@ -1342,6 +1342,15 @@ final class ASRService: ObservableObject {
 
     // Streaming transcription state (no VAD)
     private var streamingTask: Task<Void, Never>?
+    /// The recording the streaming previews belong to. A chunk that finishes for another session,
+    /// or after its session stopped, publishes nothing (no stale text in the next overlay).
+    private var streamingSessionID: Int?
+    /// Waiting for the streaming chunk now mid-inference (see waitForInFlightStreamingChunk).
+    private var streamingChunkWaiters: [CheckedContinuation<Void, Never>] = []
+    /// A streaming chunk never came back from the model; until it does, starts are refused so
+    /// no recording is lost behind it.
+    private var isRecoveringStalledStreamingChunk = false
+    private static let streamingChunkDrainTimeoutNanoseconds: UInt64 = 30_000_000_000
     private var lastProcessedSampleCount: Int = 0
     private var isProcessingChunk: Bool = false
     private var skipNextChunk: Bool = false
@@ -1962,6 +1971,11 @@ final class ASRService: ObservableObject {
         }
         guard self.isTerminating == false else {
             DebugLogger.shared.warning("START() blocked - app is terminating", source: "ASRService")
+            return .failed
+        }
+        guard !self.isRecoveringStalledStreamingChunk else {
+            DebugLogger.shared.warning("START() blocked - the speech model has not returned a stalled preview yet", source: "ASRService")
+            self.presentStalledStreamingError()
             return .failed
         }
         self.audioCaptureStartGeneration &+= 1
@@ -2662,6 +2676,8 @@ final class ASRService: ObservableObject {
             self.applyPendingParakeetVocabularyReloadIfNeeded()
             self.isDictionaryTrainingCaptureActive = false
         }
+        // No new preview may start from here on; only a chunk already mid-inference matters.
+        let streamingChunkInFlight = self.cancelStreamingForStop()
 
         await self.cancelAudioRouteRecoveryAndWait()
 
@@ -2716,13 +2732,22 @@ final class ASRService: ObservableObject {
                 "phase=\(directCaptureSnapshot.phase.rawValue) generation=\(directCaptureSnapshot.generation)"
         )
 
-        // CRITICAL FIX: Await completion of streaming task AND any pending transcriptions
-        // This prevents use-after-free crashes (EXC_BAD_ACCESS) when clearing buffer
-        DebugLogger.shared.debug("⏳ Awaiting stopStreamingTimerAndAwait()...", source: "ASRService")
+        // The streaming loop was cancelled at the top of stop(). An idle loop (between previews)
+        // needs no waiting at all; a chunk mid-inference is waited for, since the final pass
+        // queues behind it on the model anyway, but never forever: a chunk that does not come
+        // back within 30 s means the model is wedged, and this dictation fails visibly instead
+        // of hanging the stop (and every hotkey) behind it.
         let streamingStopStartedAt = Date().timeIntervalSince1970
-        await self.stopStreamingTimerAndAwait()
-        self.timingLog("stop_streaming_wait elapsedMs=\(self.elapsedMilliseconds(since: streamingStopStartedAt))")
-        DebugLogger.shared.debug("✅ stopStreamingTimerAndAwait() completed", source: "ASRService")
+        if streamingChunkInFlight, self.isProcessingChunk {
+            guard await self.waitForInFlightStreamingChunk(timeoutNanoseconds: Self.streamingChunkDrainTimeoutNanoseconds) else {
+                self.beginStalledStreamingRecovery()
+                self.timingLog("stop_end result=error reason=streaming_chunk_stalled")
+                return ""
+            }
+        }
+        self.timingLog(
+            "stop_streaming_wait elapsedMs=\(self.elapsedMilliseconds(since: streamingStopStartedAt)) chunkInFlight=\(streamingChunkInFlight)"
+        )
 
         self.isProcessingChunk = false
         self.skipNextChunk = false
@@ -3046,11 +3071,9 @@ final class ASRService: ObservableObject {
         await self.retireAudioEngineAndWait(reason: "stop_without_transcription")
         self.audioCaptureStateSettledTick &+= 1
 
-        // CRITICAL FIX: Await completion of streaming task AND any pending transcriptions
-        // This prevents use-after-free crashes (EXC_BAD_ACCESS) when clearing buffer
-        await self.stopStreamingTimerAndAwait()
-
-        // NOW it's safe to clear the buffer
+        // A chunk still mid-inference copied its audio before it began and publishes nothing
+        // once its session has stopped, so the buffer can be cleared without waiting for it.
+        _ = self.cancelStreamingForStop()
         self.audioBuffer.clear()
         self.partialTranscription.removeAll()
         self.previousFullTranscription.removeAll()
@@ -4905,6 +4928,7 @@ final class ASRService: ObservableObject {
     private func startStreamingTranscription() {
         self.streamingTask?.cancel()
         guard self.isAsrReady else { return }
+        self.streamingSessionID = self.benchmarkSessionID
 
         DebugLogger.shared.debug(
             "Starting streaming transcription task (interval: \(self.streamingChunkDurationSeconds)s, minSamples: \(self.minimumStreamingPreviewSamples))",
@@ -5009,7 +5033,8 @@ final class ASRService: ObservableObject {
         }
 
         self.isProcessingChunk = true
-        defer { isProcessingChunk = false }
+        let sessionID = self.benchmarkSessionID
+        defer { self.finishStreamingChunk() }
 
         let startTime = Date()
         let startedAt = startTime.timeIntervalSince1970
@@ -5021,6 +5046,11 @@ final class ASRService: ObservableObject {
             DebugLogger.shared.debug("Streaming chunk starting transcription (samples: \(chunk.count)) using \(self.transcriptionProvider.name)", source: "ASRService")
             let result = try await transcriptionExecutor.run { [provider = self.transcriptionProvider] in
                 try await provider.transcribeStreaming(chunk)
+            }
+            // Stopped (or another recording began) while this chunk ran: its text is stale.
+            guard self.isStreamingSessionCurrent(sessionID) else {
+                self.timingLog("chunk_stale index=\(chunkIndex) session=\(sessionID) reason=session_ended")
+                return
             }
 
             let duration = Date().timeIntervalSince(startTime)
@@ -5071,9 +5101,29 @@ final class ASRService: ObservableObject {
                 self.skipNextChunk = true
             }
         } catch {
+            guard self.isStreamingSessionCurrent(sessionID) else { return }
             DebugLogger.shared.error("❌ Streaming failed: \(error)", source: "ASRService")
             self.timingLog("chunk_fail index=\(chunkIndex) elapsedMs=\(self.elapsedMilliseconds(since: startedAt)) samples=\(chunk.count) error=\(error.localizedDescription)")
             self.skipNextChunk = true
+        }
+    }
+
+    private func isStreamingSessionCurrent(_ sessionID: Int) -> Bool {
+        self.isRunning && self.benchmarkSessionID == sessionID && self.streamingSessionID == sessionID
+    }
+
+    /// A chunk left the model: wake whoever waits for it, and end a stalled-chunk recovery.
+    private func finishStreamingChunk() {
+        self.isProcessingChunk = false
+        let waiters = self.streamingChunkWaiters
+        self.streamingChunkWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+        if self.isRecoveringStalledStreamingChunk {
+            self.isRecoveringStalledStreamingChunk = false
+            DebugLogger.shared.info("Stalled streaming chunk returned; recording is available again", source: "ASRService")
+            if self.errorMessage == Self.stalledStreamingMessage {
+                self.errorMessage = "The speech model has recovered. Please record your dictation again."
+            }
         }
     }
 
@@ -5390,30 +5440,61 @@ private extension SettingsStore.SpeechModel {
 }
 
 private extension ASRService {
-    /// Stops the streaming timer and waits for the task to complete.
-    /// This prevents race conditions where the buffer is cleared while
-    /// a transcription task is still running.
-    func stopStreamingTimerAndAwait() async {
-        guard let task = self.streamingTask else {
-            self.timingLog("streaming_timer_stop no_task=true")
-            return
-        }
-        let startedAt = Date().timeIntervalSince1970
-        self.timingLog("streaming_timer_stop begin")
-        task.cancel()
-        // Wait for the task to actually finish - this is critical!
-        // The task may be in the middle of processStreamingChunk()
-        _ = await task.result
-        self.streamingTask = nil
-        self.timingLog("streaming_timer_stop end elapsedMs=\(self.elapsedMilliseconds(since: startedAt)) completedChunks=\(self.benchmarkCompletedStreamingChunks)")
-    }
-
-    /// Legacy sync version for cases where we can't await (e.g., stopWithoutTranscription)
-    /// WARNING: This can cause crashes if buffer is cleared immediately after!
-    func stopStreamingTimer() {
+    /// Cancels the streaming loop for a stop. The loop is either waiting between previews (it
+    /// exits on its own, touching nothing) or awaiting a chunk on the model; returns whether a
+    /// chunk is mid-inference. Streaming teardown no longer waits for an idle loop to wake up on
+    /// a busy main thread (from altic-dev/FluidVoice#950).
+    func cancelStreamingForStop() -> Bool {
+        let chunkInFlight = self.isProcessingChunk
+        self.streamingSessionID = nil
         self.streamingTask?.cancel()
         self.streamingTask = nil
+        self.timingLog("streaming_cancel chunkInFlight=\(chunkInFlight) completedChunks=\(self.benchmarkCompletedStreamingChunks)")
+        return chunkInFlight
     }
+
+    /// Waits for the chunk now mid-inference, at most `timeoutNanoseconds`. False on timeout.
+    func waitForInFlightStreamingChunk(timeoutNanoseconds: UInt64) async -> Bool {
+        guard self.isProcessingChunk else { return true }
+        let outcome = OneShotFlag()
+        let timer = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+            guard !Task.isCancelled, let self else { return }
+            let waiters = self.streamingChunkWaiters
+            self.streamingChunkWaiters.removeAll()
+            outcome.timedOut = true
+            waiters.forEach { $0.resume() }
+        }
+        await withCheckedContinuation { continuation in
+            self.streamingChunkWaiters.append(continuation)
+        }
+        timer.cancel()
+        return !outcome.timedOut
+    }
+
+    /// The model kept a streaming chunk for 30 s: this dictation cannot be transcribed, and
+    /// starts are refused until the chunk returns (finishStreamingChunk ends the recovery).
+    func beginStalledStreamingRecovery() {
+        self.isRecoveringStalledStreamingChunk = true
+        DebugLogger.shared.error("Streaming chunk did not return within 30 s; dictation dropped until the model recovers", source: "ASRService")
+        self.presentStalledStreamingError()
+    }
+
+    func presentStalledStreamingError() {
+        self.errorTitle = "Speech recognition needs recovery"
+        self.errorMessage = Self.stalledStreamingMessage
+        self.showError = true
+    }
+
+    static var stalledStreamingMessage: String {
+        "Speech recognition took too long to finish, so this recording could not be transcribed. " +
+            "Wait for the model to recover, or restart Liquid Voice before recording again."
+    }
+}
+
+@MainActor
+private final class OneShotFlag {
+    var timedOut = false
 }
 
 // MARK: - Audio capture pipeline

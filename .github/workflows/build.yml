@@ -12,9 +12,11 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [ liquid-voice ]
+  workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -23,6 +25,7 @@ concurrency:
 jobs:
   changes:
     name: Detect build changes
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -51,7 +54,11 @@ jobs:
 
   build:
     name: Build and test Liquid Voice
-    if: needs.changes.outputs.relevant == 'true' && (github.event_name == 'push' || github.event.pull_request.draft == false)
+    # A manual run always builds; otherwise only when build inputs changed, and never for a draft PR.
+    if: >-
+      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      (needs.changes.outputs.relevant == 'true' &&
+      (github.event_name == 'push' || github.event.pull_request.draft == false)))
     needs: changes
     runs-on: macos-latest
     timeout-minutes: 45
@@ -63,17 +70,11 @@ jobs:
     - name: Install xcpretty
       run: sudo gem install xcpretty
 
-    - name: Cache Whisper models
-      uses: actions/cache@v4
-      with:
-        path: ~/Library/Caches/WhisperModels
-        key: ${{ runner.os }}-whisper-models-transcribecpp-v1
-
     # The code uses Swift 6.2 (@concurrent), so it needs Xcode 26 or later.
     - name: Setup Xcode
       uses: maxim-lobanov/setup-xcode@v1
       with:
-        xcode-version: latest-stable
+        xcode-version: '^26.0.0'
 
     - name: Show Xcode version
       run: xcodebuild -version

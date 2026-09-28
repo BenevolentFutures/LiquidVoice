@@ -470,6 +470,36 @@ final class HotkeyShortcutTests: XCTestCase {
         XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
     }
 
+    /// Hiding sets alpha 0 in place (no offscreen parking, a WindowServer fence on the stop path),
+    /// the click fence waits until after the stop, and the next show undoes both.
+    @MainActor
+    func testBottomOverlayHidesByAlphaAndDefersTheMouseFence() async throws {
+        let audioPublisher = Just(CGFloat.zero).eraseToAnyPublisher()
+        let controller = BottomOverlayWindowController.shared
+
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: audioPublisher, mode: .dictation)
+        let shown = try XCTUnwrap(controller.windowStateForTests)
+        XCTAssertEqual(shown.alpha, 1)
+        XCTAssertFalse(shown.ignoresMouse)
+
+        let outcome = await controller.hideAndWait()
+        XCTAssertEqual(outcome, .hidden)
+        let hidden = try XCTUnwrap(controller.windowStateForTests)
+        XCTAssertEqual(hidden.alpha, 0)
+        XCTAssertFalse(hidden.isParkedOffscreen, "hiding must not move the panel (a WindowServer fence)")
+        XCTAssertFalse(hidden.ignoresMouse, "the click fence waits until the stop is over")
+
+        try await Task.sleep(nanoseconds: 450_000_000)
+        XCTAssertEqual(controller.windowStateForTests?.ignoresMouse, true)
+
+        controller.show(audioPublisher: audioPublisher, mode: .dictation)
+        XCTAssertEqual(controller.windowStateForTests?.alpha, 1)
+        XCTAssertEqual(controller.windowStateForTests?.ignoresMouse, false)
+        _ = await controller.hideAndWait()
+    }
+
     @MainActor
     func testBottomOverlayReportsWhenRapidRestartSupersedesHide() async {
         let audioPublisher = Just(CGFloat.zero).eraseToAnyPublisher()

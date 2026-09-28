@@ -151,7 +151,7 @@ class NotchContentState: ObservableObject {
 
     // MARK: - Bottom Overlay Audio Level
 
-    @Published var bottomOverlayAudioLevel: CGFloat = 0 // Audio level for bottom overlay waveform
+    // The bottom overlay's audio level lives in OverlayAudioLevelState (only the waveform observes it).
     @Published var isBottomOverlayPresented: Bool = false
     @Published var isBottomOverlayReleaseTransitioning: Bool = false
     @Published var isBottomOverlayDismissing: Bool = false

@@ -38,6 +38,22 @@ private final class BottomOverlayPanel: NSPanel {
 
 // MARK: - Bottom Overlay Window Controller
 
+/// The live audio level, kept out of NotchContentState: level ticks arrive ~94 times a second,
+/// and on the shared state each one re-evaluated every view observing it, the whole overlay
+/// included, so every main-actor hop on the stop path queued behind that work. Only the waveform
+/// observes this. Not throttled: the voice trace scrolls one bar per level.
+/// (Ported from altic-dev/FluidVoice@6335acc4.)
+@MainActor
+final class OverlayAudioLevelState: ObservableObject {
+    static let shared = OverlayAudioLevelState()
+    @Published var level: CGFloat = 0
+
+    /// Publishes only a change, so resetting an idle waveform costs no render.
+    func reset() {
+        if self.level != 0 { self.level = 0 }
+    }
+}
+
 @MainActor
 final class BottomOverlayWindowController {
     static let shared = BottomOverlayWindowController()
@@ -56,6 +72,16 @@ final class BottomOverlayWindowController {
     private var isHideInProgress = false
     private var activeHideGeneration: UInt64?
     private var hideWaiters: [CheckedContinuation<RecordingOverlayHideOutcome, Never>] = []
+    /// A hidden panel stops taking clicks a moment after it hides (see scheduleIgnoreMouseEvents).
+    private var pendingIgnoreMouseWorkItem: DispatchWorkItem?
+    private static let ignoreMouseEventsDelay: TimeInterval = 0.3
+
+    /// The panel's alpha, and whether it sits outside every display. For tests.
+    var windowStateForTests: (alpha: CGFloat, isParkedOffscreen: Bool, ignoresMouse: Bool)? {
+        guard let window else { return nil }
+        let onAnyScreen = NSScreen.screens.contains { $0.frame.intersects(window.frame) }
+        return (window.alphaValue, !onAnyScreen && !NSScreen.screens.isEmpty, window.ignoresMouseEvents)
+    }
 
     private init() {
         NotificationCenter.default.addObserver(forName: NSNotification.Name("OverlayOffsetChanged"), object: nil, queue: .main) { [weak self] _ in
@@ -79,10 +105,9 @@ final class BottomOverlayWindowController {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.targetScreen = OverlayScreenResolver.screenForCurrentPointer()
+                // A hidden panel sits at alpha 0 where it is; show() positions it again.
                 if NotchContentState.shared.isBottomOverlayPresented {
                     self.positionWindow()
-                } else {
-                    self.parkWindowOffscreen()
                 }
             }
         }
@@ -134,7 +159,7 @@ final class BottomOverlayWindowController {
         case .command: break
         }
         NotchContentState.shared.updateTranscription("")
-        NotchContentState.shared.bottomOverlayAudioLevel = 0
+        OverlayAudioLevelState.shared.reset()
         NotchContentState.shared.setBottomOverlayDismissOffsetY(8)
         NotchContentState.shared.setBottomOverlayDismissing(false)
 
@@ -144,6 +169,12 @@ final class BottomOverlayWindowController {
         // Submit one complete frame to WindowServer.
         self.window?.setAccessibilityChildren(nil)
         self.window?.setAccessibilityElement(true)
+        self.pendingIgnoreMouseWorkItem?.cancel()
+        self.pendingIgnoreMouseWorkItem = nil
+        // A window-management fence: pay it only when a hide actually set it.
+        if self.window?.ignoresMouseEvents == true {
+            self.window?.ignoresMouseEvents = false
+        }
         self.window?.alphaValue = 1
         self.window?.orderFrontRegardless()
         self.window?.contentView?.displayIfNeeded()
@@ -156,7 +187,7 @@ final class BottomOverlayWindowController {
         self.audioSubscription = audioPublisher
             .receive(on: DispatchQueue.main)
             .sink { level in
-                NotchContentState.shared.bottomOverlayAudioLevel = level
+                OverlayAudioLevelState.shared.level = level
             }
     }
 
@@ -227,6 +258,13 @@ final class BottomOverlayWindowController {
             return .hidden
         }
 
+        // Freeze the waveform the moment the stop begins: no level tick may commit an overlay
+        // frame while the final pass runs (from altic-dev/FluidVoice@fcb54e49).
+        self.audioSubscription?.cancel()
+        self.audioSubscription = nil
+        self.pendingResizeWorkItem?.cancel()
+        self.pendingResizeWorkItem = nil
+
         NotchContentState.shared.setBottomOverlayReleaseTransitioning(true)
         NotchContentState.shared.setBottomOverlayDismissOffsetY(8)
         NotchContentState.shared.setBottomOverlayDismissing(true)
@@ -248,12 +286,22 @@ final class BottomOverlayWindowController {
             return .superseded
         }
 
-        self.parkWindowOffscreen()
-        window.alphaValue = 1
+        // Hide by alpha: a plain WindowServer property, no window-management transaction. Parking
+        // the panel offscreen (setFrameOrigin) blocked the main thread on a WindowServer fence,
+        // 70-300 ms on a busy host, right while the final transcription waited for main. The panel
+        // stays ordered in at alpha 0, surface warm for the next presentation; it stops taking
+        // clicks a moment later. (Ported from altic-dev/FluidVoice@094b8d0e and @6f929124's
+        // "window alpha drops to zero", keeping this overlay's own exit animation.)
+        window.alphaValue = 0
+        window.setAccessibilityChildren([])
+        window.setAccessibilityElement(false)
+        self.scheduleIgnoreMouseEvents(generation: currentGeneration)
         NotchContentState.shared.setBottomOverlayPresented(false)
         self.endReleaseTransition(flushDeferredUpdate: false)
         NotchContentState.shared.setBottomOverlayDismissing(false)
-        NotchContentState.shared.targetAppIcon = nil
+        if NotchContentState.shared.targetAppIcon != nil {
+            NotchContentState.shared.targetAppIcon = nil
+        }
         Self.overlayBench("bottom_hide_complete elapsedMs=\(Self.elapsedMs(since: startedAt))")
         return .hidden
     }
@@ -270,8 +318,28 @@ final class BottomOverlayWindowController {
         BottomOverlayModeMenuController.shared.hide()
         BottomOverlayActionsMenuController.shared.hide()
         BottomOverlayHistoryMenuController.shared.hide()
-        NotchContentState.shared.setProcessing(false)
-        NotchContentState.shared.bottomOverlayAudioLevel = 0
+        // Publish only real changes: each one re-renders the overlay.
+        if NotchContentState.shared.isProcessing {
+            NotchContentState.shared.setProcessing(false)
+        }
+        OverlayAudioLevelState.shared.reset()
+    }
+
+    /// ignoresMouseEvents is a window-management fence (70-90 ms): applied only if the panel is
+    /// still hidden a moment later, after the dictation's text has landed, and never for a rapid
+    /// restart. (Ported from altic-dev/FluidVoice@fcb54e49.)
+    private func scheduleIgnoreMouseEvents(generation: UInt64) {
+        self.pendingIgnoreMouseWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self,
+                  self.presentationGeneration == generation,
+                  !NotchContentState.shared.isBottomOverlayPresented,
+                  self.window?.alphaValue == 0
+            else { return }
+            self.window?.ignoresMouseEvents = true
+        }
+        self.pendingIgnoreMouseWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.ignoreMouseEventsDelay, execute: workItem)
     }
 
     func setProcessing(_ processing: Bool) {
@@ -303,7 +371,7 @@ final class BottomOverlayWindowController {
 
         self.audioSubscription?.cancel()
         self.audioSubscription = nil
-        NotchContentState.shared.bottomOverlayAudioLevel = 0
+        OverlayAudioLevelState.shared.reset()
         NotchContentState.shared.setBottomOverlayReleaseTransitioning(true)
     }
 
@@ -472,10 +540,9 @@ final class BottomOverlayWindowController {
     private func positionWindow() {
         // Safe check for window and screen availability
         guard let window = window else { return }
-        guard NotchContentState.shared.isBottomOverlayPresented else {
-            self.parkWindowOffscreen()
-            return
-        }
+        // A hidden panel sits at alpha 0 where it is: parking it here would cost WindowServer
+        // fences right after a hide.
+        guard NotchContentState.shared.isBottomOverlayPresented else { return }
         (window as? BottomOverlayPanel)?.allowsOffscreenParking = false
 
         let screen = self.targetScreen ?? window.screen ?? OverlayScreenResolver.screenForCurrentPointer()
@@ -3837,6 +3904,7 @@ struct BottomWaveformView: View {
     let layout: BottomOverlayView.LayoutConstants
 
     @ObservedObject private var contentState = NotchContentState.shared
+    @ObservedObject private var audioLevel = OverlayAudioLevelState.shared
     // Initialize with max possible bar count (93 for large) to prevent index-out-of-range before onAppear
     @State private var barHeights: [CGFloat] = Array(repeating: 2, count: 93)
     @State private var noiseThreshold: CGFloat = .init(SettingsStore.shared.visualizerNoiseThreshold)
@@ -3920,7 +3988,7 @@ struct BottomWaveformView: View {
                     .shadow(color: .white.opacity(0.28), radius: 2.5, x: 0, y: 0)
             }
         }
-        .onChange(of: self.contentState.bottomOverlayAudioLevel) { _, level in
+        .onChange(of: self.audioLevel.level) { _, level in
             guard !self.isReleaseAnimationActive else { return }
             if !self.contentState.isProcessing {
                 self.updateBars(level: level)

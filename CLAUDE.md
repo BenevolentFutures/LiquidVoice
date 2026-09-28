@@ -15,7 +15,8 @@ Atin dictates into Claude Code in c11 all day with the installed app. Text deliv
 - Until the identity change the app ran as FluidVoice: `com.FluidApp.app`, `Application Support/FluidVoice`, `~/Library/Logs/Fluid/`. On its first launch the installed app copies that data once (`AppIdentityMigration`, run from `LiquidVoiceMain` before anything reads a default): every UserDefaults key, then the folder, then the login item. It never writes to the old domain or folder, so the old app still runs from a backup. Check it with `grep IDENTITY_MIGRATION ~/Library/Logs/LiquidVoice/Fluid.log`; the markers are `LiquidVoiceIdentityMigrationDefaults` and `LiquidVoiceIdentityMigrationFolder` in the new domain. Debug builds never migrate.
 - Identifiers live in `AppStorageLocation` (and `LegacyAppIdentity` for the old ones). Never hardcode one. The keychain service `com.fluidvoice.provider-api-keys` kept its name on purpose (`KeychainService.serviceName`).
 - Model caches in `~/Library/Application Support/FluidAudio` belong to the FluidAudio library, not to a bundle ID, and are shared by every build.
-- Install with Atin only: `./build.sh install` quits the app, backs it up to `~/Backups/liquid-voice-<timestamp>/`, installs, and prints the rollback command. Then run `docs/INSTALL-CHECKLIST.md`.
+- Install with Atin only: `./build.sh install` quits the app (and stops if it will not quit), backs it up to `~/Backups/liquid-voice-<timestamp>/`, installs, and prints the rollback command. Then run `docs/INSTALL-CHECKLIST.md`.
+- Never launch a Release product (`./build.sh release`, `DerivedData/.../Release/Liquid Voice.app`): it is `com.stage11.liquidvoice`, the installed app's identity, and would write into the installed app's defaults and folder. The migration only runs for the app in `/Applications`.
 
 ## Never touch the installed app
 

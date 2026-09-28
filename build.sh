@@ -145,7 +145,17 @@ install_app() {
 
     echo "Installing to ${installed} ..."
     osascript -e 'quit app "Liquid Voice"' >/dev/null 2>&1 || true
-    sleep 1
+    # The running app must be gone before it is replaced (and before the new one migrates
+    # its data), or it would keep writing its settings and hotkeys beside the new app.
+    local waited=0
+    while pgrep -x "Liquid Voice" >/dev/null 2>&1; do
+        if [ "${waited}" -ge 10 ]; then
+            printf >&2 'Liquid Voice is still running after 10 s. Quit it, then run install again. Nothing was installed.\n'
+            exit 1
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
 
     # Keep the app being replaced, so one command brings it back.
     if [ -d "${installed}" ]; then

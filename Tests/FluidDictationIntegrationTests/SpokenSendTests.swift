@@ -96,23 +96,48 @@ final class SpokenSendParserTests: XCTestCase {
         XCTAssertEqual(self.parse("Do it for me send it"), SpokenSendParseResult(text: "Do it for me.", shouldSend: true))
         XCTAssertEqual(self.parse("Up to you send it"), SpokenSendParseResult(text: "Up to you.", shouldSend: true))
         XCTAssertEqual(self.parse("Keep it between us send it"), SpokenSendParseResult(text: "Keep it between us.", shouldSend: true))
-        XCTAssertEqual(self.parse("OK let's send it"), SpokenSendParseResult(text: "", shouldSend: true))
+        XCTAssertEqual(self.parse("OK let's send it"), SpokenSendParseResult(text: "OK.", shouldSend: true))
         XCTAssertEqual(self.parse("Fix it, let's send it."), SpokenSendParseResult(text: "Fix it.", shouldSend: true))
-        // A subject pronoun still makes it part of the sentence.
-        for text in ["Thank you, I'll send it", "If you send it", "Can you send it", "They send it"] {
-            XCTAssertFalse(self.parse(text).shouldSend, text)
+        // A subject pronoun still makes it part of the sentence, "like" and "than" included.
+        for text in [
+            "Thank you, I'll send it", "If you send it", "Can you send it", "They send it",
+            "It's not like I send it", "Faster than we send it",
+        ] {
+            XCTAssertEqual(self.parse(text), SpokenSendParseResult(text: text, shouldSend: false), text)
         }
     }
 
-    func testNothingButALeadInSendsTheDraftAndTypesNothing() {
+    func testNothingButFillerSendsTheDraftAndTypesNothing() {
         for text in [
-            "Okay send it", "OK, send it.", "Just send it.", "Please send it", "Yes send it.", "Yeah, send it",
-            "Alright, send it", "All right, send it.", "Go ahead and send it", "Yes, please send it.", "Okay, just send it.",
+            "Just send it.", "Please send it", "Um, send it", "So send it", "Well, send it", "Let's send it.",
+            "Go ahead and send it", "Oh, just send it", "And send it.",
         ] {
             XCTAssertEqual(self.parse(text), SpokenSendParseResult(text: "", shouldSend: true), text)
             XCTAssertEqual(SpokenSendParser.parse(text, phrase: "send it", enabled: true, forTerminal: true).text, "", text)
         }
-        // Anything more is the message.
+    }
+
+    /// Atin mostly answers Claude: an affirmation before the phrase is the answer, typed, then Return.
+    func testAffirmationsAreTypedThenSent() {
+        func c11(_ text: String) -> SpokenSendParseResult {
+            SpokenSendParser.parse(text, phrase: "send it", enabled: true, forTerminal: true)
+        }
+        XCTAssertEqual(c11("Yes send it"), SpokenSendParseResult(text: "Yes", shouldSend: true))
+        XCTAssertEqual(c11("Yes, go ahead and send it"), SpokenSendParseResult(text: "Yes", shouldSend: true))
+        XCTAssertEqual(c11("Okay send it"), SpokenSendParseResult(text: "Okay", shouldSend: true))
+        XCTAssertEqual(c11("Okay, just send it."), SpokenSendParseResult(text: "Okay", shouldSend: true))
+        XCTAssertEqual(c11("Sure. Send it."), SpokenSendParseResult(text: "Sure", shouldSend: true))
+        XCTAssertEqual(c11("Go ahead, send it"), SpokenSendParseResult(text: "Go ahead", shouldSend: true))
+        XCTAssertEqual(c11("Yes, please send it"), SpokenSendParseResult(text: "Yes, please", shouldSend: true))
+        for (text, typed) in [
+            ("Yes send it.", "Yes."), ("Okay send it", "Okay."), ("OK, send it.", "OK."), ("Yeah, send it", "Yeah."),
+            ("Yep send it", "Yep."), ("Alright, send it", "Alright."), ("All right, send it.", "All right."),
+            ("Fine, send it", "Fine."), ("Cool send it", "Cool."), ("Great, send it", "Great."), ("Perfect send it", "Perfect."),
+            ("K send it", "K."),
+        ] {
+            XCTAssertEqual(self.parse(text), SpokenSendParseResult(text: typed, shouldSend: true), text)
+        }
+        // Anything more is the message too.
         XCTAssertEqual(self.parse("No, send it."), SpokenSendParseResult(text: "No.", shouldSend: true))
         XCTAssertEqual(self.parse("Okay, fix the typo, send it."), SpokenSendParseResult(text: "Okay, fix the typo.", shouldSend: true))
         XCTAssertEqual(self.parse("Fix it, go ahead and send it."), SpokenSendParseResult(text: "Fix it.", shouldSend: true))

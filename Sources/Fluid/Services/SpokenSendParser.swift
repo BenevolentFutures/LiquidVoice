@@ -11,9 +11,11 @@ import Foundation
 //   ("but don't send it", "I'll send it", "can you send it", "want to send it"). This holds for
 //   the final parse, for arming during streaming, and for the armed near miss ("I already sent
 //   it"). Object pronouns do not count ("Thank you send it", "Do it for me send it" send).
-// - A dangling lead-in before the phrase goes with it: "and", "and then", "let's", "go ahead
-//   and" ("Fix the typo and send it" types "Fix the typo."). When nothing but a lead-in comes
-//   before it ("Okay send it", "Yes, please send it"), nothing is typed and the draft is sent.
+// - A dangling lead-in before the phrase goes with it: "and", "and then", "let's", "just", "go
+//   ahead and" ("Fix the typo and send it" types "Fix the typo."; "Yes, go ahead and send it"
+//   types "Yes"). When nothing but filler comes before it ("Just send it", "Um, send it"),
+//   nothing is typed and the draft is sent. Affirmations are answers and are typed ("Okay send
+//   it" types "Okay").
 // - "literal" escapes the phrase with a comma, colon or semicolon after it ("literal, send it"),
 //   but not across a sentence ("Take it literal. Send it." sends).
 // - For a terminal (c11) no sentence ending is added, and only one sentence-ending period right
@@ -261,8 +263,10 @@ nonisolated enum SpokenSendParser {
 
     /// A pronoun right after one of these is an object, not the subject of the phrase: "Thank
     /// you send it", "Up to you send it" send. Transcribers often drop the comma there.
+    /// Not "like" or "than": a subject can follow them ("It's not like I send it", "Faster than
+    /// we send it").
     private static let objectMarkers: Set<String> = [
-        "thank", "thanks", "to", "for", "with", "at", "from", "about", "by", "of", "like", "than", "without",
+        "thank", "thanks", "to", "for", "with", "at", "from", "about", "by", "of", "without",
     ]
 
     private static let subjectPronouns: Set<String> = ["i", "you", "we", "they", "he", "she"]
@@ -378,8 +382,9 @@ nonisolated enum SpokenSendParser {
         let trim: (String) -> String = { forTerminal ? self.trimTerminalTail($0) : self.trimTrailingSeparators($0) }
         var polished = trim(text)
         // A lead-in that joined the text to the command goes with it: "Fix the typo and send it",
-        // "…, and then send it", "…, let's send it", "…, go ahead and send it". None of these can
-        // end a real sentence; "then" or "so" alone can ("See you then"), so they stay.
+        // "…, and then send it", "…, let's send it", "…, just send it", "Yes, go ahead and send
+        // it". None of these can end a real sentence; "then" or "so" alone can ("See you then"),
+        // and so can "go ahead" without its "and", so they stay.
         var strippedAnd = false
         for _ in 0..<4 {
             let prefixWords = self.lastWords(polished, count: 2)
@@ -387,7 +392,7 @@ nonisolated enum SpokenSendParser {
             let lastWord = self.normalizeWord(last.text)
             let wordBefore = prefixWords.count >= 2 ? prefixWords[prefixWords.count - 2] : nil
             let cutAt: String.Index
-            if lastWord == "and" || lastWord == "lets" {
+            if lastWord == "and" || lastWord == "lets" || lastWord == "just" {
                 strippedAnd = strippedAnd || lastWord == "and"
                 cutAt = last.range.lowerBound
             } else if let wordBefore, wordBefore.text.allSatisfy(\.isLetter),
@@ -401,8 +406,8 @@ nonisolated enum SpokenSendParser {
             polished = trim(String(polished[..<cutAt]))
         }
 
-        // "Okay send it", "Yes, please send it": nothing but a lead-in. Send the draft that is
-        // already there and type nothing.
+        // "Just send it", "Um, please send it": nothing but filler. Send the draft that is
+        // already there and type nothing. ("Okay send it" types "Okay": it answers.)
         if self.isOnlyLeadIn(polished) {
             return ""
         }
@@ -425,11 +430,10 @@ nonisolated enum SpokenSendParser {
         return polished + "."
     }
 
-    /// Words that are only a lead-in to the command when nothing else comes before the phrase.
+    /// Pure filler: when nothing else comes before the phrase, nothing is typed. Affirmations
+    /// ("yes", "okay", "sure", "go ahead") are not here: they answer Claude, so they are typed.
     private static let leadInWords: Set<String> = [
-        "okay", "ok", "k", "alright", "all", "right", "yes", "yeah", "yep", "yup", "sure", "fine",
-        "cool", "great", "perfect", "just", "please", "go", "ahead", "and", "then", "so", "now",
-        "well", "um", "uh", "oh", "lets",
+        "just", "please", "now", "so", "then", "and", "well", "um", "uh", "oh", "lets",
     ]
 
     /// Stops at the first word that is not a lead-in, so a long dictation costs one word.

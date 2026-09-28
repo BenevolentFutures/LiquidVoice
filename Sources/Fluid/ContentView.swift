@@ -1765,7 +1765,7 @@ struct ContentView: View {
                 ownPID: ownPID,
                 ownFocusIsOverlay: ownFocusIsOverlay
             )
-            DeliveryLog.bench(
+            DeliveryLog.info(
                 "stop_target_capture pid=\(target.map { String($0.pid) } ?? "nil") element=\(target?.element != nil) " +
                     "elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))"
             )
@@ -2514,7 +2514,7 @@ struct ContentView: View {
             traceOutcome = "benchmark_handoff"
         }
 
-        DebugLogger.shared.debug(
+        DebugLogger.shared.info(
             "Typing decision → frontmost: \(frontmostName), fluidFrontmost: \(isFluidFrontmost), editorFocused: \(self.isTranscriptionFocused), willTypeExternally: \(shouldTypeExternally)",
             source: "ContentView"
         )
@@ -2528,7 +2528,7 @@ struct ContentView: View {
                 typingTargetPID = stopTarget.pid
                 let preparation = await TypingService.prepareTargetForDelivery(stopTarget)
                 isTargetReady = preparation.isReady
-                self.appBench("stop_target_prepare pid=\(stopTarget.pid) result=\(preparation.rawValue)")
+                DeliveryLog.info("stop_target_prepare pid=\(stopTarget.pid) result=\(preparation.rawValue)")
             } else {
                 let typingTarget = self.resolveTypingTargetPID()
                 typingTargetPID = typingTarget.pid
@@ -2666,7 +2666,7 @@ struct ContentView: View {
             stoppedAt: stoppedAt
         ) {
             let preparation = await TypingService.prepareTargetForDelivery(sendKey.target)
-            self.appBench("stop_target_prepare pid=\(sendKey.target.pid) result=\(preparation.rawValue) phraseOnly=true")
+            DeliveryLog.info("stop_target_prepare pid=\(sendKey.target.pid) result=\(preparation.rawValue) phraseOnly=true")
             if preparation.isReady {
                 SpokenSendController.shared.sendExistingDraft(sendKey)
             } else {

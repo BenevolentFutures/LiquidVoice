@@ -36,7 +36,7 @@
       const syllables = 2 + Math.floor(rnd() * 9);
       for (let i = 0; i < syllables; i++) {
         const len = 0.12 + rnd() * 0.16;
-        const peak = 0.35 + rnd() * 0.65;
+        const peak = 0.58 + rnd() * 0.42;
         timeline.push([t, t + len, peak]);
         t += len + 0.02 + rnd() * 0.06;
       }
@@ -45,13 +45,13 @@
   })();
   const jitter = LV.seeded(7);
   function envelope(t) {
-    let v = 0.02 + jitter() * 0.03; // room noise floor
+    let v = 0.05 + jitter() * 0.04; // room noise floor
     for (let i = 0; i < timeline.length; i++) {
       const [a, b, p] = timeline[i];
       if (t < a) break;
       if (t <= b + 0.08) {
         const x = (t - a) / (b - a);
-        const shape = x < 0.25 ? x / 0.25 : Math.max(0, 1 - (x - 0.25) / 0.9);
+        const shape = x < 0.2 ? x / 0.2 : Math.max(0.35, 1 - (x - 0.2) / 1.1);
         v = Math.max(v, p * shape * (0.85 + jitter() * 0.3));
       }
     }
@@ -149,7 +149,7 @@
     S.state = id;
     document.documentElement.dataset.state = id;
     document.querySelectorAll("#lv-states button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.state === id)));
-    if (id === "listening") startTicking(); else stopTicking();
+    if (id === "listening" || id === "history") startTicking(); else stopTicking();
     S.listeners.state.forEach((f) => f(id, prev));
   }
   function setTheme(theme) {

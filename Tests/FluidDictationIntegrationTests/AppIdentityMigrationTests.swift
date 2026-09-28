@@ -140,7 +140,10 @@ final class AppIdentityMigrationTests: XCTestCase {
         let marker = try XCTUnwrap(self.destination.dictionary(forKey: AppIdentityMigration.defaultsMarkerKey))
         XCTAssertEqual(marker["keys"] as? Int, source.count)
         XCTAssertEqual(marker["from"] as? String, self.sourceSuite)
-        XCTAssertTrue(self.logLines.contains { $0.1.contains("IDENTITY_MIGRATION step=defaults outcome=copied keys=\(source.count)") })
+        // The same line format docs/INSTALL-CHECKLIST.md shows.
+        XCTAssertTrue(self.logLines.contains {
+            $0.1 == "IDENTITY_MIGRATION step=defaults outcome=copied keys=\(source.count) replaced=0 attempt=1 from=\(self.sourceSuite!)"
+        })
         XCTAssertTrue(self.logLines.contains { $0.1.contains("IDENTITY_MIGRATION finished result=ok") })
     }
 
@@ -355,7 +358,10 @@ final class AppIdentityMigrationTests: XCTestCase {
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: self.root.path)
         XCTAssertEqual(Set(leftovers), ["FluidVoice", "LiquidVoice"], "no staging folder may remain")
         XCTAssertNotNil(self.destination.object(forKey: AppIdentityMigration.folderMarkerKey))
-        XCTAssertTrue(self.logLines.contains { $0.1.contains("step=folder outcome=copied files=3") })
+        XCTAssertTrue(self.logLines.contains {
+            $0.1 == "IDENTITY_MIGRATION step=folder outcome=copied files=3 bytes=34 skipped=0 from=FluidVoice to=LiquidVoice (FluidVoice left in place)"
+        })
+        XCTAssertTrue(self.logLines.contains { $0.1.hasPrefix("IDENTITY_MIGRATION finished result=ok defaults=copied(1) folder=copied(3) loginItem=not_needed elapsedMs=") })
     }
 
     private let fiveBoostTerms = #"{"terms":["Cairn","c11","Gregorovich","Atlas","Hyperion"]}"#

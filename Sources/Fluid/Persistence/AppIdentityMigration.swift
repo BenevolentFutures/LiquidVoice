@@ -1,4 +1,3 @@
-import AppKit
 import CoreFoundation
 import Foundation
 import ServiceManagement
@@ -162,7 +161,7 @@ nonisolated struct AppIdentityMigration {
     /// test host, a build with another bundle identifier, or one outside Applications).
     @MainActor private(set) static var launchReport: Report?
 
-    /// Shows the halt alert. Replaced in tests; the app shows a modal `NSAlert`.
+    /// Shows the halt alert. Replaced in tests; the app shows a blocking system alert.
     @MainActor static var presentHaltAlert: (HaltAlert) -> Void = { alert in
         Self.runModalHaltAlert(alert)
     }
@@ -178,22 +177,41 @@ nonisolated struct AppIdentityMigration {
         }
     }
 
-    /// A modal alert before the SwiftUI app starts, so the stopped migration cannot go unnoticed.
+    /// A blocking alert before the SwiftUI app starts, so the stopped migration cannot go
+    /// unnoticed. `CFUserNotificationDisplayAlert` needs no `NSApplication`: touching
+    /// `NSApplication.shared` here, before `FluidApp.main()`, would make `NSApp` a plain
+    /// `NSApplication` instead of SwiftUI's subclass for the whole process. The app does not
+    /// continue until the alert is answered.
     @MainActor
     private static func runModalHaltAlert(_ halt: HaltAlert) {
         guard !TestHostQuietMode.isActive else { return }
-        NSApplication.shared.activate()
-        let alert = NSAlert()
-        alert.alertStyle = .critical
-        alert.messageText = halt.title
-        alert.informativeText = halt.message
-        alert.addButton(withTitle: "Continue")
-        if !halt.backups.isEmpty {
-            alert.addButton(withTitle: "Show Backup in Finder")
+        var response: CFOptionFlags = 0
+        let showBackup = halt.backups.isEmpty ? nil : "Show Backup in Finder" as CFString
+        _ = CFUserNotificationDisplayAlert(
+            0, // no timeout
+            CFOptionFlags(kCFUserNotificationStopAlertLevel),
+            nil,
+            nil,
+            nil,
+            halt.title as CFString,
+            halt.message as CFString,
+            "Continue" as CFString,
+            showBackup,
+            nil,
+            &response
+        )
+        let button = response & 0x3
+        if showBackup != nil, button == CFOptionFlags(kCFUserNotificationAlternateResponse), let backup = halt.backups.last {
+            // `open -R` reveals it in Finder without any AppKit object in this process.
+            let reveal = Process()
+            reveal.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            reveal.arguments = ["-R", backup.path]
+            try? reveal.run()
         }
-        if alert.runModal() == .alertSecondButtonReturn {
-            NSWorkspace.shared.activateFileViewerSelecting(halt.backups)
-        }
+        DebugLogger.shared.info(
+            "\(Self.logPrefix) halt alert answered button=\(button == CFOptionFlags(kCFUserNotificationAlternateResponse) ? "show_backup" : "continue")",
+            source: "AppIdentityMigration"
+        )
     }
 
     /// Only an app installed in an Applications folder migrates. A Release product launched from

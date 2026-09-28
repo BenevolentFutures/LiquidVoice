@@ -23,6 +23,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         !self.wasLaunchedAsLoginItem || SettingsStore.shared.showMainWindowAtLoginLaunch
     }
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        TestHostQuietMode.install()
+        if TestHostQuietMode.isActive {
+            // Never activate, never show in the Dock, never take focus from the operator.
+            NSApp.setActivationPolicy(.prohibited)
+        }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Bring up file logging + crash handlers immediately during launch.
         _ = FileLogger.shared
@@ -59,7 +67,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         self.schedulePeriodicUpdateChecks()
 
         // Login Items can launch hidden; reveal the real SwiftUI window so ContentView startup runs.
-        self.openMainWindowOnLaunch()
+        // The XCTest host never reveals anything: its window is created but stays off screen.
+        if !TestHostQuietMode.isActive {
+            self.openMainWindowOnLaunch()
+        }
 
         // Note: App UI is designed with dark color scheme in mind
         // All gradients and effects are optimized for dark mode
@@ -160,7 +171,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     /// LaunchServices reopen below, which restores the bundle default (.regular) even when the
     /// app is reopened without activation, so hide-from-dock is honored on login launches (#396).
     private func applyDockVisibilityPolicy() {
-        NSApp.setActivationPolicy(SettingsStore.shared.showInDock ? .regular : .accessory)
+        NSApp.setActivationPolicy(TestHostQuietMode.activationPolicy(SettingsStore.shared.showInDock ? .regular : .accessory))
     }
 
     private func openMainWindowOnLaunch() {

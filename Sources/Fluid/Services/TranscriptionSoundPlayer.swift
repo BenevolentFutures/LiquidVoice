@@ -39,7 +39,14 @@ final class TranscriptionSoundPlayer {
         self.play(soundName: soundName, desiredVolume: volume)
     }
 
+    /// Sound players created so far. The XCTest host must never create one.
+    var createdPlayerCount: Int {
+        self.playbackQueue.sync { self.players.count }
+    }
+
     private func play(soundName: String, desiredVolume: Float) {
+        // The XCTest host is silent: no player is created and nothing plays.
+        guard !TestHostQuietMode.isActive else { return }
         let startedAt = ProcessInfo.processInfo.systemUptime
         DebugLogger.shared.benchmark(
             "APP_BENCH",

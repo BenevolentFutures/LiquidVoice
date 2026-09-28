@@ -772,6 +772,12 @@ final class GlobalHotkeyManager: NSObject {
         self.finishInterruptedMouseShortcutPress(reason: "hotkey tap reinitialized")
         self.cleanupEventTap()
 
+        // The XCTest host never intercepts the operator's keyboard or mouse.
+        guard !TestHostQuietMode.isActive else {
+            DebugLogger.shared.info("Hotkey event taps skipped in test host quiet mode", source: "GlobalHotkeyManager")
+            return true
+        }
+
         if !AXIsProcessTrusted() {
             DebugLogger.shared.debug("Accessibility permissions not granted", source: "GlobalHotkeyManager")
             return false

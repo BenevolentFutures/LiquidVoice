@@ -439,7 +439,7 @@ final class BottomOverlayWindowController {
             }
         }
 
-        if self.globalMouseDownMonitor == nil {
+        if self.globalMouseDownMonitor == nil, !TestHostQuietMode.isActive {
             self.globalMouseDownMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
                 let clickPoint = NSEvent.mouseLocation
                 Task { @MainActor [weak self] in

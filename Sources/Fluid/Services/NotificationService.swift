@@ -12,7 +12,7 @@ enum NotificationService {
     }
 
     static func showAIProcessingFallback(error: String) {
-        guard SettingsStore.shared.notifyAIProcessingFailures else { return }
+        guard SettingsStore.shared.notifyAIProcessingFailures, !TestHostQuietMode.isActive else { return }
 
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
@@ -42,7 +42,7 @@ enum NotificationService {
     }
 
     static func showCommandModeFailure(error: String) {
-        guard SettingsStore.shared.notifyAIProcessingFailures else { return }
+        guard SettingsStore.shared.notifyAIProcessingFailures, !TestHostQuietMode.isActive else { return }
 
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in

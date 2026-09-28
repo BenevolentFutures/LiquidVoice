@@ -2333,7 +2333,7 @@ final class SettingsStore: ObservableObject {
 
         // Set activation policy based on saved preference
         DispatchQueue.main.async {
-            NSApp.setActivationPolicy(dockVisible ? .regular : .accessory)
+            NSApp.setActivationPolicy(TestHostQuietMode.activationPolicy(dockVisible ? .regular : .accessory))
         }
         #endif
     }
@@ -3942,7 +3942,7 @@ final class SettingsStore: ObservableObject {
         // Method 2: Try to notify the system of the change
         // This may help with some system caches
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            NSApp.setActivationPolicy(visible ? .regular : .accessory)
+            NSApp.setActivationPolicy(TestHostQuietMode.activationPolicy(visible ? .regular : .accessory))
             DebugLogger.shared.info(
                 "✓ Activation policy updated to: \(visible ? "regular" : "accessory")",
                 source: "SettingsStore"

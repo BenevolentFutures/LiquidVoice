@@ -136,6 +136,8 @@ normalize_ctranscribe_framework() {
 
 # The bundle identifier of an app bundle, or nothing.
 bundle_id() {
+    # PlistBuddy offers to create a missing file on stdout, so check first.
+    [ -f "$1/Contents/Info.plist" ] || return 0
     /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist" 2>/dev/null || true
 }
 
@@ -152,17 +154,22 @@ quit_liquid_voice() {
     done
 }
 
-# Writes <backup dir>/rollback.sh, which puts the backed-up app back.
+# Writes <backup dir>/rollback.sh, which puts the backed-up app back with the same
+# move-aside swap as install: nothing is removed until the backup copy is in place.
 write_rollback_script() {
     local backup_dir="$1"
     local installed="$2"
+    local backup_id="$3"
     cat > "${backup_dir}/rollback.sh" <<ROLLBACK
 #!/bin/bash
-# Puts back the Liquid Voice that ./build.sh install replaced. Its own settings and data were
-# never changed, so it picks up where it was (without dictations made in the newer app).
+# Puts back the Liquid Voice (${backup_id}) that ./build.sh install replaced. Its own settings
+# and data were never changed, so it picks up where it was (without dictations made in the
+# newer app).
 set -euo pipefail
 installed="${installed}"
 backup="${backup_dir}/Liquid Voice.app"
+staged="\${installed}.rollback"
+replaced="\${installed}.replaced-\$(date +%Y%m%d-%H%M%S)"
 osascript -e 'quit app "Liquid Voice"' >/dev/null 2>&1 || true
 waited=0
 while pgrep -x "Liquid Voice" >/dev/null 2>&1; do
@@ -173,11 +180,27 @@ while pgrep -x "Liquid Voice" >/dev/null 2>&1; do
     sleep 0.5
     waited=\$((waited + 1))
 done
-rm -rf "\${installed}.rollback"
-ditto "\${backup}" "\${installed}.rollback"
-rm -rf "\${installed}"
-mv "\${installed}.rollback" "\${installed}"
-echo "Restored \$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "\${installed}/Contents/Info.plist") to \${installed}."
+rm -rf "\${staged}"
+ditto "\${backup}" "\${staged}"
+if [ ! -f "\${staged}/Contents/Info.plist" ] || \\
+    [ "\$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "\${staged}/Contents/Info.plist")" != "${backup_id}" ]; then
+    rm -rf "\${staged}"
+    echo "The copy of the backup is incomplete. Nothing was changed." >&2
+    exit 1
+fi
+if [ -e "\${installed}" ]; then
+    mv "\${installed}" "\${replaced}"
+fi
+if ! mv "\${staged}" "\${installed}"; then
+    if [ -e "\${replaced}" ] && mv "\${replaced}" "\${installed}"; then
+        echo "Could not put the backup in place; the current app was left as it was." >&2
+    else
+        echo "Could not put the backup in place. The app that was installed is at \${replaced}; the backup is at \${backup}." >&2
+    fi
+    exit 1
+fi
+rm -rf "\${replaced}"
+echo "Restored ${backup_id} to \${installed}."
 open "\${installed}"
 ROLLBACK
     chmod +x "${backup_dir}/rollback.sh"
@@ -253,6 +276,21 @@ install_app() {
 
     product_id="$(bundle_id "${product}")"
     [ -n "${product_id}" ] || { printf >&2 'Cannot read the bundle ID of %s. Nothing was installed.\n' "${product}"; exit 1; }
+
+    # An earlier install that stopped between its two moves leaves the old app at .previous.
+    # Put it back (or, when an app is installed again, keep it in the backups); never delete it.
+    if [ -e "${previous}" ]; then
+        if [ ! -e "${installed}" ]; then
+            echo "Found ${previous} from an interrupted install and no app at ${installed}: moving it back first."
+            mv "${previous}" "${installed}"
+        else
+            local leftover
+            leftover="${backup_root}/liquid-voice-leftover-$(date +%Y%m%d-%H%M%S)"
+            mkdir -p "${leftover}"
+            mv "${previous}" "${leftover}/Liquid Voice.app"
+            echo "Kept a leftover ${previous} as ${leftover}/Liquid Voice.app."
+        fi
+    fi
     if [ -d "${installed}" ]; then
         installed_id="$(bundle_id "${installed}")"
     fi
@@ -269,6 +307,8 @@ install_app() {
     # Keep the app being replaced, verified, so one command brings it back.
     if [ -d "${installed}" ]; then
         backup_dir="${backup_root}/liquid-voice-$(date +%Y%m%d-%H%M%S)"
+        # Two installs within one second must not share (and merge into) one backup.
+        [ ! -e "${backup_dir}" ] || backup_dir="${backup_dir}-$$"
         mkdir -p "${backup_dir}"
         echo "Backing up the current app to ${backup_dir}/Liquid Voice.app ..."
         ditto "${installed}" "${backup_dir}/Liquid Voice.app"
@@ -286,14 +326,14 @@ install_app() {
             fi
             echo "Note: the installed app itself fails strict codesign verification; the backup is an exact copy of it."
         fi
-        write_rollback_script "${backup_dir}" "${installed}"
+        write_rollback_script "${backup_dir}" "${installed}" "${backup_id}"
         echo "Backed up ${backup_id}."
         echo "Rollback, if needed (restores the previous app; its own settings and data were never changed):"
         echo "  bash \"${backup_dir}/rollback.sh\""
     fi
 
     # Copy next to the installed app, check it, then swap it in.
-    rm -rf "${staged}" "${previous}"
+    rm -rf "${staged}"
     ditto "${product}" "${staged}"
     if [ "$(bundle_id "${staged}")" != "${product_id}" ]; then
         rm -rf "${staged}"
@@ -304,8 +344,16 @@ install_app() {
         mv "${installed}" "${previous}"
     fi
     if ! mv "${staged}" "${installed}"; then
-        [ -d "${previous}" ] && mv "${previous}" "${installed}"
-        printf >&2 'Could not move the new app into place; the previous app was put back.\n'
+        if [ -e "${previous}" ] && mv "${previous}" "${installed}"; then
+            printf >&2 'Could not move the new app into place; the previous app was put back.\n'
+        else
+            printf >&2 'Could not move the new app into place, nor put the previous app back.\n'
+            printf >&2 'The previous app is at %s. Move it back to %s, run install again (it moves it back first)' "${previous}" "${installed}"
+            if [ -n "${backup_dir}" ]; then
+                printf >&2 ', or run: bash "%s/rollback.sh"' "${backup_dir}"
+            fi
+            printf >&2 '.\n'
+        fi
         exit 1
     fi
     rm -rf "${previous}"

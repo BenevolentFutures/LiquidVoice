@@ -123,9 +123,29 @@ normalize_ctranscribe_framework() {
         | sed -n 's/.*"\(Apple Development:[^"]*\)".*/\1/p' | head -1)"
     [ -n "${identity}" ] || { printf >&2 'No signing identity for re-sign.\n'; return 1; }
 
+    # Re-sign with the entitlements Xcode signed the app with, not the bare
+    # Fluid.entitlements file. Xcode adds the hardened-runtime resource entitlements
+    # (ENABLE_RESOURCE_ACCESS_AUDIO_INPUT -> com.apple.security.device.audio-input) at
+    # build time; without that one, macOS denies the microphone silently: no prompt,
+    # and the app never appears in Privacy & Security > Microphone.
+    local entitlements
+    entitlements="$(mktemp -t liquidvoice-entitlements)"
+    codesign -d --entitlements - --xml "${app}" > "${entitlements}" 2>/dev/null
+    if ! /usr/libexec/PlistBuddy -c 'Print :com.apple.security.device.audio-input' "${entitlements}" 2>/dev/null | grep -q true; then
+        printf >&2 'The built app lacks com.apple.security.device.audio-input; the microphone would be denied. Stopping.\n'
+        rm -f "${entitlements}"
+        return 1
+    fi
+
     codesign --force --sign "${identity}" --timestamp=none "${fw}"
     codesign --force --sign "${identity}" --timestamp=none \
-        --entitlements Fluid.entitlements --options runtime "${app}"
+        --entitlements "${entitlements}" --options runtime "${app}"
+    rm -f "${entitlements}"
+
+    if ! codesign -d --entitlements - --xml "${app}" 2>/dev/null | grep -q 'com.apple.security.device.audio-input'; then
+        printf >&2 'Re-signed app lost com.apple.security.device.audio-input. Stopping.\n'
+        return 1
+    fi
 
     if codesign --verify --deep --strict "${app}"; then
         echo "Signature verified."

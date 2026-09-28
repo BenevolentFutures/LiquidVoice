@@ -458,6 +458,12 @@ final class BottomOverlayWindowController {
         return true
     }
 
+    /// The app the held dictation was pasted into, for the recovery card's headline.
+    var pendingDeliveryAppName: String? {
+        guard let pending = self.pendingDelivery, pending.generation == self.presentationGeneration else { return nil }
+        return pending.appName
+    }
+
     private static let outcomeWait: TimeInterval = 5
     private static let cardWait: TimeInterval = 1.5
 

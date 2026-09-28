@@ -2972,6 +2972,39 @@ final class SignalOverlayRenderTests: XCTestCase {
         super.tearDown()
     }
 
+    /// Recovery cards (DESIGN.md §15): the pill grows upward to 174 (one-line card), 231 (failed)
+    /// or 248 (two-line reason); the rails and the rows below the card stay where the overlay's are.
+    func testRecoveryCardsGrowThePillUpward() throws {
+        let transcript = "Okay, take a look at the retry admission path in the queue worker. When the same job ID lands twice inside the lease window we are admitting both and the second one clobbers the first one's checkpoint so I think the fix is to key the admission set."
+        let cards: [(String, SignalCardContent, CGFloat)] = [
+            ("07-failed", SignalCardContent(headline: "Couldn\u{2019}t paste into c11", reason: "No text field focused", transcript: transcript, primary: .copy, meta: "118 words"), 231),
+            ("17-failed-clipboardkept", SignalCardContent(headline: "Couldn\u{2019}t paste into c11", reason: DeliveryFailureOverlayController.reasonText(failure: .pasteNotLanded, clipboard: .newerClipboardCopy, inHistory: true), transcript: transcript, primary: .copy, meta: "118 words"), 248),
+            ("18-timedout", SignalCardContent(headline: "Transcription timed out", reason: "Your audio is kept", primary: .reprocess), 174),
+            ("19-asrback", SignalCardContent(headline: "Speech recognition is back", reason: "A kept dictation is waiting", primary: .reprocess), 174),
+            ("20-micoff", SignalCardContent(headline: "Microphone access is off", reason: "Allow Liquid Voice in Privacy & Security", primary: .openSystemSettings, isMicrophoneOff: true), 174),
+        ]
+        for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+            let theme = appearance == .darkAqua ? "dark" : "light"
+            for (name, content, pillHeight) in cards {
+                let card = DeliveryFailureCardView(
+                    content: content,
+                    icon: NSWorkspace.shared.icon(forFile: "/Applications/c11.app"),
+                    timerText: "0:41",
+                    microphoneName: "MacBook Pro Microphone",
+                    onPrimary: {},
+                    onDismiss: {},
+                    onHoverChanged: { _ in }
+                )
+                XCTAssertEqual(content.height(width: 304) + 12 + 6 + 50 + 4 + 13 + 10, pillHeight, "\(name)")
+                let rep = try SignalRenderStage.render(card, appearance: appearance)
+                XCTAssertEqual(rep.size.height, pillHeight + 12 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
+                if let folder = self.outputFolder {
+                    try SignalRenderStage.write(rep, to: folder.appendingPathComponent("\(theme)-\(name).png"))
+                }
+            }
+        }
+    }
+
     func testHistoryCardRendersAboveTheHistoryChip() throws {
         for appearance in [NSAppearance.Name.darkAqua, .aqua] {
             let theme = appearance == .darkAqua ? "dark" : "light"

@@ -1112,16 +1112,23 @@ final class DeliveryFailureReportingTests: XCTestCase {
     }
 
     func testTheCardLineMatchesWhereTheTranscriptActuallyIs() {
-        let line = DeliveryFailureOverlayController.detailText
-        XCTAssertEqual(line(.copied, true), "Kept on your clipboard and in history.")
-        XCTAssertEqual(line(.alreadyOnClipboard, false), "Kept on your clipboard.")
-        XCTAssertEqual(line(.newerClipboardCopy, true), "In history. Your newer clipboard was left alone.")
-        XCTAssertEqual(line(.newerClipboardCopy, false), "Your newer clipboard was left alone. Use Copy.")
-        XCTAssertEqual(line(.writeFailed, true), "In history. The clipboard couldn't be written.")
-        XCTAssertEqual(line(.writeFailed, false), "The clipboard couldn't be written. Use Copy.")
+        let line = { (clipboard: TranscriptBackupOutcome, inHistory: Bool) in
+            DeliveryFailureOverlayController.reasonText(failure: .pasteNotLanded, clipboard: clipboard, inHistory: inHistory)
+        }
+        // DESIGN.md §15's three reasons.
+        XCTAssertEqual(
+            DeliveryFailureOverlayController.reasonText(failure: .noEditableTarget, clipboard: .copied, inHistory: true),
+            "No text field focused"
+        )
+        XCTAssertEqual(line(.copied, true), "The text is on your clipboard")
+        XCTAssertEqual(line(.alreadyOnClipboard, false), "The text is on your clipboard")
+        XCTAssertEqual(line(.newerClipboardCopy, true), "Your newer clipboard was left alone, the text is in History")
+        XCTAssertEqual(line(.newerClipboardCopy, false), "Your newer clipboard was left alone. Use Copy")
+        XCTAssertEqual(line(.writeFailed, true), "The clipboard couldn\u{2019}t be written, the text is in History")
+        XCTAssertEqual(line(.writeFailed, false), "The clipboard couldn\u{2019}t be written. Use Copy")
         // Never claims history for text that is not in it (rewrite output, debug deliveries).
         for outcome in [TranscriptBackupOutcome.copied, .alreadyOnClipboard, .newerClipboardCopy, .writeFailed] {
-            XCTAssertFalse(line(outcome, false).contains("history"), outcome.rawValue)
+            XCTAssertFalse(line(outcome, false).localizedCaseInsensitiveContains("history"), outcome.rawValue)
         }
     }
 

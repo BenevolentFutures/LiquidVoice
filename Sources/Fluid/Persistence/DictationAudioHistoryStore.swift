@@ -47,8 +47,25 @@ final nonisolated class DictationAudioHistoryStore: @unchecked Sendable {
     private let appSupportFolder = AppStorageLocation.folderName
     private let audioFolder = "DictationAudioHistory"
     private let fileManager = FileManager.default
+    /// Replaces `~/Library/Application Support/<app folder>` (tests use a temporary directory).
+    private let rootDirectoryOverride: URL?
 
-    private init() {}
+    /// Posted on the main queue when the user's "Clear all history" or "Delete all saved audio"
+    /// discards the kept recording too, so ASRService forgets its copy.
+    static let keptDictationDiscardedNotification = Notification.Name("LiquidVoice.keptDictationDiscarded")
+
+    init(rootDirectoryOverride: URL? = nil) {
+        self.rootDirectoryOverride = rootDirectoryOverride
+    }
+
+    /// The app's storage folder (or the test override).
+    private func rootDirectory() throws -> URL {
+        if let rootDirectoryOverride = self.rootDirectoryOverride { return rootDirectoryOverride }
+        guard let base = self.fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            throw DictationAudioHistoryError.applicationSupportUnavailable
+        }
+        return base.appendingPathComponent(self.appSupportFolder, isDirectory: true)
+    }
 
     func save(
         snapshot: DictationAudioSnapshot,
@@ -278,6 +295,15 @@ final nonisolated class DictationAudioHistoryStore: @unchecked Sendable {
         }
     }
 
+    /// The user cleared history or deleted all saved audio: the kept recording goes too, and
+    /// ASRService is told to forget its copy.
+    func discardKeptDictation() {
+        self.deleteKeptDictation()
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: Self.keptDictationDiscardedNotification, object: nil)
+        }
+    }
+
     /// When the kept recording on disk stopped, if there is one. Waits for pending saves.
     func keptDictationStoppedAt() -> Date? {
         self.keptQueue.sync { self.keptFileURL().flatMap { Self.keptStoppedAt(fileName: $0.lastPathComponent) } }
@@ -292,12 +318,7 @@ final nonisolated class DictationAudioHistoryStore: @unchecked Sendable {
     }
 
     private func keptDirectory(createIfNeeded: Bool) throws -> URL {
-        guard let base = self.fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            throw DictationAudioHistoryError.applicationSupportUnavailable
-        }
-        let directory = base
-            .appendingPathComponent(self.appSupportFolder, isDirectory: true)
-            .appendingPathComponent(self.keptFolder, isDirectory: true)
+        let directory = try self.rootDirectory().appendingPathComponent(self.keptFolder, isDirectory: true)
         if createIfNeeded {
             try self.fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         }
@@ -355,12 +376,7 @@ final nonisolated class DictationAudioHistoryStore: @unchecked Sendable {
     }
 
     private func audioDirectory(createIfNeeded: Bool = true) throws -> URL {
-        guard let base = self.fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            throw DictationAudioHistoryError.applicationSupportUnavailable
-        }
-        let directory = base
-            .appendingPathComponent(self.appSupportFolder, isDirectory: true)
-            .appendingPathComponent(self.audioFolder, isDirectory: true)
+        let directory = try self.rootDirectory().appendingPathComponent(self.audioFolder, isDirectory: true)
         if createIfNeeded {
             try self.fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         }

@@ -2888,16 +2888,31 @@ final class TranscriptionTimeoutTests: XCTestCase {
 }
 
 final class KeptDictationStorageTests: XCTestCase {
+    private var root: URL!
+    private var store: DictationAudioHistoryStore!
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        // Never the Debug build's own storage.
+        self.root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeptDictationStorageTests-\(UUID().uuidString)", isDirectory: true)
+        self.store = DictationAudioHistoryStore(rootDirectoryOverride: self.root)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: self.root)
+        try super.tearDownWithError()
+    }
+
     func testTheKeptRecordingReadsBackAsWritten() throws {
         let samples: [Float] = (0..<1600).map { Float(sin(Double($0) / 7)) * 0.5 }
         let original = DictationAudioSnapshot(samples: samples, sampleRate: 16_000, channels: 1)
         let stoppedAt = Date(timeIntervalSince1970: 1_790_000_000.123)
-        let store = DictationAudioHistoryStore.shared
-        store.saveKeptDictation(original, stoppedAt: stoppedAt)
-        defer { store.deleteKeptDictation() }
+        self.store.saveKeptDictation(original, stoppedAt: stoppedAt)
 
-        XCTAssertEqual(store.keptDictationStoppedAt()?.timeIntervalSince1970 ?? 0, stoppedAt.timeIntervalSince1970, accuracy: 0.001)
-        let loaded = try XCTUnwrap(store.loadKeptDictation())
+        XCTAssertEqual(self.store.keptDictationStoppedAt()?.timeIntervalSince1970 ?? 0, stoppedAt.timeIntervalSince1970, accuracy: 0.001)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: self.root.appendingPathComponent("KeptDictation").path))
+        let loaded = try XCTUnwrap(self.store.loadKeptDictation())
         XCTAssertEqual(loaded.sampleRate, 16_000)
         XCTAssertEqual(loaded.channels, 1)
         XCTAssertEqual(loaded.samples.count, samples.count)
@@ -2905,17 +2920,28 @@ final class KeptDictationStorageTests: XCTestCase {
             XCTAssertEqual(read, written, accuracy: 1.0 / 16_000, "16-bit round trip")
         }
 
-        store.deleteKeptDictation()
-        XCTAssertNil(store.keptDictationStoppedAt())
-        XCTAssertNil(store.loadKeptDictation())
+        self.store.deleteKeptDictation()
+        XCTAssertNil(self.store.keptDictationStoppedAt())
+        XCTAssertNil(self.store.loadKeptDictation())
     }
 
     func testANewerKeptRecordingReplacesTheOlderOne() {
-        let store = DictationAudioHistoryStore.shared
         let audio = DictationAudioSnapshot(samples: [0.1, 0.2], sampleRate: 16_000, channels: 1)
-        store.saveKeptDictation(audio, stoppedAt: Date(timeIntervalSince1970: 1_000))
-        store.saveKeptDictation(audio, stoppedAt: Date(timeIntervalSince1970: 2_000))
-        defer { store.deleteKeptDictation() }
-        XCTAssertEqual(store.keptDictationStoppedAt(), Date(timeIntervalSince1970: 2_000))
+        self.store.saveKeptDictation(audio, stoppedAt: Date(timeIntervalSince1970: 1_000))
+        self.store.saveKeptDictation(audio, stoppedAt: Date(timeIntervalSince1970: 2_000))
+        XCTAssertEqual(self.store.keptDictationStoppedAt(), Date(timeIntervalSince1970: 2_000))
+    }
+
+    func testDeletingAllHistoryAudioLeavesTheKeptRecordingToTheExplicitDiscard() {
+        let audio = DictationAudioSnapshot(samples: [0.1, 0.2], sampleRate: 16_000, channels: 1)
+        self.store.saveKeptDictation(audio, stoppedAt: Date(timeIntervalSince1970: 3_000))
+        // History audio lives in its own folder: a prune or delete-all of it never reaches the kept file.
+        self.store.deleteAllAudioFiles()
+        XCTAssertNotNil(self.store.keptDictationStoppedAt())
+
+        let discarded = expectation(forNotification: DictationAudioHistoryStore.keptDictationDiscardedNotification, object: nil)
+        self.store.discardKeptDictation()
+        wait(for: [discarded], timeout: 2)
+        XCTAssertNil(self.store.keptDictationStoppedAt())
     }
 }

@@ -2432,6 +2432,11 @@ struct ContentView: View {
         DebugLogger.shared.info("Transcription finalized (chars: \(finalText.count))", source: "ContentView")
         let finalTextReadyAt = ProcessInfo.processInfo.systemUptime
         trace.mark(.textReady, at: finalTextReadyAt)
+        // A normal dictation produced text: it replaces a kept timed-out recording as the one
+        // Reprocess means (command, edit and sandbox recordings returned or are excluded above).
+        if route == .normal, trace.trigger != .benchmark {
+            self.asr.discardKeptDictationForNewerDictation()
+        }
         trace.note("chars", String(finalText.count))
         trace.note("ai", String(postProcessingModel != nil))
         traceOutcome = aiFallbackReason == nil ? "not_typed" : "ai_fallback_not_typed"
@@ -2766,7 +2771,11 @@ struct ContentView: View {
             }
             return
         }
+        self.reprocessLatestDictationText()
+    }
 
+    /// Reprocess from text: a pending AI failure's text, else the latest history entry.
+    private func reprocessLatestDictationText() {
         if let pendingText = self.pendingAIReprocessText?.trimmingCharacters(in: .whitespacesAndNewlines),
            !pendingText.isEmpty
         {
@@ -2803,13 +2812,18 @@ struct ContentView: View {
             return
         }
         do {
-            guard let text = try await self.asr.transcribeKeptUntranscribedDictation(),
-                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            else {
-                DebugLogger.shared.info("Actions: kept dictation transcribed to nothing", source: "ContentView")
-                return
+            switch try await self.asr.transcribeKeptUntranscribedDictation() {
+            case .unavailable:
+                // The kept file could not be read (and is gone now): reprocess as usual instead.
+                DebugLogger.shared.info("Actions: kept dictation unavailable; reprocessing the latest dictation", source: "ContentView")
+                self.reprocessLatestDictationText()
+            case let .text(text):
+                guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    DebugLogger.shared.info("Actions: kept dictation transcribed to nothing", source: "ContentView")
+                    return
+                }
+                await self.reprocessDictationText(text)
             }
-            await self.reprocessDictationText(text)
         } catch {
             DebugLogger.shared.error("Actions: kept dictation could not be transcribed: \(error.localizedDescription)", source: "ContentView")
             ASRService.transcriptionTimeoutHandler(.reprocessUnavailable)

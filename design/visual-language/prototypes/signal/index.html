@@ -7,9 +7,9 @@
 <link rel="stylesheet" href="../shared/stage.css">
 <style>
 /* =====================================================================================
-   SIGNAL v2: the overlay as an engineering drawing.
-   Zero gradients, zero blur, zero glow. Solid surfaces, 1 px rules, 8-tick corner brackets,
-   SF Mono for every number and label, one accent (international orange).
+   SIGNAL v3: the overlay as an engineering drawing that stays quiet until you reach for it.
+   Zero gradients, zero blur, zero glow. Solid surfaces, 1 px rules, SF Mono for every number and
+   label, one accent (international orange). The 8-tick corner brackets draw only on pointer hover.
 
    Native mapping (SwiftUI / AppKit on macOS 15 and 26):
    - Surfaces: RoundedRectangle(cornerRadius:, style: .continuous).fill(surface)
@@ -19,6 +19,7 @@
    - Corner ticks (.tk): one Path in the surface's .overlay: four L sub-paths
      (move(to: corner + len along y), addLine(to: corner), addLine(to: corner + len along x)),
      stroked 1.5 pt, lineCap .butt, lineJoin .miter, inset 6 pt. Or eight small Rectangles.
+     Shown on .onHover with .opacity(hovering ? 1 : 0).animation(.linear(duration: 0.06)).
    - Voice trace and graticule: one Canvas in a TimelineView(.animation); fill(Path(rect)) per
      bar and per graticule tick, integer-snapped.
    - Type: .system(size:weight:) for prose; .system(size:weight:design: .monospaced) for every
@@ -84,7 +85,7 @@
 }
 
 /* ---------- the tick primitive: an 8-tick corner bracket (four L corners, nothing along the edges) ---------- */
-.tk { position: absolute; inset: var(--tk-inset); pointer-events: none; z-index: 2; }
+.tk { position: absolute; inset: var(--tk-inset); pointer-events: none; z-index: 2; opacity: 0; transition: opacity 60ms linear; }
 .tk i { position: absolute; width: var(--tk-len); height: var(--tk-len); box-sizing: border-box; border: 0 solid currentColor; }
 .tk i:nth-child(1) { top: 0; left: 0; border-top-width: var(--tk-w); border-left-width: var(--tk-w); }
 .tk i:nth-child(2) { top: 0; right: 0; border-top-width: var(--tk-w); border-right-width: var(--tk-w); }
@@ -94,7 +95,7 @@
 /* ---------- overlay root: [rail] [pill] [rail], bottom-aligned ---------- */
 .sg {
   --pill-w: 340px;
-  --pill-h: 158px;               /* 12 + 18 strip + 8 + 54 preview + 10 + 44 trace + 12 */
+  --pill-h: 149px;               /* 12 + 54 preview + 6 + 50 trace row (44 trace + 6 ruler) + 4 + 13 mic + 10 */
   position: relative;
   display: flex; align-items: flex-end; gap: 6px;
   margin-bottom: 50px;
@@ -112,95 +113,78 @@
   display: flex; flex-direction: column; justify-content: space-between;
 }
 
-/* ---------- chips, style A: geometric keys ---------- */
+/* ---------- chips: one style. At rest a solid square (the fill keeps glyphs legible over a busy terminal),
+   no edge, no bracket. Hover draws the chip's own 4-corner bracket in ink. Press and latch invert. ---------- */
 .sg-chip {
   position: relative;
-  width: 30px; height: 30px; padding: 0; margin: 0; border: 0; border-radius: 6px;
-  background: var(--sg-chip); color: var(--sg-glyph);
-  box-shadow: inset 0 0 0 1px var(--sg-chip-edge), var(--sg-drop);
+  width: 30px; height: 30px; padding: 0; margin: 0; border: 0; border-radius: 2px;
+  background: var(--sg-chip); color: var(--sg-glyph); box-shadow: none;
   display: grid; place-items: center; cursor: default; outline: none;
   transition: background-color 60ms linear, color 60ms linear, box-shadow 60ms linear;
 }
 .sg-chip svg { display: block; width: 16px; height: 16px; }
 .sg-chip .g-check { display: none; }
-.sg-chip .tk { display: none; --tk-inset: 0px; --tk-len: 7px; color: var(--sg-bracket); transition: color 60ms linear; }
-.sg-chip:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--sg-accent), var(--sg-drop); }
+.sg-chip .tk { --tk-inset: 0px; --tk-len: 7px; color: var(--sg-bracket); }
+.sg-chip:hover:not(:disabled) .tk, .sg-chip.is-hover .tk { opacity: 1; }
 /* Inverted (pressed, or latched while its card is open). A 1 px keyline in the surface colour keeps the key's
    shape on any backdrop: a black key over a black terminal would otherwise vanish. Native: an outer strokeBorder. */
-.sg-chip.is-latched, .sg-chip.is-pressed, .sg-chip.is-pressed:hover:not(:disabled) {
-  background: var(--sg-inv-bg); color: var(--sg-inv-fg);
-  box-shadow: inset 0 0 0 1px var(--sg-inv-bg), 0 0 0 1px var(--sg-surface), var(--sg-drop);
+.sg-chip.is-latched, .sg-chip.is-pressed {
+  background: var(--sg-inv-bg); color: var(--sg-inv-fg); box-shadow: 0 0 0 1px var(--sg-surface);
 }
-.sg-chip.is-copied, .sg-chip.is-copied:hover { background: var(--sg-accent); color: var(--sg-on-accent); box-shadow: inset 0 0 0 1px var(--sg-accent), var(--sg-drop); }
+.sg-chip.is-latched .tk, .sg-chip.is-pressed .tk { color: var(--sg-inv-bg); }
+.sg-chip.is-copied { background: var(--sg-accent); color: var(--sg-on-accent); box-shadow: none; }
+.sg-chip.is-copied .tk { color: var(--sg-accent); }
 .sg-chip.is-copied .g-main { display: none; }
 .sg-chip.is-copied .g-check { display: block; }
 .sg-chip:disabled { color: var(--sg-glyph-off); }
-.sg-chip:focus-visible { box-shadow: inset 0 0 0 2px var(--sg-accent), var(--sg-drop); }
-
-/* ---------- chips, style B: bracketed keys. No edge, no drop: the key is its four corners. ---------- */
-.sg[data-chips="brackets"] .sg-chip { border-radius: 2px; background: var(--sg-surface); box-shadow: none; }
-.sg[data-chips="brackets"] .sg-chip .tk { display: block; }
-.sg[data-chips="brackets"] .sg-chip:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--sg-bracket); }   /* hover draws the full rule */
-.sg[data-chips="brackets"] .sg-chip:disabled .tk { color: var(--sg-glyph-off); }
-.sg[data-chips="brackets"] .sg-chip.is-latched,
-.sg[data-chips="brackets"] .sg-chip.is-pressed,
-.sg[data-chips="brackets"] .sg-chip.is-pressed:hover:not(:disabled) { background: var(--sg-inv-bg); box-shadow: 0 0 0 1px var(--sg-surface); }
-.sg[data-chips="brackets"] .sg-chip.is-latched .tk,
-.sg[data-chips="brackets"] .sg-chip.is-pressed .tk { color: var(--sg-inv-bg); }
-.sg[data-chips="brackets"] .sg-chip.is-copied,
-.sg[data-chips="brackets"] .sg-chip.is-copied:hover { background: var(--sg-accent); box-shadow: none; }
-.sg[data-chips="brackets"] .sg-chip.is-copied .tk { color: var(--sg-accent); }
-.sg[data-chips="brackets"] .sg-chip:focus-visible { box-shadow: inset 0 0 0 2px var(--sg-accent); }
+.sg-chip:focus-visible { box-shadow: inset 0 0 0 2px var(--sg-accent); }
 
 /* ---------- pill ---------- */
 .sg-pill {
   position: relative; width: var(--pill-w); box-sizing: border-box;
-  padding: 12px 18px;
+  padding: 12px 18px 10px;
   background: var(--sg-surface); border-radius: 10px;
   box-shadow: inset 0 0 0 1px var(--sg-edge), var(--sg-drop);
   overflow: hidden;
   display: flex; flex-direction: column;
 }
 .sg-pill > .tk { color: var(--sg-tick); }
-/* The four corners are the recording frame: orange while the mic is open, and on delivered / failed. */
-.sg[data-state="listening"] .sg-pill > .tk, .sg[data-state="history"] .sg-pill > .tk,
-.sg[data-state="delivered"] .sg-pill > .tk, .sg[data-state="failed"] .sg-pill > .tk { color: var(--sg-accent); }
+/* Corners are a hover affordance: they draw in ink while the pointer is over the overlay (pill or rails),
+   never at rest and never orange. Recording is carried by the orange square and the timer. */
+.sg:hover .sg-pill > .tk, .sg.is-hover .sg-pill > .tk { opacity: 1; }
 
-.sg-top { position: relative; height: 80px; }           /* reserved: strip + preview, all non-failed states */
-.sg-gap { height: 10px; flex: none; }
-.sg-trace-row { height: 44px; flex: none; display: flex; align-items: flex-start; justify-content: space-between; }
+.sg-top { position: relative; height: 54px; }           /* reserved: the 3-line preview, all non-failed states */
+.sg-gap { height: 6px; flex: none; }                     /* + the trace's own 2 pt top margin = 8 */
+
+/* trace row: [target-app icon 20] [trace] [■ 6] [timer, 5ch reserved], centred on the trace midline */
+.sg-trace-row { height: 50px; flex: none; display: flex; align-items: flex-start; justify-content: space-between; }
 .sg-app { width: 20px; height: 20px; flex: none; margin-top: 12px; }
 .sg-app svg { display: block; }
-.sg-trace { display: block; width: 260px; height: 52px; margin-bottom: -8px; }   /* 44 trace + 8 graticule below */
-
-/* strip: label top-left, [leader], readout top-right, one baseline */
-.sg-strip { height: 18px; display: flex; align-items: baseline; }
-.sg-label {
-  flex: 0 1 auto; min-width: 0;
-  font: 500 10px/18px var(--sg-mono); letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--sg-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.sg-leader { flex: 1 1 12px; min-width: 12px; }          /* spacer between label and readout */
-/* Title rule (Drawn): a thin rule under the strip, like the rule under a drawing's title. It sits in the
-   8 pt gap above the preview, so it adds no height and nothing shifts between densities. */
-.sg-titlerule { position: absolute; left: 0; right: 0; top: 22px; height: 1px; display: none; }
-.sg[data-density="drawn"] .sg-titlerule { display: block; background: var(--sg-grat); }
+.sg-trace { display: block; flex: none; height: 50px; }  /* 44 trace + 6 age ruler below; width set from the bar count */
 .sg-readout {
-  flex: none;                     /* mono digits: constant width from 0:00 to 9:59 */
-  display: flex; align-items: baseline; justify-content: flex-end; gap: 6px;
+  flex: none; margin-top: 13px; height: 18px;
+  display: flex; align-items: center; gap: 4px;
   font: 600 15px/18px var(--sg-mono); color: var(--sg-text);
 }
-.sg-dot { width: 6px; height: 6px; flex: none; box-sizing: border-box; align-self: center; margin-top: 1px; }
+.sg-time { display: inline-block; width: 5ch; text-align: right; }   /* reserved for "99:59": never shifts */
+.sg-dot { width: 6px; height: 6px; flex: none; box-sizing: border-box; }
 .sg[data-state="listening"] .sg-dot, .sg[data-state="history"] .sg-dot { background: var(--sg-accent); }
 .sg[data-state="transcribing"] .sg-dot { box-shadow: inset 0 0 0 1.5px var(--sg-accent); }
 
-.sg-preview { margin-top: 8px; height: 54px; overflow: hidden; }
+/* mic row: bottom centre, the same in every visible state */
+.sg-mic {
+  flex: none; margin-top: 4px; height: 13px; text-align: center;
+  font: 500 10.5px/13px var(--sg-mono); letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--sg-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.sg-preview { height: 54px; overflow: hidden; }
 .sg-preview p { margin: 0; font: 500 13.5px/18px var(--sg-font); color: var(--sg-text); overflow-wrap: break-word; }
 .sg[data-state="transcribing"] .sg-preview p { color: var(--sg-text-dim); }
 
-/* delivered: swaps the strip + preview for one statement of equal height */
-.sg-rec { position: relative; height: 80px; }
-.sg-done { position: absolute; inset: 0 0 -10px 0; display: none; align-items: center; gap: 14px; }   /* centred between pill top and trace */
+/* delivered: swaps the preview for one statement of equal height */
+.sg-rec { position: relative; height: 54px; }
+.sg-done { position: absolute; inset: 0; display: none; align-items: center; gap: 14px; }
 .sg-stamp { width: 30px; height: 30px; flex: none; border-radius: 3px; background: var(--sg-accent); color: var(--sg-on-accent); display: grid; place-items: center; }
 .sg-done-text { display: flex; flex-direction: column; gap: 3px; }
 .sg-done-text b { font: 600 16px/20px var(--sg-font); color: var(--sg-text); }
@@ -252,18 +236,18 @@
   overflow: hidden; display: none; flex-direction: column;
 }
 .sg-hist > .tk { --tk-inset: 5px; color: var(--sg-tick); }
+.sg-hist:hover > .tk { opacity: 1; }
 .sg-hist.is-open { display: flex; }
-/* The failed card grows the pill 35 pt above the rail (193 vs 158); a history card opened then clears it. */
-.sg[data-state="failed"] .sg-hist { bottom: calc(100% + 6px + 35px); }
+/* The failed card grows the pill 61 pt above the rail (210 vs 149); a history card opened then clears it. */
+.sg[data-state="failed"] .sg-hist { bottom: calc(100% + 6px + 61px); }
 .sg-hist header, .sg-hist footer {
   flex: none; padding: 0 19px; display: flex; align-items: center; justify-content: space-between;
   font: 500 10px/1 var(--sg-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--sg-text-2);
 }
 .sg-hist header { height: 36px; box-shadow: inset 0 -1px 0 var(--sg-rule); }
 .sg-hist header b { font-weight: 600; color: var(--sg-text); }
-/* Title block (Drawn): a ruled strip on the card's bottom edge, two cells. */
-.sg-hist footer { display: none; height: 28px; padding: 0; box-shadow: inset 0 1px 0 var(--sg-rule); }
-.sg[data-density="drawn"] .sg-hist footer { display: flex; }
+/* Title block: a ruled strip on the card's bottom edge, two cells. */
+.sg-hist footer { height: 28px; padding: 0; box-shadow: inset 0 1px 0 var(--sg-rule); }
 .sg-hist footer span { padding: 0 19px; height: 100%; display: flex; align-items: center; }
 .sg-hist footer span + span { box-shadow: inset 1px 0 0 var(--sg-rule); color: var(--sg-text); font-weight: 600; }
 .sg-hist ol { list-style: none; margin: 0; padding: 0; overflow-y: auto; scrollbar-width: none; flex: 1 1 auto; min-height: 0; }
@@ -293,6 +277,8 @@
 /* ---------- menu bar item + menu ---------- */
 #lv-menubar-slot .lv-status { justify-content: center; color: inherit; }
 #lv-menubar-slot .lv-status svg { display: block; }
+#lv-menubar-slot .lv-status .mb-bracket { opacity: 0; transition: opacity 60ms linear; }
+#lv-menubar-slot .lv-status:hover .mb-bracket, #lv-menubar-slot .lv-status.open .mb-bracket { opacity: 1; }
 .sg-menu {
   position: fixed; z-index: 120; min-width: 262px; box-sizing: border-box; padding: 5px;
   background: var(--sg-menu); color: var(--sg-text); border-radius: 8px;
@@ -344,11 +330,8 @@
   const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const HISTORY_TOTAL = 247;                      // entries in the store; the card lists the newest 12
 
-  // Prototype options (round 2), persisted in the URL: density=quiet|drawn, chips=keys|brackets.
-  const OPT = {
-    density: params.get("density") === "quiet" ? "quiet" : "drawn",
-    chips: params.get("chips") === "keys" ? "keys" : "brackets",
-  };
+  // Prototype option, persisted in the URL: density=quiet|drawn (the age ruler under the trace).
+  const OPT = { density: params.get("density") === "quiet" ? "quiet" : "drawn" };
 
   // ---------------------------------------------------------------- timing tokens
   const T_BAR = 60;          // bar morph, linear
@@ -414,7 +397,6 @@
   const root = document.createElement("div");
   root.className = "sg is-hidden is-gone";
   root.dataset.density = OPT.density;
-  root.dataset.chips = OPT.chips;
   root.innerHTML = `
     <div class="sg-rail sg-lead">
       ${chip("history", "Recent Dictations", G.history)}
@@ -431,12 +413,6 @@
       ${TK}
       <div class="sg-top">
         <div class="sg-rec">
-          <div class="sg-strip">
-            <span class="sg-label"></span>
-            <span class="sg-leader" aria-hidden="true"></span>
-            <span class="sg-readout"><i class="sg-dot"></i><span class="sg-time">0:00</span></span>
-          </div>
-          <i class="sg-titlerule" aria-hidden="true"></i>
           <div class="sg-preview"><p></p></div>
         </div>
         <div class="sg-done" aria-live="polite">
@@ -449,15 +425,17 @@
           <div class="sg-actions">
             <button class="sg-copy" title="Copy the transcription to the clipboard"><span class="a">Copy</span><span class="b">${G.check.replace('viewBox', 'width="13" height="13" viewBox').replace('stroke-width="2"', 'stroke-width="2.25"')}Copied</span></button>
             <button class="sg-dismiss">Dismiss</button>
-            <span class="sg-fail-meta">${H0.words} words · ${LV.fmtDuration(H0.seconds)}</span>
+            <span class="sg-fail-meta">${H0.words} words</span>
           </div>
         </div>
       </div>
       <div class="sg-gap"></div>
       <div class="sg-trace-row">
         <span class="sg-app" title="Dictation target app">${APP_C11}</span>
-        <canvas class="sg-trace" width="520" height="104"></canvas>
+        <canvas class="sg-trace"></canvas>
+        <span class="sg-readout"><i class="sg-dot"></i><span class="sg-time">0:00</span></span>
       </div>
+      <div class="sg-mic" title="Microphone">${esc(MIC)}</div>
     </div>
     <div class="sg-rail sg-trail">
       ${chip("cancel", "Cancel Dictation (Esc)", G.cancel)}
@@ -466,14 +444,16 @@
 
   const $ = (s) => root.querySelector(s);
   const el = {
-    label: $(".sg-label"), time: $(".sg-time"), preview: $(".sg-preview p"),
+    time: $(".sg-time"), preview: $(".sg-preview p"),
     doneMeta: $(".sg-done-meta"), hist: $(".sg-hist"), canvas: $(".sg-trace"),
     copyBtn: $(".sg-copy"), dismissBtn: $(".sg-dismiss"),
     chips: Object.fromEntries([...root.querySelectorAll(".sg-chip")].map((b) => [b.dataset.chip, b])),
   };
 
   // ---------------------------------------------------------------- voice trace + graticule (one Canvas)
-  const N = 65, BAR = 2, PITCH = 4, TW = 260, TH = 44, CH = 52, MID = 22, HMIN = 2, HMAX = 40, HEAD = 6, SWEEP_W = 24;
+  // 52 bars on the 4 pt pitch (2 pt bars, 2 pt gaps) = 206 pt: the row now also holds the timer, so the trace
+  // keeps its grain and gets shorter (4.3 s of history) rather than finer.
+  const N = 52, BAR = 2, PITCH = 4, TW = N * PITCH - 2, TH = 44, CH = 50, MID = 22, HMIN = 2, HMAX = 40, HEAD = 6, SWEEP_W = 24;
   const PER_S = 12;          // bars per second of history (T_SAMPLE = 1000 / 12)
   const tr = {
     prev: new Float32Array(N).fill(HMIN), cur: new Float32Array(N).fill(HMIN),
@@ -484,6 +464,7 @@
   function sizeCanvas() {
     dpr = Math.max(1, Math.round(window.devicePixelRatio || 1));
     el.canvas.width = TW * dpr; el.canvas.height = CH * dpr;
+    el.canvas.style.width = TW + "px";
   }
   function readColours() {
     const cs = getComputedStyle(document.documentElement);
@@ -491,7 +472,7 @@
     C = { ink: v("--sg-ink"), accent: v("--sg-accent"), mid: v("--sg-midline"), grat: v("--sg-grat") };
   }
   // Four printed opacity steps by age band (age 0 = newest). Newest 6 are the accent write head.
-  function band(age) { return age < 22 ? 1 : age < 36 ? 0.7 : age < 50 ? 0.45 : 0.25; }
+  function band(age) { return age < 18 ? 1 : age < 29 ? 0.7 : age < 40 ? 0.45 : 0.25; }
   function heightFor(level) {
     const adjusted = clamp01((level - 0.4) / 0.6);
     const amp = Math.pow(adjusted, 1.15);
@@ -546,13 +527,12 @@
       ctx.fillRect(x, MID - 2, SWEEP_W, 4);
     }
     if (OPT.density === "drawn") {
-      // Graticule: a static age ruler under the trace, on the bar grid (tick at each bar's centre).
-      // Minor every 0.25 s (3 bars), 1 s ticks taller, the 5 s tick tallest. Rule colour, never animated.
+      // Age ruler: static, on the bar grid (a tick at each bar's centre), between the trace and the mic row.
+      // Minor every 0.25 s (3 bars), 1 s ticks taller. Rule colour, never animated. Quiet keeps the 6 pt empty.
       ctx.globalAlpha = 1; ctx.fillStyle = C.grat;
       for (let age = 0; age < N; age += 3) {
         const x = TW - BAR / 2 - 0.5 - age * PITCH;
-        const len = age % (5 * PER_S) === 0 && age ? 6 : age % PER_S === 0 ? 4 : 2;
-        ctx.fillRect(x, TH + 2, 1, len);
+        ctx.fillRect(x, TH + 1, 1, age % PER_S === 0 ? 4 : 2);
       }
     }
     ctx.globalAlpha = 1;
@@ -624,7 +604,6 @@
       if (!continuing) startRecording(wantFresh);
       wantFresh = false;
       tr.live = true; tr.sweep = false;
-      el.label.textContent = "Listening · " + MIC;
       setChipsEnabled(true);
       renderTimer(); rec.words = -1;
     } else {
@@ -636,7 +615,6 @@
       flatten(performance.now());
       renderTimer();
       renderPreview();
-      el.label.textContent = MIC;
       tr.sweep = next === "transcribing";
       tr.sweepT0 = performance.now();
       setChipsEnabled(next !== "transcribing");
@@ -644,7 +622,7 @@
     if (next === "history") openHistory(); else closeHistory(false);
     if (next === "delivered") {
       const s = rec.frozen != null ? rec.frozen : H0.seconds;
-      el.doneMeta.textContent = `${Math.max(1, wordsAt(s))} words · ${fmt(s)}`;
+      el.doneMeta.textContent = `${Math.max(1, wordsAt(s))} words`;      // the duration is the frozen timer beside the trace
       LVStage.insertText(esc(H0.text.slice(0, 90)) + "…");
       if (!HOLD) doneTimer = setTimeout(() => { if (LVStage.state === "delivered") LVStage.setState("idle"); }, T_DELIVERED);
     }
@@ -714,26 +692,24 @@
     if ((e.key === "p" || e.key === "P") && !e.repeat) wantFresh = true;
     if (e.key === "Escape") { closeMenu(); if (LVStage.state !== "idle") { LVStage.stopSequence(); LVStage.setState("idle"); } }
     if ((e.key === "d" || e.key === "D") && !e.repeat) setOption("density", OPT.density === "drawn" ? "quiet" : "drawn");
-    if ((e.key === "c" || e.key === "C") && !e.repeat) setOption("chips", OPT.chips === "brackets" ? "keys" : "brackets");
   }, true);
   document.addEventListener("click", (e) => { if (e.target.closest("#lv-play")) wantFresh = true; }, true);
 
   // ---------------------------------------------------------------- menu bar item
-  // 16 px template glyph (NSImage, isTemplate = true), drawn in the same corner grammar:
-  //   idle          three bars inside a 4-corner bracket (the mark at rest)
-  //   listening     the bracket closes into a solid square; bars knocked out, following the live level
-  //                 (8 Hz, 2 pt steps). Solid, never blinking.
-  //   transcribing  the square is outlined, bars solid inside it: input closed, working
-  // The status item never changes width.
-  const FRAME_FILL = "M3.5 1H12.5A2.5 2.5 0 0 1 15 3.5V12.5A2.5 2.5 0 0 1 12.5 15H3.5A2.5 2.5 0 0 1 1 12.5V3.5A2.5 2.5 0 0 1 3.5 1Z";
-  const FRAME_LINE = '<rect x="1.75" y="1.75" width="12.5" height="12.5" rx="1.75" fill="none" stroke="currentColor" stroke-width="1.5"/>';
-  const FRAME_TICKS = '<path d="M1.75 5.5V1.75H5.5M10.5 1.75H14.25V5.5M14.25 10.5V14.25H10.5M5.5 14.25H1.75V10.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="butt" stroke-linejoin="miter"/>';
+  // 22 x 16 template glyph (NSImage, isTemplate = true). Bars on the left, a record-square slot on the right,
+  // so the item never changes width and the bars never move:
+  //   idle          the three bars
+  //   listening     + a solid square beside them; the bars follow the live level (8 Hz, 2 pt steps). Never blinks.
+  //   transcribing  + the square outlined: input closed, working
+  //   hover / open  a 4-corner bracket draws around the whole mark (the same corner grammar as the overlay)
+  const MB_BRACKET = '<path class="mb-bracket" d="M0.75 4.75V0.75H4.75M17.25 0.75H21.25V4.75M21.25 11.25V15.25H17.25M4.75 15.25H0.75V11.25" fill="none" stroke="currentColor" stroke-width="1.5"/>';
   function barsPath(hs) { return hs.map((h, i) => { const x = 4 + i * 3, y = 8 - h / 2; return `M${x} ${y}h2v${h}h-2Z`; }).join(""); }
   function glyph(kind, hs) {
-    const open = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">';
-    if (kind === "listening") return open + `<path fill-rule="evenodd" d="${FRAME_FILL}${barsPath(hs || [4, 6, 4])}"/></svg>`;
-    if (kind === "transcribing") return open + FRAME_LINE + `<path d="${barsPath([4, 8, 6])}"/></svg>`;
-    return open + FRAME_TICKS + `<path d="${barsPath([4, 8, 6])}"/></svg>`;
+    const open = '<svg width="22" height="16" viewBox="0 0 22 16" fill="currentColor" aria-hidden="true">';
+    const bars = `<path d="${barsPath(hs || [6, 10, 7])}"/>`;
+    const sq = kind === "listening" ? '<rect x="14" y="5" width="6" height="6"/>'
+      : kind === "transcribing" ? '<rect x="14.75" y="5.75" width="4.5" height="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/>' : "";
+    return open + MB_BRACKET + bars + sq + "</svg>";
   }
   let statusEl = null;
   let mbKind = "idle", mbLast = 0, mbKey = "";
@@ -751,9 +727,9 @@
     const now = performance.now();
     if (mbKind !== "listening" || now - mbLast < 125) return;
     mbLast = now;
-    // Knocked-out bars read three recent trace samples, quantised to whole pixels. The floor keeps the
-    // mark's own silhouette in silence (never three dots, which would read as an overflow "…").
-    const floor = [4, 6, 4], cap = [8, 10, 8];
+    // The bars read three recent trace samples, quantised to 2 pt steps. The floor keeps the mark's own
+    // silhouette in silence (never three dots, which would read as an overflow "…").
+    const floor = [4, 6, 4], cap = [10, 12, 10];
     const hs = [4, 1, 7].map((age, k) => { const v = (tr.cur[N - 1 - age] - HMIN) / (HMAX - HMIN); return Math.min(cap[k], floor[k] + 2 * Math.round(v * 3)); });
     paintMenubar(hs);
     renderMenuHead();
@@ -803,17 +779,14 @@
 
   // ---------------------------------------------------------------- prototype options strip (round 2)
   // Sits directly under the stage's controls panel and borrows its classes, so it matches without
-  // touching shared/. Density: Quiet (ticks + mono) | Drawn (+ graticule, leader, title block).
-  // Chips: Keys | Brackets. Both persist in the URL (density=, chips=). Keys: D and C.
+  // touching shared/. Density: Quiet | Drawn (the age ruler under the trace). Persists in the URL. Key: D.
   const opts = document.createElement("div");
   opts.className = "proto-controls sg-options";
   opts.innerHTML = `
     <h1>Signal options</h1>
     <div class="row"><label>Density</label><div class="seg" data-opt="density">
       <button data-v="quiet">Quiet</button><button data-v="drawn">Drawn</button></div></div>
-    <div class="row"><label>Chips</label><div class="seg" data-opt="chips">
-      <button data-v="keys">Keys</button><button data-v="brackets">Brackets</button></div></div>
-    <p class="hint"><b>D</b> toggles density, <b>C</b> toggles chips. Both stay in the URL.</p>`;
+    <p class="hint"><b>D</b> toggles density: Drawn shows the age ruler under the trace. It stays in the URL.</p>`;
   opts.querySelector("h1").addEventListener("click", () => opts.classList.toggle("collapsed"));
   opts.addEventListener("click", (e) => {
     const b = e.target.closest(".seg button"); if (!b) return;
@@ -870,7 +843,10 @@
   readColours();
   placeOptions();
 
-  // Inspection hooks for screenshots: ?menu=1 opens the menu, ?copied=1 shows copy feedback, ?hoverRow=n.
+  // Inspection hooks for screenshots: ?menu=1 opens the menu, ?copied=1 shows copy feedback, ?hoverRow=n,
+  // ?hover=1 holds the overlay in its hover state (corners drawn), ?hoverChip=<id> holds one chip hovered.
+  if (params.get("hover") === "1") root.classList.add("is-hover");
+  if (params.get("hoverChip") && el.chips[params.get("hoverChip")]) el.chips[params.get("hoverChip")].classList.add("is-hover");
   if (params.get("menu") === "1") setTimeout(openMenu, 50);
   if (params.get("copied") === "1") { el.chips.copy.classList.add("is-copied"); el.copyBtn.classList.add("is-copied"); }
   if (params.get("hoverRow")) { const r = root.querySelector(`.sg-hrow[data-i="${+params.get("hoverRow") - 1}"]`); if (r) r.classList.add("is-hover"); }

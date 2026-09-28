@@ -2,44 +2,67 @@
 
 ## Thesis
 
-The overlay is an engineering drawing of an instrument: solid surfaces, 1 px rules, 8-tick corner brackets, square-ended ink bars, and mono numerals and placards. It has no gradients, no blur and no glow. International orange is the only colour, and it only ever marks something live: the recording frame (the four corners), the recording square, the trace's write head, the transcribing sweep, the delivered stamp and the Copy action. Where the other directions use effects, Signal relies on alignment, weight and one accent, so every state reads in a tenth of a second and nothing on it moves unless it means something.
+The overlay is an engineering drawing of an instrument that stays quiet until you reach for it. It is built from solid surfaces, 1 px rules, square-ended ink bars, mono numerals and placards, and corner brackets that draw only under the pointer. It has no gradients, no blur and no glow. International orange is the only colour, and it only ever marks something live: the recording square, the trace's write head, the transcribing sweep, the delivered stamp, the failed top rule and the Copy action. Every state reads in a tenth of a second, and nothing on it moves unless it means something.
 
-## Round 2: diagram grammar (2026-09-28)
+## History
 
-Atin chose Signal and asked for the diagram aesthetic he uses in Sekhem Prime: "engineering-diagram type things, accented corners, crisp lines". We inherit the grammar of `Sekhem_Prime/design/deck-corners.html` and `big-number-language.html`, not its colours:
-- **Corners are the design.** An 8-tick bracket draws each corner as a short horizontal and a short vertical tick, with nothing along the edges.
-- **Mono** for every number and label.
-- **Thin rules.**
-- **Status in solid colour and words**, never blinking.
+- **Round 1 (2026-09-27):** a printed instrument panel. Flat surfaces, one accent, a label strip over the preview.
+- **Round 2 (2026-09-28):** Atin chose Signal and asked for Sekhem Prime's diagram grammar: 8-tick corner brackets ("corners are the design"), mono numbers and labels, thin rules, status in solid colour and words. We inherited the grammar, not the teal and gold.
+- **Round 3 (2026-09-28), current.** Atin: *"let's only have those corners appear in a standard way on mouseover … show [the microphone] in the bottom in the middle and get rid of the listening. And then move the time to the right-hand side, the opposite on the horizontal axis from the icon."* So:
+  1. **Corners are a hover affordance.** They are never drawn at rest and never orange.
+  2. **The top label strip is gone** ("LISTENING", mic and timer at the top).
+  3. **The timer now closes the trace row**, opposite the target-app icon.
+  4. **The mic name sits bottom centre.**
+  5. **There is one chip style.**
+  6. **Density now only controls the age ruler.**
 
-### What changed from v1
+## Anatomy (round 3)
 
-1. **Corner ticks on the pill.** They are ink at rest and turn **orange while listening**, so the four corners are the recording frame (a viewfinder's REC brackets). They return to ink while transcribing, since the sweep carries that state. They are orange on delivered (with the stamp) and on failed (with the top rule). They never move and never blink.
-2. **SF Mono for every number and label:** timer, word counts, durations, the history index and time, meta rows, status and mic labels, day rows, the menu header and the title block. Transcripts and button text stay SF Pro.
-3. **Graticule** under the trace (Drawn only): a static age ruler on the bar grid, with a minor tick every 0.25 s, a taller tick every second and the tallest at 5 s. To make the ruler honest, the trace now samples at exactly 12 per second (was about 11.8), so 12 bars = 1 s.
-4. **Bracketed chips** as an option beside the keyed ones. There is no edge and no drop: the key is its four corners. Hover draws the full 1 px rule. Press and latch invert to a solid square. Copy still fills orange.
-5. **Labels placed like a drawing.** The status label sits top-left against the corner tick, and the timer with its orange square sits top-right. In Drawn, a thin **title rule** runs under the strip. I tried an inline leader from the label to the timer and dropped it. With the default mic it gets only about 15 pt and reads as an em dash; the title rule does the same job without the noise.
-6. **History card as an engineering table.** It has corner ticks, a mono index column ("01" over "3:04 PM"), mono uppercase meta rows and 1 px rules. In Drawn it adds a two-cell **title block** on the bottom edge: "HISTORY · 12 OF 247 · NEWEST FIRST" | "LIQUID VOICE".
-7. **Failed → Copy** keeps its orange top rule and gains orange corners. Copy stays solid orange.
-8. **Menu bar mark** in the same grammar:
-   - Idle: three bars in a 4-corner bracket.
-   - Listening: the bracket closes into a solid square with the bars knocked out and following the level. It is solid and never blinks.
-   - Transcribing: the square is outlined.
-   The status item never changes width.
-9. **Radii tightened** so the ticks read square: pill and card 10 (was 12), keyed chips 6 (was 7), bracketed chips 2, stamp and Copy button 3.
+```
+┌──────────────────────────────────────────────┐
+│ …scheduler when you are done give me a one    │  preview, 3 lines, head-truncated
+│ line summary and the diff stat and if the     │
+│ suite takes longer than a minute tell me which│
+│ [c11]  ▏▎▍▌▏▎││▎▏··········▎│▍│▌▎▍  ■  0:38  │  trace row: icon · trace · square · timer
+│        ╵ ╵ ╵ │ ╵ ╵ ╵ │ ╵ ╵ ╵ │ ╵ ╵ ╵ │         │  age ruler (Drawn; reserved in Quiet)
+│            MACBOOK PRO MICROPHONE             │  mic, centred
+└──────────────────────────────────────────────┘
+```
 
-### The two live options (prototype only)
+**Pill: 340 × 149.**
+- Rows, top to bottom: padding 12, preview 54, gap 6, trace row 50 (a 44 trace plus a 6 ruler), gap 4, mic 13, padding 10. So 12 + 54 + 6 + 50 + 4 + 13 + 10 = **149** (v2 was 158).
+- The height is reserved in every non-failed state. Failed grows **upward** to 210 (+61); its bottom rows, the rails and the chips do not move.
+- The rails are 149 tall and bottom-aligned, with chips at the pill's top and bottom corners, 6 pt out.
 
-A "Signal options" strip sits under the stage's controls. Both options persist in the URL (`density=`, `chips=`) and have keys **D** and **C**.
+**Trace row.** Left to right:
+- the 20 pt target-app icon on the text column's left edge;
+- the trace: **52 bars**, 2 pt wide on a 4 pt pitch, 206 × 44;
+- the 6 pt record square;
+- the timer, SF Mono semibold 15, **right-aligned in a 5 ch box reserved for "99:59"**, on the text column's right edge.
 
-| Option | Values | What it switches |
-|---|---|---|
-| Density | **Quiet** | corner ticks and mono only |
-|  | **Drawn** (default) | also the graticule, the title rule under the strip, and the history title block |
-| Chips | Keys | v1 keys: filled, 1 px edge, 2 pt drop rule |
-|  | **Brackets** (default) | surface fill, four corner ticks, no edge, no drop |
+The icon, trace and readout are all centred on the trace midline. The trace kept its 2 pt grain and got shorter rather than finer: 52 bars is 4.3 s of history at 12 samples/s, down from 65 bars and 5.4 s. A 1 pt gap (pitch 3) would keep 65 bars but lose the printed spacing.
 
-Switching options never moves anything. The title rule sits inside the existing 8 pt gap, the graticule sits in the pill's bottom padding, and both chip styles are the same 30 × 30.
+**Mic row.** SF Mono medium 10.5, uppercase, +0.06 em, secondary colour, centred, the same in listening, transcribing, delivered and failed.
+
+**Age ruler (Drawn).** Static ticks at bar centres, 1 pt below the trace frame: 2 pt every 0.25 s (3 bars), 4 pt every 1 s (12 bars). It never scrolls; it measures age. In Quiet the 6 pt is still reserved, so toggling moves nothing.
+
+## States
+
+| State | Preview area | Trace row | Corners | Accent |
+|---|---|---|---|---|
+| Listening | live preview | live trace, orange write head (newest 6 bars), **■ solid** + running timer | on hover only, ink | square, write head |
+| Transcribing | frozen preview, dimmed | flat trace, orange 24 × 4 sweep, **□ hollow** + frozen timer; Copy and Reprocess dim | on hover only | hollow square, sweep |
+| Delivered | orange stamp + "Delivered to c11" / "118 WORDS" | flat trace, frozen timer (the duration) | on hover only | stamp |
+| Failed → Copy | the card grows upward: headline, 3-line transcript, Copy / Dismiss / "118 WORDS" | flat trace, frozen timer | on hover only | 2 pt top rule, Copy button |
+| History | listening underneath, with the card 6 pt above the History chip | live | card corners on card hover | as listening |
+| Idle | hidden | | | |
+
+## Hover grammar
+
+- **Overlay:** with the pointer anywhere over the overlay (pill or rails), the pill's 8-tick corners draw in ink at the rest tick colour. They fade in over 60 ms linear and fade out the same way on leave.
+- **Chip:** at rest, a solid square (radius 2) with no edge and no bracket; the fill keeps glyphs legible over a busy terminal. On chip hover, its own 4-corner bracket draws in ink. Press inverts to a solid square with a 1 px surface keyline. It stays inverted while the history card is open (latched). Copy fills orange with a black check for 900 ms.
+- **History card:** its corners draw on card hover. Rows invert on hover.
+- **Menu bar item:** a bracket draws around the mark on hover and while its menu is open.
 
 ## Tokens
 
@@ -47,114 +70,104 @@ Switching options never moves anything. The title rule sits inside the existing 
 
 | Token | Value | Notes |
 |---|---|---|
-| `tk-len` | 10 pt | tick arm length on the pill and card; 7 pt on bracketed chips; 4 pt in the menu bar mark |
-| `tk-w` | 1.5 pt | tick stroke everywhere |
-| `tk-inset` | 6 pt from the surface's outer corner | inside the 10 pt radius; 0 on chips |
-| `tick` (rest) | white 0.34 / ink 0.42 | pill (transcribing) and history card |
-| `tick` (live) | `#FF4F1F` | pill while listening, delivered, failed |
-| `bracket` | white 0.62 / `#111214` | bracketed chip corners and hover rule |
-| `grat` | white 0.20 / ink 0.30 | graticule ticks and the title rule |
-| Graticule | ticks 1 pt wide at bar centres, from 2 pt below the trace: 2 pt (0.25 s), 4 pt (1 s), 6 pt (5 s) | static; it measures age, so it never scrolls |
+| `tk-len` | 10 pt | pill and card; 7 pt on chips; 4 pt in the menu bar mark |
+| `tk-w` | 1.5 pt | every tick |
+| `tk-inset` | 6 pt (pill), 5 pt (card), 0 (chips) | inside the 10 pt radius |
+| `tick` | white 0.34 / ink 0.42 | pill and card corners on hover |
+| `bracket` | white 0.62 / `#111214` | chip corners on hover |
+| `grat` | white 0.20 / ink 0.30 | age ruler |
+| Tick fade | 60 ms linear | in and out |
 
 ### Colour
 
 | Token | Dark | Light | Used for |
 |---|---|---|---|
-| `accent` | `#FF4F1F` | `#FF4F1F` | live corners, record square, write head, sweep, stamp, Copy, failed top rule, NOT DELIVERED marker |
+| `accent` | `#FF4F1F` | `#FF4F1F` | record square, write head, sweep, stamp, failed top rule, Copy, NOT DELIVERED marker |
 | `on-accent` | `#111214` | `#111214` | glyphs and text on accent |
-| `surface` | `#111214` | `#FFFFFF` | pill, card, bracketed chips |
+| `surface` | `#111214` | `#FFFFFF` | pill, card |
 | `edge` | `#2C2E33` | `#111214` | 1 px pill and card edge, table rules |
-| `chip` / `chip-edge` | `#1A1B1F` / `#2C2E33` | `#F2F2F4` / `#111214` | keyed chips |
-| `drop` | `0 2 0 rgba(0,0,0,.35)` | `0 2 0 #111214` | flat, unblurred offset rule under pill, card, keyed chips |
+| `chip` | `#1A1B1F` | `#F2F2F4` | chip fill |
+| `drop` | `0 2 0 rgba(0,0,0,.35)` | `0 2 0 #111214` | flat offset rule under pill and card |
 | `ink` | `#FFFFFF` | `#111214` | trace bars |
 | `midline` | `#2C2E33` | `#D3D4D8` | 1 px rule behind the trace |
 | `text` | white 0.92 | `#111214` | preview, headlines, timer |
-| `text-2` | white 0.58 | `#111214` | labels and meta. In light it is true ink, and size, case and face carry the hierarchy |
+| `text-2` | white 0.58 | `#111214` | mic, meta, table labels. In light it is true ink |
 | `text-dim` | white 0.46 | ink 0.50 | frozen preview while transcribing |
-| `inv-bg` / `inv-fg` | `#FFFFFF` / `#111214` | `#111214` / `#FFFFFF` | pressed and latched chips, hovered history row, hovered menu row |
+| `inv-bg` / `inv-fg` | `#FFFFFF` / `#111214` | `#111214` / `#FFFFFF` | pressed and latched chips, hovered rows |
 
 There is no green, red or amber.
 
-## Type scale
+## Type
 
-The two families are SF Pro Text / Display for prose and **SF Mono** for numbers and labels. SF Mono is `.system(.monospaced)` natively. In the prototype the stack is `"SF Mono", ui-monospace, Menlo`: Safari renders SF Mono, and Chrome renders Menlo, which has the same 0.6 em advance.
+SF Pro Text / Display for prose. **SF Mono** for every number and label: `.system(design: .monospaced)` natively, and the stack `"SF Mono", ui-monospace, Menlo` in the prototype. Safari renders SF Mono; Chrome falls back to Menlo, which has the same 0.6 em advance.
 
-| Role | Face | Size / line | Weight | Notes |
-|---|---|---|---|---|
-| Elapsed timer | Mono | 15 / 18 | semibold | top-right, with the 6 pt orange square |
-| Status / mic label | Mono | 10 / 18 | medium, UPPERCASE, +0.06 em | "LISTENING · MACBOOK PRO MICROPHONE" fits at 225 pt beside the timer |
-| Meta, delivered meta, failed meta | Mono | 10.5 / 14–15 | medium, UPPERCASE, +0.06 em | "0:41 · 118 WORDS · C11" |
-| History index / time | Mono | 11.5 / 17 and 10 / 14 | semibold / medium | "01" over "3:04 PM" |
-| Table header, day rows, title block, menu header | Mono | 10 | medium (title-block right cell semibold) | uppercase, +0.06 em |
-| Delivered headline | Pro | 16 / 20 | semibold | "Delivered to c11" |
-| Live preview | Pro | 13.5 / 18 | medium | 3 lines, head-truncated |
-| Failed headline | Pro | 13.5 / 18 | semibold | "Couldn't paste into c11" |
-| Transcripts (card, table) | Pro | 13 / 17–18 | regular | clamped to 3 and 4 lines |
-| Menu rows, Copy, Dismiss | Pro | 13 | regular / semibold / medium | |
+| Role | Face | Size / line | Weight |
+|---|---|---|---|
+| Timer | Mono | 15 / 18 | semibold, 5 ch box, right-aligned |
+| Mic | Mono | 10.5 / 13 | medium, UPPERCASE, +0.06 em |
+| Meta (history, delivered, failed) | Mono | 10.5 / 14–15 | medium, UPPERCASE, +0.06 em |
+| History index / time | Mono | 11.5 / 17, 10 / 14 | semibold / medium |
+| Table header, day rows, title block, menu header | Mono | 10 | medium, UPPERCASE, +0.06 em |
+| Delivered headline | Pro | 16 / 20 | semibold |
+| Live preview | Pro | 13.5 / 18 | medium |
+| Failed headline | Pro | 13.5 / 18 | semibold |
+| Transcripts | Pro | 13 / 17–18 | regular |
+| Menu rows, Copy, Dismiss | Pro | 13 | regular / semibold / medium |
 
-## Geometry
+## Radii and materials
 
-- **Pill**: 340 wide, radius 10, padding 12 v × 18 h. From the top: strip 18, gap 8 (with the title rule at 4), preview 54, gap 10, trace row 44. That makes it **158 tall** in every non-failed state, and the height is reserved. The graticule lives in the bottom padding. In failed the pill grows **upward** to 193. The rails are fixed at 158 and bottom-aligned, so no chip moves.
-- **Trace row**: the 20 pt target-app icon sits on the left edge of the text column. Then comes a 260 × 44 trace of 65 bars, 2 wide on a 4 pt pitch, whose newest bar ends on the text column's right edge.
-- **Chips**: 30 × 30, rails 6 pt from the pill, at the pill's top and bottom corners.
-- **History card**: 480 wide, at most 480 tall, radius 10, 1 px border, ticks inset 6. It has a 36 pt header, 28 pt day rows, a 68 pt index column, and a 28 pt title block (Drawn). It sits 6 pt above the History chip on the chip's leading edge (35 pt higher while the failed card is up).
-- **Copy button** 88 × 28. **Delivered stamp** 30 × 30. **Menu**: radius 8, 22 pt rows.
-
-## Materials
-
-There are none. Every surface is an opaque fill with a 1 px edge, a flat 2 pt drop rule and ink or orange corner ticks. There is no NSVisualEffectView, vibrancy, glass or noise.
+Pill and card 10, chips 2, stamp and Copy button 3, menu 8. There are no materials: opaque fills, 1 px edges and a flat 2 pt drop rule, with no NSVisualEffectView, vibrancy, glass or noise.
 
 ## Motion
 
-| Event | Duration | Curve | What happens |
-|---|---|---|---|
-| Entrance | 0 ms | none | The panel is simply there |
-| Dismiss | 120 ms | linear | Opacity 1 → 0, no scale and no drop |
-| Corner ticks | 0 ms | none | Colour swaps with the state. Never animated, never blinking |
-| Trace sample | every 83.3 ms | none | 12 per second; one new bar at the right edge |
-| Bar morph | 60 ms | linear | Each slot morphs to its right neighbour's height, snapped to 2 pt steps |
-| Stop → flat | 60 ms | linear | All bars go to 2 pt, and the write head goes ink |
-| Transcribing sweep | 1050 ms, repeating | linear | Solid 24 × 4 accent block, stepped on the 4 pt bar pitch |
-| Chip press | ≥ 60 ms | 60 ms linear colour | Inverts to a solid square, no scale |
-| Copy feedback | 900 ms (chip), 1400 ms (card button) | none | Orange fill and check, same size |
-| Delivered | 1200 ms | none | Then dismisses (skipped with `?hold=1`) |
-| Menu bar knocked-out bars | 8 Hz | none | 2 pt steps |
-| Reduced motion | | | Bars jump with no morph; the sweep holds 4 positions per cycle; dismiss is a cut |
+| Event | Duration | Curve |
+|---|---|---|
+| Entrance | 0 ms | the panel is simply there |
+| Dismiss | 120 ms | linear opacity → 0, no scale, no drop |
+| Corner ticks (hover in / out) | 60 ms | linear opacity. Colour never changes; never blinks |
+| Trace sample | 83.3 ms (12/s) | one bar in at the right |
+| Bar morph | 60 ms | linear, snapped to 2 pt steps |
+| Stop → flat | 60 ms | linear |
+| Sweep | 1050 ms, repeating | linear, stepped on the 4 pt pitch |
+| Chip press | ≥ 60 ms | 60 ms linear colour, no scale |
+| Copy feedback | 900 ms chip, 1400 ms button | none |
+| Delivered hold | 1200 ms | then dismiss (`?hold=1` keeps it) |
+| Menu bar bars | 8 Hz | 2 pt steps |
+| Reduced motion | | no bar morph; the sweep holds 4 positions; dismiss and tick fades are cuts |
 
 ## Native mapping
 
 | Effect | SwiftUI / AppKit (macOS 15 and 26) |
 |---|---|
-| Pill, card, keyed chips | `RoundedRectangle(cornerRadius:, style: .continuous).fill(surface)` + `.strokeBorder(edge, lineWidth: 1)` |
-| Drop rule | `.shadow(color: drop, radius: 0, x: 0, y: 2)` or a second shape offset y +2 |
-| **Corner ticks** | One `Path` in the surface's `.overlay`, inset 6. For each corner: `move(to: c + (0, ±10))`, `addLine(to: c)`, `addLine(to: c + (±10, 0))`. Stroke 1.5 pt, `lineCap: .butt`, `lineJoin: .miter`, colour from state. Equivalent: eight 10 × 1.5 `Rectangle`s. `.animation(nil)` so the colour swaps instantly |
-| **Bracketed chip** | `Button` with a custom `ButtonStyle`: fill `surface`, the same tick `Path` at inset 0 and length 7. Hover (`.onHover`) adds `.strokeBorder(bracket, 1)`. `isPressed` or latched swaps to a solid `inv-bg` fill |
-| Voice trace + **graticule** | One `Canvas` in `TimelineView(.animation)`: `fill(Path(rect))` per bar, then per graticule tick (`x = 259 − 4·age`, 1 × 2 / 4 / 6 pt), all integer-snapped. The graticule is static |
-| Title rule, table rules, title block | `Rectangle().frame(height: 1)` and `.frame(width: 1)`; the title block is an `HStack` of two cells with a 1 pt divider |
-| Sweep | The same `Canvas`: one accent rect, x from the timeline date, `floor`ed to the 4 pt pitch |
+| Pill, card | `RoundedRectangle(cornerRadius: 10, style: .continuous).fill(surface)` + `.strokeBorder(edge, lineWidth: 1)`; drop rule `.shadow(color: drop, radius: 0, x: 0, y: 2)` |
+| **Hover corners** | `@State var hovering`, set by `.onHover` on the overlay's root `HStack`. The pill's `.overlay` holds one `Path`, inset 6: for each corner `move(to: c + (0, ±10))`, `addLine(to: c)`, `addLine(to: c + (±10, 0))`, stroked 1.5 pt with `.butt` / `.miter`. Apply `.opacity(hovering ? 1 : 0).animation(.linear(duration: 0.06), value: hovering)`. The panel needs an `NSTrackingArea` with `.activeAlways` because it is non-activating |
+| Chip | a `ButtonStyle`: `Rectangle` fill `chip` (radius 2); its own tick `Path` (inset 0, length 7) is shown on the chip's `.onHover`. `configuration.isPressed` or latched swaps to an `inv-bg` fill plus an outer 1 pt `surface` stroke |
+| Trace row | `HStack(alignment: .center)`: `Image(nsImage: targetIcon)` 20 pt, the `Canvas`, `Spacer`, a 6 pt `Rectangle` (filled or `strokeBorder` 1.5), then `Text(time).font(.system(size: 15, weight: .semibold, design: .monospaced)).frame(width: fiveCh, alignment: .trailing)` |
+| Trace + age ruler | one `Canvas` in `TimelineView(.animation)`: `fill(Path(rect))` per bar, then per ruler tick (`x = 205 − 4·age`, 1 × 2 or 1 × 4). The ruler is static, and Quiet skips it but keeps the frame height |
+| Mic row | `Text(micName).font(.system(size: 10.5, weight: .medium, design: .monospaced)).textCase(.uppercase).tracking(0.63).frame(maxWidth: .infinity)` |
 | Failed top rule | `Rectangle().frame(height: 2)` aligned `.top`, clipped by the pill's `clipShape` |
-| Mono type | `.font(.system(size: 10, weight: .medium, design: .monospaced)).textCase(.uppercase).tracking(0.6)`; timer `.system(size: 15, weight: .semibold, design: .monospaced)` |
-| Head truncation | `Text(...).lineLimit(3).truncationMode(.head)` |
-| Menu bar mark | `NSStatusItem` with a template `NSImage` per state (bracket / solid / outlined), redrawn at 8 Hz while listening |
-| Menu | a plain `NSMenu`. The header is a disabled item with an attributed mono uppercase title. The system draws the highlight |
+| Menu bar mark | `NSStatusItem` with a 22 × 16 template `NSImage` per state (bars; bars + filled square; bars + outlined square). Hover: the button's tracking area redraws with the bracket. The width never changes |
 | Dismiss | `NSAnimationContext` 0.12 s linear `alphaValue` → 0, then park |
 
 SF Symbols: `clock.arrow.circlepath`, `doc.on.doc`, `xmark`, `arrow.clockwise`, `checkmark`, `chevron.right`, semibold at 13 pt.
 
+## Prototype controls
+
+A "Signal options" strip sits under the stage's controls: **Density: Quiet | Drawn** (Drawn is the default). It persists as `density=` and toggles with **D**. The Chips toggle is retired; `C` does nothing.
+
+Inspection hooks: `?hover=1` holds the overlay's hover state (corners drawn), `?hoverChip=cancel` holds one chip's bracket, `?hold=1` keeps Delivered up, `?menu=1` opens the menu, `?copied=1` shows both copy confirmations, `?hoverRow=2` holds a history row inverted. The state picker opens mid-dictation (0:37); Space, Play and the menu start at 0:00.
+
 ## What to look at
 
-1. **Light, Listening, Drawn + Brackets** (the default; press T for light). The orange corners are the recording frame: white paper, black mono strip with a title rule, graticule under the trace, keys drawn as four corners.
-2. **History (6).** The engineering table: mono index column, caps meta, orange NOT DELIVERED marker, the title block on the bottom edge. Hover a row and it inverts.
-3. **Transcribing (3) after Listening (2).** The corners fall back to ink the moment the mic closes. Only the orange block moves.
-4. **Density and Chips (D, C).** Flip them while watching the overlay: nothing moves, only drawing appears or disappears.
-5. **The menu bar mark** at idle, while listening, and while transcribing.
-
-Inspection hooks: `?hold=1`, `?menu=1`, `?copied=1`, `?hoverRow=2`, plus `density=` and `chips=`. The state picker opens mid-dictation (0:37); Space, Play and the menu start at 0:00.
+1. **Listening (2), then move the pointer onto the overlay and off.** The corners draw in and out; nothing else changes.
+2. **The trace row:** icon left, timer right, the orange square beside it. Then Transcribing (3): the square goes hollow and the timer freezes.
+3. **The mic at bottom centre**, identical across 2, 3, 4 and 5.
+4. **Hover a chip.** Its bracket draws; press inverts it.
+5. **Light theme (T), with D toggled.** The ruler appears and disappears; nothing moves.
 
 ## Decisions to confirm
 
-1. **Bracketed chips keep a surface fill.** Without it the glyph would be illegible over a busy backdrop. Our assumption is the fill stays; the corners, not an edge, draw the key.
-2. **Inline leader dropped for a title rule.** With the default mic the leader is a 15 pt stub that reads as an em dash.
-3. **Failed shows both the orange top rule and orange corners.** If it reads as too loud, drop the rule and let the corners carry it.
-4. **Sampling moved to exactly 12 per second** so the graticule is true. The real tap runs at about 11.7 per second; the native build would resample to 12 or label the ruler per sample rate.
-5. **No "TRANSCRIBING" word** (contract rule). The hollow square, ink corners and the sweep carry it.
+1. **52 bars instead of 65.** We kept the 2 pt grain and shortened history to 4.3 s. The alternative is 65 bars at a 3 pt pitch (1 pt gaps), which is denser and less printed.
+2. **Delivered meta reads "118 WORDS" only.** The duration is the frozen timer in the row below, so each fact appears once.
+3. **The mic is shown in every visible state**, including failed and delivered, for positional stability. Our assumption is that stability beats relevance there.
+4. **No "TRANSCRIBING" word** (contract rule). The hollow square, frozen timer and sweep carry it.

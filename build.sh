@@ -7,7 +7,7 @@
 #   ./build.sh public             # signed Debug build
 #   ./build.sh unsigned           # unsigned Debug build (CI/fallback)
 #   ./build.sh release            # signed Release build -> "Liquid Voice.app"
-#   ./build.sh install            # Release build, then install to /Applications
+#   ./build.sh install            # Release build, back up the installed app, install to /Applications
 
 set -euo pipefail
 
@@ -41,6 +41,7 @@ run_public_build() {
         -configuration Debug
         -destination 'platform=macOS'
         -derivedDataPath "${DERIVED_DATA_PATH}"
+        SDK_STAT_CACHE_ENABLE=NO
         build
     )
 
@@ -133,6 +134,48 @@ normalize_ctranscribe_framework() {
     fi
 }
 
+# Installs the built app, keeping the one it replaces so one command brings it back.
+# LIQUIDVOICE_INSTALL_PATH and LIQUIDVOICE_BACKUP_ROOT only exist to try this step on scratch
+# folders; the defaults are /Applications/Liquid Voice.app and ~/Backups.
+install_app() {
+    local product="$1"
+    local installed="${LIQUIDVOICE_INSTALL_PATH:-/Applications/Liquid Voice.app}"
+    local backup_root="${LIQUIDVOICE_BACKUP_ROOT:-${HOME}/Backups}"
+    local backup_dir=""
+
+    echo "Installing to ${installed} ..."
+    osascript -e 'quit app "Liquid Voice"' >/dev/null 2>&1 || true
+    sleep 1
+
+    # Keep the app being replaced, so one command brings it back.
+    if [ -d "${installed}" ]; then
+        backup_dir="${backup_root}/liquid-voice-$(date +%Y%m%d-%H%M%S)"
+        mkdir -p "${backup_dir}"
+        echo "Backing up the current app to ${backup_dir}/Liquid Voice.app ..."
+        ditto "${installed}" "${backup_dir}/Liquid Voice.app"
+        local installed_id backup_id
+        installed_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${installed}/Contents/Info.plist" 2>/dev/null || true)"
+        backup_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${backup_dir}/Liquid Voice.app/Contents/Info.plist" 2>/dev/null || true)"
+        if [ -z "${backup_id}" ] || [ "${backup_id}" != "${installed_id}" ]; then
+            printf >&2 'The backup at %s looks incomplete; nothing was installed.\n' "${backup_dir}"
+            exit 1
+        fi
+        echo "Backed up ${backup_id}."
+    fi
+
+    rm -rf "${installed}"
+    ditto "${product}" "${installed}"
+    echo "Installed: ${installed}"
+    codesign -dv "${installed}" 2>&1 | grep -E 'Identifier|TeamIdentifier' || true
+    echo "Log: ~/Library/Logs/LiquidVoice/Fluid.log. After an identity change, follow docs/INSTALL-CHECKLIST.md."
+
+    if [ -n "${backup_dir}" ]; then
+        echo "Rollback to the previous app (its own settings and data were left untouched):"
+        printf '  osascript -e %s; sleep 1; rm -rf "%s" && ditto "%s" "%s" && open "%s"\n' \
+            "'quit app \"Liquid Voice\"'" "${installed}" "${backup_dir}/Liquid Voice.app" "${installed}" "${installed}"
+    fi
+}
+
 run_release_build() {
     local do_install="$1"
     local development_team
@@ -155,6 +198,7 @@ run_release_build() {
         -destination 'platform=macOS' \
         -derivedDataPath "${DERIVED_DATA_PATH}" \
         DEVELOPMENT_TEAM="${development_team}" \
+        SDK_STAT_CACHE_ENABLE=NO \
         build
 
     [ -d "${product}" ] || { printf >&2 'Build succeeded but %s is missing.\n' "${product}"; exit 1; }
@@ -165,13 +209,7 @@ run_release_build() {
         return
     fi
 
-    echo "Installing to /Applications/Liquid Voice.app ..."
-    osascript -e 'quit app "Liquid Voice"' >/dev/null 2>&1 || true
-    sleep 1
-    rm -rf "/Applications/Liquid Voice.app"
-    ditto "${product}" "/Applications/Liquid Voice.app"
-    echo "Installed: /Applications/Liquid Voice.app"
-    codesign -dv "/Applications/Liquid Voice.app" 2>&1 | grep -E 'Identifier|TeamIdentifier' || true
+    install_app "${product}"
 }
 
 case "${PROFILE}" in

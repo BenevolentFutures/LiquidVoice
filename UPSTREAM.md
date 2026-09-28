@@ -107,8 +107,13 @@ Skip anything on the never-port list. Each commit that gets ported, or deliberat
 | `0348e714` | fix(logging): exclude verbose diagnostics from production builds | ported; audio lifecycle and delivery decision lines kept in Release | #9 |
 | `a5d32e6a` | perf(diagnostics): keep stop-path tracing out of Release | ported; Release keeps one STOP_SUMMARY line per dictation | #9 |
 | `c32a110c` | perf(dictation): defer context reads until the mic stops | skipped: our stop path does no window-title or text-before-cursor reads | #9 |
-| `1ce13665` | perf: harden incremental parakeet previews | deferred: needs incremental previews, which we don't have; would shorten the wait on a preview running at stop | #9 |
+| `1ce13665` | perf: harden incremental parakeet previews | partial: settings accessibility labels (#7); incremental Parakeet previews deferred | #7 |
 | `daa0f2d3` | feat(debug): trace clipboard writes and restoration metadata | skipped: debug tracing | #4 |
 | `208566c2` | feat(debug): trace clipboard shortcut event sources | skipped: debug tracing | #4 |
 | `74a1ee8b` | feat(bench): log stop input timing and post-dispatch waits | skipped: benchmark tracing | #4 |
 | `26ad5a41` | Refine AI provider setup and model verification | skipped: rewrite selection clipboard, Fluid Intelligence-adjacent | #4 |
+| `c679506d` | feat: add spoken send commands | partial: parser, literal escape, settings/backup, send key, countdown; not upstream's overlay/notch indicators, exact-field check (replaced by our exact-pane CFEqual gate) or tag-based hotkey check | #7, #8 |
+| `95fe1b15` | fix: complete spoken send after quiet countdown | ported | #7 |
+| `9778fe46` | Block Spoken Send in additional terminals | ported; block list extended (WezTerm, Tabby, Hyper, Rio); c11 allow-listed ahead of it | #7 |
+| `60480451` | fix(spoken-send): hold the armed phrase across noisy partials | ported | #7 |
+| `4310f143` | fix: harden 1.6.10 review edge cases | partial: Spoken Send parts only; FI check skipped | #7 |

@@ -26,9 +26,18 @@ Round 1, 2026-09-27. Same anatomy in all three (four corner chips on rails, wide
 
 Keyboard in every prototype: digits 1–6 pick a state, hold Space to talk, P plays a full dictation, T toggles appearance. Drag the overlay; double-click to reset.
 
+## Round 2 (2026-09-28): Signal, pushed toward a diagram grammar
+
+Atin chose **Signal**. He wants it to carry the "diagram aesthetic" he uses in Sekhem Prime: engineering-drawing lines, accented corners, crisp rules. The grammar we inherit from `Sekhem_Prime/design/deck-corners.html` and `big-number-language.html` is the **8-tick corner bracket** ("corners are the design"), **mono numerals and labels**, thin rules, and status carried by solid colour and words, never blinking. We do not inherit its teal and gold; Signal keeps international orange on ink and paper.
+
+What round 2 adds: orange corner ticks as the recording frame while listening, SF Mono for every number and label, a graticule under the trace, bracketed chips as an option beside the keyed ones, the history card as an engineering table with a title-block footer, a bracketed menu bar mark. Two live toggles in the prototype (Density: Quiet | Drawn; Chips: Keys | Brackets) so Atin can compare in place.
+
 ## Decisions so far
 
 - Anatomy stays; the language changes. (Atin, round 1)
 - Chips stay but are open to play. (Atin, round 1)
 - Accent is not derived from the icon; the icon will follow the chosen language. (Atin, round 1)
-- Assumption, unconfirmed: dark is the default for all three; each gets a designed light variant.
+- Direction: **Signal**. (Atin, 2026-09-28)
+- Diagram grammar from Sekhem Prime, colours not inherited. (Atin, 2026-09-28)
+- Assumption, unconfirmed: dark is the default; the light variant follows the system appearance.
+- Assumption, unconfirmed: the delivered line and the mic label row stay (Atin picked Signal with both present).

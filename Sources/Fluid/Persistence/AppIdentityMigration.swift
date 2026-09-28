@@ -9,7 +9,7 @@ nonisolated protocol AppIdentityMigrationDefaults: AnyObject {
     func synchronize() -> Bool
 }
 
-extension UserDefaults: AppIdentityMigrationDefaults {}
+nonisolated extension UserDefaults: AppIdentityMigrationDefaults {}
 
 /// One-time copy of FluidVoice-era data on the first launch of Liquid Voice's own identity.
 ///

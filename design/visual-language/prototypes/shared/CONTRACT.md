@@ -76,3 +76,7 @@ LVStage.theme, LVStage.state, LVStage.level
 
 - `prototypes/<direction>/index.html`
 - `prototypes/<direction>/DIRECTION.md`: the aesthetic thesis in three sentences, the colour tokens (light and dark), type scale, radii, materials, motion table, the native mapping for every effect, and a short "what to look at" list for the owner.
+
+## Opening the prototypes
+
+Run `prototypes/serve.sh`. It serves this directory on `http://localhost:8765` and opens each direction in the system browser. Do not open the files directly in Safari: Safari refuses parent-directory loads (`../shared/…`) from `file://` pages and shows a blank page. Chrome and the c11 browser surface load `file://` fine. Inside c11, `open` is shimmed to open c11 surfaces; use `/usr/bin/open` for the system browser.

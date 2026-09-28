@@ -4,17 +4,28 @@ thanks for helping. Liquid Voice is for straight voice to text on macOS. the mos
 
 ## issues.
 
-- **bugs:** say what you did, what you expected, and what happened. include your macOS version, your Mac, the speech model, and the app you were dictating into. the app log helps; Settings shows where it is. the app's Feedback page drafts an issue for you.
+- **bugs:** say what you did, what you expected, and what happened. include your macOS version, your Mac, the speech model, and the app you were dictating into. the app log helps: Settings › Debug Settings › Reveal Log File. the app's Feedback page drafts an issue for you.
 - **ideas:** say what problem it solves before how.
+
+## build and test.
+
+`./build.sh` makes a signed Debug build; the README covers signing. the test suite, unsigned:
+
+```bash
+xcodebuild test -project Fluid.xcodeproj -scheme Fluid -destination 'platform=macOS' \
+  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+```
+
+if a build sits at `ClangStatCache` and never moves, add `SDK_STAT_CACHE_ENABLE=NO`.
 
 ## pull requests.
 
 - target `liquid-voice`.
 - one fix or feature per PR. say how you tested it, and on which Mac.
-- build and test commands, and the rules the tests follow, are in [CLAUDE.md](CLAUDE.md). it is written for people and agents alike.
+- the house rules, including how tests must behave, are in [CLAUDE.md](CLAUDE.md).
 - for anything you can see (the overlay, settings, the menu bar), attach a screenshot or a short video.
 - keep telemetry off, the upstream updater off, and Fluid Intelligence out.
-- never commit a Team ID or an API key. `scripts/check-team-id.sh` works as a pre-commit hook.
+- don't change `DEVELOPMENT_TEAM` in the project; `build.sh` passes yours at build time. never commit an API key. `scripts/check-team-id.sh` works as a pre-commit hook that catches a team change.
 
 ## upstream.
 

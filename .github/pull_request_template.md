@@ -8,7 +8,7 @@ Closes #
 
 ## Testing
 
-- [ ] `xcodebuild … test` passes (commands in CLAUDE.md)
+- [ ] The test suite passes (the command is in CONTRIBUTING.md)
 - [ ] Tried in the running app. macOS version and Mac:
 - [ ] Tested delivery into a terminal (c11, Ghostty or Terminal), if this touches typing, paste or the clipboard
 

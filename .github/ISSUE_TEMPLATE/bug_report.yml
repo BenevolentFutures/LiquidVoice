@@ -81,7 +81,7 @@ body:
     id: logs
     attributes:
       label: Logs or crash report
-      description: Paste the relevant lines from the app log (Settings shows where it is) or a crash report.
+      description: Paste the relevant lines from the app log (Settings › Debug Settings › Reveal Log File) or a crash report.
       render: text
     validations:
       required: false

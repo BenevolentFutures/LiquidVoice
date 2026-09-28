@@ -2545,9 +2545,22 @@ final class StopPathTraceTests: XCTestCase {
         XCTAssertEqual(
             line,
             "STOP_SUMMARY id=7 trigger=hold_release latched=false releaseMs=2.0 captureMs=8.0 drainMs=20.0 " +
-                "asrMs=60.0 returnMs=5.0 postMs=1.0 handoffMs=4.0 pasteMs=40.0 totalMs=140.0 lastStage=paste_posted " +
+                "asrMs=60.0 returnMs=5.0 postMs=1.0 handoffMs=4.0 pasteMs=40.0 sendMs=- totalMs=140.0 lastStage=paste_posted " +
                 "audioMs=2500 chars=17 outcome=pasted"
         )
+    }
+
+    func testASpokenSendReturnIsReportedAfterTheTextNotInItsTotal() {
+        let line = StopPathTrace.summaryLine(
+            id: 2,
+            trigger: .spokenSend,
+            latched: false,
+            marks: [.trigger: 1.0, .stopEnter: 1.001, .handoff: 1.1, .pastePosted: 1.12, .sendKeyPosted: 1.25],
+            details: [:],
+            outcome: "delivered"
+        )
+        XCTAssertTrue(line.contains("trigger=spoken_send"), line)
+        XCTAssertTrue(line.contains("pasteMs=20.0 sendMs=130.0 totalMs=120.0 lastStage=send_key_posted"), line)
     }
 
     func testSummaryFoldsASkippedStageIntoTheNextOne() {

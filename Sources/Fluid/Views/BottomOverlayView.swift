@@ -2393,8 +2393,10 @@ struct BottomOverlayView: View {
     @ObservedObject private var activeAppMonitor = ActiveAppMonitor.shared
     @ObservedObject private var historyStore = TranscriptionHistoryStore.shared
     @ObservedObject private var settings = SettingsStore.shared
+    @ObservedObject private var spokenSend = SpokenSendController.shared
     @Environment(\.theme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHoveringSpokenSendChip = false
     @State private var isHoveringModeChip = false
     @State private var isHoveringPromptChip = false
     @State private var isHoveringActionsChip = false
@@ -3506,8 +3508,65 @@ struct BottomOverlayView: View {
     private var quickActionRail: some View {
         VStack(spacing: 6) {
             self.cancelChip
-            self.railChipSpacer
+            self.spokenSendChip
             self.reprocessLastChip
+        }
+    }
+
+    /// Spoken Send's chip, in the trailing rail's reserved middle slot: empty until the send
+    /// phrase ends what was said, then a paper plane, with a ring running around it during the
+    /// quiet countdown. Clicking it cancels the send for this dictation (the text still lands,
+    /// without the phrase). A hollow plane means no key will follow: canceled, or a terminal
+    /// that never gets one. It is drawn over the slot's own spacer, so the rail never resizes.
+    private var spokenSendChip: some View {
+        let indicator = self.spokenSend.indicator
+        let isVisible = indicator.isVisible && self.contentState.mode == .dictation && self.settings.spokenSendEnabled
+        let sends = self.spokenSend.sendsInRecordingApp && indicator != .canceled
+        return self.railChipSpacer
+            .overlay {
+                if isVisible {
+                    ZStack {
+                        self.chipBackground(isHovered: self.isHoveringSpokenSendChip && sends, disabled: !sends)
+                        if indicator == .countingDown {
+                            SpokenSendCountdownRing(
+                                duration: self.spokenSend.settleDuration,
+                                cornerRadius: self.promptSelectorCornerRadius,
+                                animates: !self.reduceMotion
+                            )
+                            .id(self.spokenSend.countdownID)
+                        }
+                        Image(systemName: sends ? "paperplane.fill" : "paperplane")
+                            .font(.system(size: max(self.promptSelectorFontSize + 1, 10), weight: .semibold))
+                            .foregroundStyle(.white.opacity(sends ? 0.86 : 0.34))
+                    }
+                    .contentShape(Rectangle())
+                    .onHover { hovering in
+                        self.isHoveringSpokenSendChip = hovering && sends
+                    }
+                    .onTapGesture {
+                        self.spokenSend.cancelSend()
+                    }
+                    .help(Self.spokenSendHelp(indicator: indicator, sendsInApp: self.spokenSend.sendsInRecordingApp))
+                    .transition(.opacity)
+                }
+            }
+            .animation(self.reduceMotion ? nil : .easeOut(duration: 0.14), value: indicator)
+            // A chip that vanishes under the pointer never gets its hover-out.
+            .onChange(of: indicator) { _, _ in
+                self.isHoveringSpokenSendChip = false
+            }
+    }
+
+    private static func spokenSendHelp(indicator: SpokenSendController.Indicator, sendsInApp: Bool) -> String {
+        switch indicator {
+        case .canceled:
+            return "Send canceled for this dictation"
+        case _ where !sendsInApp:
+            return "Spoken Send never presses Return in this terminal; the phrase is left out"
+        case .countingDown:
+            return "Sending after a pause. Click to cancel the send"
+        case .armed, .hidden:
+            return "Sends when you stop. Click to cancel the send"
         }
     }
 
@@ -3898,6 +3957,30 @@ struct BottomOverlayView: View {
 }
 
 // MARK: - Bottom Waveform View (reads from NotchContentState)
+
+/// The quiet countdown's ring around the Spoken Send chip: one pass of the chip's outline.
+private struct SpokenSendCountdownRing: View {
+    let duration: TimeInterval
+    let cornerRadius: CGFloat
+    let animates: Bool
+    @State private var progress: CGFloat = 0
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: self.cornerRadius)
+            .trim(from: 0, to: self.progress)
+            .stroke(Color.white.opacity(0.8), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+            .onAppear {
+                guard self.animates else {
+                    self.progress = 1
+                    return
+                }
+                withAnimation(.linear(duration: self.duration)) {
+                    self.progress = 1
+                }
+            }
+            .allowsHitTesting(false)
+    }
+}
 
 struct BottomWaveformView: View {
     let color: Color

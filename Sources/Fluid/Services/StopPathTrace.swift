@@ -31,6 +31,8 @@ nonisolated final class StopPathTrace: @unchecked Sendable {
         case handoff
         /// The paste (or typed text) was posted to the target app.
         case pastePosted = "paste_posted"
+        /// Spoken Send: the send key (Return) was posted after the paste.
+        case sendKeyPosted = "send_key_posted"
     }
 
     enum Trigger: String, Sendable {
@@ -38,6 +40,8 @@ nonisolated final class StopPathTrace: @unchecked Sendable {
         case toggle
         case automatic
         case ui
+        /// Spoken Send's quiet countdown ended the recording.
+        case spokenSend = "spoken_send"
         case benchmark
     }
 
@@ -52,6 +56,7 @@ nonisolated final class StopPathTrace: @unchecked Sendable {
         ("postMs", .textReady),
         ("handoffMs", .handoff),
         ("pasteMs", .pastePosted),
+        ("sendMs", .sendKeyPosted),
     ]
 
     let id: Int
@@ -183,7 +188,9 @@ nonisolated final class StopPathTrace: @unchecked Sendable {
             }
             previous = time
         }
-        let last = Stage.allCases.reversed().compactMap { marks[$0] }.first
+        // Total runs to the text landing (the paste), or to the last stage reached. A Spoken Send
+        // Return is reported on its own (sendMs), after the text.
+        let last = marks[.pastePosted] ?? Stage.allCases.reversed().compactMap { marks[$0] }.first
         if let start = marks[.trigger], let last {
             fields.append("totalMs=\(Self.format((last - start) * 1000))")
         } else {

@@ -666,6 +666,9 @@ struct SettingsView: View {
                                     )
                                     Divider().opacity(0.2)
 
+                                    self.spokenSendSettings
+                                    Divider().opacity(0.2)
+
                                     self.optionToggleRow(
                                         title: "Save Transcription History",
                                         description: "Save transcriptions for stats tracking. Disable for privacy.",
@@ -1985,7 +1988,96 @@ struct SettingsView: View {
     }
 }
 
+// Spoken Send settings. Ported from altic-dev/FluidVoice@c679506d, plus Liquid Voice's
+// "Allow in c11" (upstream blocks every terminal).
 private extension SettingsView {
+    var spokenSendSettings: some View {
+        Group {
+            self.optionToggleRow(
+                title: "Spoken Send",
+                description: "End a dictation with a phrase and Liquid Voice presses Return after the text lands.",
+                isOn: Binding(
+                    get: { self.settings.spokenSendEnabled },
+                    set: { self.settings.spokenSendEnabled = $0 }
+                )
+            )
+
+            if self.settings.spokenSendEnabled {
+                VStack(spacing: 10) {
+                    HStack(alignment: .center) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Send Phrase")
+                                .font(self.theme.typography.bodyStrong)
+                                .foregroundStyle(self.settingsTitleText)
+                            Text("Say it last. Say “literal \(self.settings.spokenSendPhrase)” to type it instead.")
+                                .font(self.theme.typography.bodySmall)
+                                .foregroundStyle(self.settingsSecondaryText)
+                        }
+
+                        Spacer()
+
+                        TextField(
+                            "send it",
+                            text: Binding(
+                                get: { self.settings.spokenSendPhrase },
+                                set: { self.settings.spokenSendPhrase = $0 }
+                            )
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 170)
+                        .accessibilityLabel("Spoken Send phrase")
+                    }
+
+                    self.optionToggleRow(
+                        title: "Send After a Pause",
+                        description: "Once the phrase ends what you said, stop listening after a second and a half of quiet and send. Keep talking, or click the plane on the overlay, to cancel. Not while you hold the dictation key: letting go ends it.",
+                        isOn: Binding(
+                            get: { self.settings.spokenSendImmediatelyEnabled },
+                            set: { self.settings.spokenSendImmediatelyEnabled = $0 }
+                        ),
+                        allowsDescriptionWrapping: true
+                    )
+
+                    HStack(alignment: .center) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Send Key")
+                                .font(self.theme.typography.bodyStrong)
+                                .foregroundStyle(self.settingsTitleText)
+                            Text("The key the app sends with. c11 always gets Return.")
+                                .font(self.theme.typography.bodySmall)
+                                .foregroundStyle(self.settingsSecondaryText)
+                        }
+
+                        Spacer()
+
+                        Picker("", selection: Binding(
+                            get: { self.settings.spokenSendKey },
+                            set: { self.settings.spokenSendKey = $0 }
+                        )) {
+                            ForEach(SettingsStore.SpokenSendKey.allCases) { key in
+                                Text(key.displayName).tag(key)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(width: 170, alignment: .trailing)
+                        .accessibilityLabel("Spoken Send key")
+                    }
+
+                    self.optionToggleRow(
+                        title: "Allow in c11",
+                        description: "Press Return in c11, for example to submit a Claude Code prompt. Only in the pane you stopped in, and not if you type or click before it goes. Other terminals never get it: Return there runs a shell command. The phrase is left out either way.",
+                        isOn: Binding(
+                            get: { self.settings.spokenSendAllowsC11 },
+                            set: { self.settings.spokenSendAllowsC11 = $0 }
+                        ),
+                        allowsDescriptionWrapping: true
+                    )
+                }
+                .padding(.leading, 12)
+            }
+        }
+    }
+
     var microphonePrioritySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {

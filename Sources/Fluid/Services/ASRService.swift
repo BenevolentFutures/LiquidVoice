@@ -2054,6 +2054,42 @@ final class ASRService: ObservableObject {
         }
     }
 
+    /// The system's microphone permission for this app (tests replace it).
+    static var microphoneAuthorizationStatus: () -> AVAuthorizationStatus = {
+        AVCaptureDevice.authorizationStatus(for: .audio)
+    }
+
+    /// Where a start refused for a denied microphone is announced (the overlay card; tests
+    /// replace it).
+    static var microphoneAccessNeededHandler: @MainActor () -> Void = {
+        DeliveryFailureOverlayController.shared.showMicrophoneAccessNeeded()
+    }
+
+    /// A start without microphone access never fails silently. `micStatus` is read once at
+    /// startup and after a request, so: never asked (or not read yet) asks now, which is the
+    /// system dialog, or just records the answer when there already is one; denied re-reads
+    /// the permission, which may have been turned on in System Settings since, and otherwise
+    /// shows a card that opens the Microphone settings. Returns whether recording may start.
+    private func recheckMicrophoneAccessBeforeStart() -> Bool {
+        if self.micStatus == .notDetermined {
+            DebugLogger.shared.info("Microphone permission not determined at start; requesting it", source: "ASRService")
+            self.requestMicAccess()
+            return false
+        }
+        let current = Self.microphoneAuthorizationStatus()
+        if current == .authorized {
+            DebugLogger.shared.info("Microphone permission granted since last read; starting", source: "ASRService")
+            self.micStatus = .authorized
+            self.micPermissionGranted = true
+            return true
+        }
+        if current != self.micStatus {
+            self.micStatus = current
+        }
+        Self.microphoneAccessNeededHandler()
+        return false
+    }
+
     /// Starts the speech recognition session.
     ///
     /// This method initiates audio capture and real-time processing. The service will:
@@ -2081,8 +2117,11 @@ final class ASRService: ObservableObject {
     ) async -> AudioCaptureStartOutcome {
         DebugLogger.shared.info("🎤 START() called - beginning recording session", source: "ASRService")
 
-        guard self.micStatus == .authorized else {
-            DebugLogger.shared.error("❌ START() blocked - mic not authorized", source: "ASRService")
+        guard self.micStatus == .authorized || self.recheckMicrophoneAccessBeforeStart() else {
+            DebugLogger.shared.error(
+                "❌ START() blocked - mic not authorized status=\(self.micStatus.rawValue)",
+                source: "ASRService"
+            )
             return .failed
         }
         guard self.isRunning == false, self.isStarting == false else {

@@ -260,6 +260,80 @@ final class HotkeyShortcutTests: XCTestCase {
         XCTAssertTrue(stops.isEmpty)
     }
 
+    /// Regression guard for the hotkey start ordering: the release lands after the callback has
+    /// dispatched its start but before ASRService marks itself starting (the callback and the
+    /// start task both suspend first). It must still be latched and honored once, when the start
+    /// finishes. A latch that settles the start on a fixed number of main-actor turns fails here.
+    @MainActor
+    func testHoldReleaseIsHonoredWhateverTheStartAwaitsBeforeASRSeesIt() async {
+        let asr = FakeCaptureStartState()
+        var stops: [HoldReleaseStopLatch.Request] = []
+        let latch = asr.makeLatch { stops.append($0) }
+        let release = HoldReleaseStopLatch.Request(type: .transcription, label: "Transcription", requireTargetMode: true)
+        var outcomeBeforeASRSawTheStart: HoldReleaseStopLatch.Outcome?
+
+        let tracking = latch.trackStart {
+            await Task.yield() // the callback awaits before dispatching
+            return Task { @MainActor in
+                for _ in 0..<5 { await Task.yield() } // ASR has not seen the start yet
+                outcomeBeforeASRSawTheStart = latch.release(release)
+                asr.isStarting = true
+                for _ in 0..<5 { await Task.yield() } // a slow direct Core Audio start
+                asr.isStarting = false
+                asr.isRunning = true
+                latch.captureStartSettled()
+            }
+        }
+        await tracking.value
+
+        XCTAssertEqual(outcomeBeforeASRSawTheStart, .latched)
+        XCTAssertEqual(stops, [release], "stopped exactly once, when the start finished")
+        XCTAssertTrue(latch.pending.isEmpty)
+        XCTAssertFalse(latch.isStartInFlight)
+    }
+
+    @MainActor
+    func testAStartingActionThatStartsNothingClearsItsLatchedRelease() async {
+        let asr = FakeCaptureStartState()
+        var stops: [HoldReleaseStopLatch.Request] = []
+        let latch = asr.makeLatch { stops.append($0) }
+        let tracking = latch.trackStart { nil } // e.g. the screen is locked
+        XCTAssertEqual(latch.release(.init(type: .transcription, label: "Transcription", requireTargetMode: true)), .latched)
+        await tracking.value
+        XCTAssertTrue(stops.isEmpty)
+        XCTAssertTrue(latch.pending.isEmpty)
+    }
+
+    @MainActor
+    func testANewStartingPressSupersedesAModeAgnosticLatchedStop() {
+        let asr = FakeCaptureStartState()
+        var stops: [HoldReleaseStopLatch.Request] = []
+        let latch = asr.makeLatch { stops.append($0) }
+
+        // A tracking reset during a slow dictation start latches a stop bound to no mode.
+        latch.startRequested()
+        asr.isStarting = true
+        latch.startRequestSettled()
+        let reset = HoldReleaseStopLatch.Request(type: .transcription, label: "Shortcut tracking reset", requireTargetMode: false)
+        XCTAssertEqual(latch.release(reset), .latched)
+
+        // A mode-bound release latched alongside keeps its own mode check.
+        let promptRelease = HoldReleaseStopLatch.Request(type: .promptMode, label: "Prompt mode", requireTargetMode: true)
+        XCTAssertEqual(latch.release(promptRelease), .latched)
+
+        // A new starting press (say, command mode) supersedes the reset's stop: it must not end
+        // the recording that press now owns.
+        latch.startRequested()
+        XCTAssertNil(latch.pending[.transcription])
+        XCTAssertEqual(latch.pending[.promptMode], promptRelease)
+
+        asr.activeTargets = [.commandMode]
+        asr.isStarting = false
+        asr.isRunning = true
+        latch.startRequestSettled()
+        XCTAssertTrue(stops.isEmpty, "neither the superseded reset nor the prompt-mode release stops command mode")
+    }
+
     @MainActor
     func testHoldReleaseLatchEdgeCases() {
         let asr = FakeCaptureStartState()

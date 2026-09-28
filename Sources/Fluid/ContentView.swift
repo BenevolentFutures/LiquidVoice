@@ -1383,7 +1383,7 @@ struct ContentView: View {
             isTranscriptionFocused: self.$isTranscriptionFocused,
             accessibilityEnabled: self.accessibilityEnabled,
             stopAndProcessTranscription: { await self.stopAndProcessTranscription() },
-            startRecording: self.startRecording,
+            startRecording: { self.startRecording() },
             openAccessibilitySettings: self.openAccessibilitySettings,
             restartApp: self.restartApp
         )
@@ -1532,7 +1532,7 @@ struct ContentView: View {
             copyToClipboard: self.$copyToClipboard,
             hotkeyManager: self.hotkeyManager,
             menuBarManager: self.menuBarManager,
-            startRecording: self.startRecording,
+            startRecording: { self.startRecording() },
             refreshDevices: self.refreshDevices,
             openAccessibilitySettings: self.openAccessibilitySettings,
             restartApp: self.restartApp,
@@ -1546,7 +1546,7 @@ struct ContentView: View {
         RecordingView(
             appear: self.$appear,
             stopAndProcessTranscription: { await self.stopAndProcessTranscription() },
-            startRecording: self.startRecording
+            startRecording: { self.startRecording() }
         )
     }
 
@@ -3114,7 +3114,10 @@ struct ContentView: View {
     }
 
     /// Capture app context at start to avoid mismatches if the user switches apps mid-session
-    private func startRecording() {
+    /// Returns the task running the capture start (nil if nothing was started): the hotkey
+    /// manager counts the start as in flight until it finishes (HoldReleaseStopLatch.trackStart).
+    @discardableResult
+    private func startRecording() -> HotkeyCaptureStartTask? {
         let model = SettingsStore.shared.selectedSpeechModel
         DebugLogger.shared.info(
             "ContentView: startRecording() for model=\(model.displayName), supportsStreaming=\(model.supportsStreaming)",
@@ -3122,7 +3125,7 @@ struct ContentView: View {
         )
         guard !self.asr.isRunningOrStarting else {
             DebugLogger.shared.debug("ContentView: start ignored because capture is already active", source: "ContentView")
-            return
+            return nil
         }
 
         self.advanceOverlayLifecycle()
@@ -3145,7 +3148,7 @@ struct ContentView: View {
             )
         }
 
-        Task {
+        let captureStart = Task {
             let startOutcome = await self.asr.start(onCaptureStarted: {
                 if shouldPlayStartSound {
                     TranscriptionSoundPlayer.shared.playStartSound()
@@ -3172,6 +3175,7 @@ struct ContentView: View {
                 DebugLogger.shared.error("Failed to pre-load model: \(error)", source: "ContentView")
             }
         }
+        return captureStart
     }
 
     /// Best-effort: re-activate the app that was focused when recording started.
@@ -3326,9 +3330,12 @@ struct ContentView: View {
             promptModeShortcutEnabled: self.isPromptModeShortcutEnabled,
             commandModeShortcutEnabled: self.isCommandModeShortcutEnabled,
             rewriteModeShortcutEnabled: self.isRewriteModeShortcutEnabled,
+            // Start callbacks return the task running the capture start they dispatch (nil when
+            // they start nothing). The release-stop latch counts the start as in flight until
+            // that task finishes, whatever the callback awaits before it (see trackStart).
             startRecordingCallback: {
                 DebugLogger.shared.debug("ContentView: startRecordingCallback invoked by hotkey", source: "ContentView")
-                self.startRecording()
+                return self.startRecording()
             },
             dictationModeCallback: {
                 DebugLogger.shared.info("Dictate mode triggered", source: "ContentView")
@@ -3336,7 +3343,7 @@ struct ContentView: View {
                     "ContentView: selected model for dictate hotkey=\(SettingsStore.shared.selectedSpeechModel.displayName)",
                     source: "ContentView"
                 )
-                self.beginDictationRecording(for: .primary, mode: .dictate)
+                return self.beginDictationRecording(for: .primary, mode: .dictate)
             },
             stopAndProcessCallback: {
                 let route = self.currentDictationOutputRouteForHotkeyStop()
@@ -3345,11 +3352,11 @@ struct ContentView: View {
             },
             promptModeCallback: {
                 DebugLogger.shared.info("Prompt mode triggered", source: "ContentView")
-                self.beginDictationRecording(for: .secondary, mode: .promptMode)
+                return self.beginDictationRecording(for: .secondary, mode: .promptMode)
             },
             promptSelectionCallback: { selection in
                 DebugLogger.shared.info("Prompt selection shortcut triggered", source: "ContentView")
-                self.beginDictationRecording(for: selection, mode: .promptMode)
+                return self.beginDictationRecording(for: selection, mode: .promptMode)
             },
             commandModeCallback: {
                 DebugLogger.shared.info("Command mode triggered", source: "ContentView")
@@ -3361,7 +3368,7 @@ struct ContentView: View {
                 // Set overlay mode to command
                 self.menuBarManager.setOverlayMode(.command)
 
-                guard !self.asr.isRunningOrStarting else { return }
+                guard !self.asr.isRunningOrStarting else { return nil }
 
                 self.advanceOverlayLifecycle()
 
@@ -3370,7 +3377,7 @@ struct ContentView: View {
                     "Starting voice recording for command",
                     source: "ContentView"
                 )
-                Task {
+                return Task {
                     let startOutcome = await self.asr.start(onCaptureStarted: {
                         TranscriptionSoundPlayer.shared.playStartSound()
                         self.appBench("overlay_phase phase=recording trigger=first_pcm mode=command")
@@ -3408,13 +3415,13 @@ struct ContentView: View {
                 // Set flag so stopAndProcessTranscription knows to process as rewrite
                 self.setActiveRecordingMode(.edit)
 
-                guard !self.asr.isRunningOrStarting else { return }
+                guard !self.asr.isRunningOrStarting else { return nil }
 
                 self.advanceOverlayLifecycle()
 
                 // Start recording immediately for the edit instruction
                 DebugLogger.shared.info("Starting voice recording for edit mode", source: "ContentView")
-                Task {
+                return Task {
                     let startOutcome = await self.asr.start(onCaptureStarted: {
                         TranscriptionSoundPlayer.shared.playStartSound()
                         self.appBench("overlay_phase phase=recording trigger=first_pcm mode=edit")
@@ -3732,7 +3739,10 @@ extension ContentView {
         }
     }
 
-    private func beginDictationRecording(for slot: SettingsStore.DictationShortcutSlot, mode: ActiveRecordingMode) {
+    /// Returns the task running the capture start (nil if nothing was started): the hotkey
+    /// manager counts the start as in flight until it finishes (HoldReleaseStopLatch.trackStart).
+    @discardableResult
+    private func beginDictationRecording(for slot: SettingsStore.DictationShortcutSlot, mode: ActiveRecordingMode) -> HotkeyCaptureStartTask? {
         DebugLogger.shared.debug("Begin dictation recording for slot \(slot.rawValue)", source: "ContentView")
         self.appBench("begin_recording slot=\(slot.rawValue) mode=\(mode.rawValue)")
         if self.isOnboardingVoicePlaygroundStepActive {
@@ -3748,7 +3758,7 @@ extension ContentView {
 
         guard !self.asr.isRunningOrStarting else {
             self.appBench("asr_start_skipped reason=already_running_or_starting")
-            return
+            return nil
         }
         self.advanceOverlayLifecycle()
         if self.asr.micStatus == .authorized {
@@ -3758,7 +3768,7 @@ extension ContentView {
             self.appBench("overlay_mode_requested mode=Dictation")
             self.appBench("overlay_phase phase=connecting")
         }
-        Task {
+        return Task {
             let asrStartStartedAt = ProcessInfo.processInfo.systemUptime
             DebugLogger.shared.benchmark("APP_BENCH", message: "asr_start_call", source: "AppBenchmark")
             let startOutcome = await self.asr.start(onCaptureStarted: {
@@ -3779,10 +3789,11 @@ extension ContentView {
         }
     }
 
-    private func beginDictationRecording(for selection: SettingsStore.DictationPromptSelection, mode: ActiveRecordingMode) {
+    @discardableResult
+    private func beginDictationRecording(for selection: SettingsStore.DictationPromptSelection, mode: ActiveRecordingMode) -> HotkeyCaptureStartTask? {
         let settings = SettingsStore.shared
         settings.setDictationPromptSelection(selection, for: .secondary)
-        self.beginDictationRecording(for: .secondary, mode: mode)
+        return self.beginDictationRecording(for: .secondary, mode: mode)
     }
 
     private func appBench(_ message: String) {

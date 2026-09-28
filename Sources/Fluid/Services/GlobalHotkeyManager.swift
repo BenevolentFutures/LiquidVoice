@@ -225,17 +225,28 @@ nonisolated struct OneShotMouseUpSwallow: Equatable {
     }
 }
 
+/// The task a hotkey's start callback dispatched to start a capture (ContentView's
+/// `Task { await asr.start(...) }`), or nil when the callback started nothing.
+typealias HotkeyCaptureStartTask = Task<Void, Never>
+
 /// A hold-mode release must always end its recording. When the release arrives while the capture
 /// is still starting (a direct Core Audio start can take seconds under DeadlineRace, before the
 /// AVAudioEngine fallback), the stop is latched and honored the moment the start settles, through
 /// the normal stop-and-transcribe path. It never cancels the start, which would drop the audio it
 /// captures, and never gives up on a timer. A start that fails clears the latch.
+///
+/// "Starting" is explicit: `trackStart` counts a hotkey action as a start in flight from the
+/// moment it is dispatched until the capture start it reports has finished. The latch does not
+/// depend on when (after how many suspension points) the action or `ASRService.start()` first
+/// becomes visible as `isStarting`.
 @MainActor
 final class HoldReleaseStopLatch {
     struct Request: Equatable {
         let type: HotkeyHoldModeType
         let label: String
         /// Skip the stop if a different recording mode is active by the time the start settles.
+        /// A request without it (a tracking reset, an interrupted press) belongs to whatever start
+        /// was in flight when it was made, so a newer starting press supersedes it.
         let requireTargetMode: Bool
         /// When the release happened; the stop-path trace starts here even when the stop waits.
         var releasedAt: TimeInterval = ProcessInfo.processInfo.systemUptime
@@ -271,15 +282,38 @@ final class HoldReleaseStopLatch {
         self.isStarting() || self.outstandingStartRequests > 0
     }
 
-    /// A hotkey action that may start a capture was dispatched.
+    /// A hotkey action that may start a capture was dispatched. A newer press supersedes any
+    /// latched stop that is not bound to a recording mode.
     func startRequested() {
         self.outstandingStartRequests += 1
+        let superseded = self.pending.filter { !$0.value.requireTargetMode }
+        guard !superseded.isEmpty else { return }
+        for type in superseded.keys {
+            self.pending.removeValue(forKey: type)
+        }
+        DebugLogger.shared.info(
+            "Release stop latch: a new starting press supersedes \(superseded.values.map(\.label))",
+            source: "GlobalHotkeyManager"
+        )
     }
 
-    /// That action finished and any capture start it kicked off is visible to ASR.
+    /// That action finished, and so did any capture start it dispatched.
     func startRequestSettled() {
         self.outstandingStartRequests = max(0, self.outstandingStartRequests - 1)
         self.resolve(reason: "start request settled")
+    }
+
+    /// Runs a hotkey action that may start a capture. The start counts as in flight from now
+    /// until the capture start task the action returns has finished (or at once, if it returns
+    /// nil), so a hold release that arrives at any point in between is latched, never lost.
+    @discardableResult
+    func trackStart(_ action: @escaping @MainActor () async -> HotkeyCaptureStartTask?) -> Task<Void, Never> {
+        self.startRequested()
+        return Task { @MainActor [weak self] in
+            let captureStart = await action()
+            await captureStart?.value
+            self?.startRequestSettled()
+        }
     }
 
     /// ASR finished a capture start, on either backend, successfully or not.
@@ -360,6 +394,7 @@ private final nonisolated class HotkeyState: @unchecked Sendable {
     /// When the tap thread received the key event now being handled on main. Lets the stop-path
     /// trace start at the real release, before any wait for a busy main thread.
     var eventReceivedAt: TimeInterval?
+    var keyboardEventTap: CFMachPort?
 
     func withLock<T>(_ block: () -> T) -> T {
         self.lock.lock()
@@ -371,7 +406,12 @@ private final nonisolated class HotkeyState: @unchecked Sendable {
 @MainActor
 final class GlobalHotkeyManager: NSObject {
     private nonisolated(unsafe) var state = HotkeyState()
-    private nonisolated(unsafe) var eventTap: CFMachPort?
+    /// The keyboard tap. Written on main, read on the tap thread (to re-enable it after macOS
+    /// disables it), so it lives behind the state lock.
+    private nonisolated var eventTap: CFMachPort? {
+        get { self.state.withLock { self.state.keyboardEventTap } }
+        set { self.state.withLock { self.state.keyboardEventTap = newValue } }
+    }
     private nonisolated(unsafe) var runLoopSource: CFRunLoopSource?
     private nonisolated(unsafe) var mouseObserverTap: CFMachPort?
     private nonisolated(unsafe) var mouseObserverSource: CFRunLoopSource?
@@ -391,13 +431,15 @@ final class GlobalHotkeyManager: NSObject {
     private var promptModeShortcutEnabled: Bool
     private var commandModeShortcutEnabled: Bool
     private var rewriteModeShortcutEnabled: Bool
-    private var startRecordingCallback: (() async -> Void)?
-    private var dictationModeCallback: (() async -> Void)?
+    // Start callbacks return the task that runs the capture start they dispatched (nil if they
+    // started nothing); the release-stop latch counts the start as in flight until it finishes.
+    private var startRecordingCallback: (() async -> HotkeyCaptureStartTask?)?
+    private var dictationModeCallback: (() async -> HotkeyCaptureStartTask?)?
     private var stopAndProcessCallback: (() async -> Void)?
-    private var promptModeCallback: (() async -> Void)?
-    private var promptSelectionCallback: ((SettingsStore.DictationPromptSelection) async -> Void)?
-    private var commandModeCallback: (() async -> Void)?
-    private var rewriteModeCallback: (() async -> Void)?
+    private var promptModeCallback: (() async -> HotkeyCaptureStartTask?)?
+    private var promptSelectionCallback: ((SettingsStore.DictationPromptSelection) async -> HotkeyCaptureStartTask?)?
+    private var commandModeCallback: (() async -> HotkeyCaptureStartTask?)?
+    private var rewriteModeCallback: (() async -> HotkeyCaptureStartTask?)?
     private var isDictateRecordingProvider: (() -> Bool)?
     private var isPromptModeRecordingProvider: (() -> Bool)?
     private var isCommandRecordingProvider: (() -> Bool)?
@@ -584,13 +626,13 @@ final class GlobalHotkeyManager: NSObject {
         promptModeShortcutEnabled: Bool,
         commandModeShortcutEnabled: Bool,
         rewriteModeShortcutEnabled: Bool,
-        startRecordingCallback: (() async -> Void)? = nil,
-        dictationModeCallback: (() async -> Void)? = nil,
+        startRecordingCallback: (() async -> HotkeyCaptureStartTask?)? = nil,
+        dictationModeCallback: (() async -> HotkeyCaptureStartTask?)? = nil,
         stopAndProcessCallback: (() async -> Void)? = nil,
-        promptModeCallback: (() async -> Void)? = nil,
-        promptSelectionCallback: ((SettingsStore.DictationPromptSelection) async -> Void)? = nil,
-        commandModeCallback: (() async -> Void)? = nil,
-        rewriteModeCallback: (() async -> Void)? = nil,
+        promptModeCallback: (() async -> HotkeyCaptureStartTask?)? = nil,
+        promptSelectionCallback: ((SettingsStore.DictationPromptSelection) async -> HotkeyCaptureStartTask?)? = nil,
+        commandModeCallback: (() async -> HotkeyCaptureStartTask?)? = nil,
+        rewriteModeCallback: (() async -> HotkeyCaptureStartTask?)? = nil,
         isDictateRecordingProvider: (() -> Bool)? = nil,
         isPromptModeRecordingProvider: (() -> Bool)? = nil,
         isCommandRecordingProvider: (() -> Bool)? = nil,
@@ -654,7 +696,7 @@ final class GlobalHotkeyManager: NSObject {
         self.stopAndProcessCallback = callback
     }
 
-    func setCommandModeCallback(_ callback: @escaping () async -> Void) {
+    func setCommandModeCallback(_ callback: @escaping () async -> HotkeyCaptureStartTask?) {
         self.commandModeCallback = callback
     }
 
@@ -678,7 +720,7 @@ final class GlobalHotkeyManager: NSObject {
         self.scheduleActiveShortcutLog(reason: "shortcuts updated")
     }
 
-    func setRewriteModeCallback(_ callback: @escaping () async -> Void) {
+    func setRewriteModeCallback(_ callback: @escaping () async -> HotkeyCaptureStartTask?) {
         self.rewriteModeCallback = callback
     }
 
@@ -712,7 +754,7 @@ final class GlobalHotkeyManager: NSObject {
         self.scheduleActiveShortcutLog(reason: "shortcuts updated")
     }
 
-    func setPromptModeCallback(_ callback: @escaping () async -> Void) {
+    func setPromptModeCallback(_ callback: @escaping () async -> HotkeyCaptureStartTask?) {
         self.promptModeCallback = callback
     }
 
@@ -2101,9 +2143,10 @@ final class GlobalHotkeyManager: NSObject {
         // recording. (A keyboard-tap outage alone would not lose the mouse-up; stopping there is the
         // conservative choice and matches what a mouse-tap outage does.)
         let finishedMousePress = self.finishInterruptedMouseShortcutPress(reason: "shortcut tracking reset (\(reason))")
+        // "Starting" includes a hotkey start dispatched but not yet visible in ASR (the latch's view).
         let shouldStopActiveHold = !finishedMousePress && Self.shouldStopHeldRecordingOnTrackingReset(
             activationMode: self.hotkeyMode,
-            isRunningOrStarting: self.asrService.isRunningOrStarting,
+            isRunningOrStarting: self.asrService.isRunning || self.holdReleaseStopLatch.isStartInFlight,
             isAnyHoldKeyPressed: self.isKeyPressed || self.isPromptModeKeyPressed || self.isCommandModeKeyPressed
                 || self.isRewriteKeyPressed || self.isPromptAssignmentKeyPressed
         )
@@ -2335,61 +2378,54 @@ final class GlobalHotkeyManager: NSObject {
         }
     }
 
-    /// Runs a hotkey action that may start a capture. Until it settles, a hold release counts as
-    /// arriving during a start, so it is latched rather than lost.
-    private func performStartingHotkeyAction(_ action: @escaping @MainActor () async -> Void) {
-        self.holdReleaseStopLatch.startRequested()
-        Task { @MainActor [weak self] in
-            await action()
-            guard let self = self else { return }
-            // The callbacks start capture in a task of their own, and ASRService.start() marks
-            // itself starting before its first suspension, so one main-actor turn makes it visible.
-            await Task.yield()
-            self.holdReleaseStopLatch.startRequestSettled()
-        }
+    /// Runs a hotkey action that may start a capture. Until the capture start it dispatched has
+    /// finished, a hold release counts as arriving during a start, so it is latched rather than
+    /// lost (see HoldReleaseStopLatch.trackStart).
+    private func performStartingHotkeyAction(_ action: @escaping @MainActor () async -> HotkeyCaptureStartTask?) {
+        self.holdReleaseStopLatch.trackStart(action)
     }
 
     private func triggerPromptMode() {
         self.performStartingHotkeyAction { [weak self] in
-            guard let self = self else { return }
-            guard self.canTriggerRecordingAction("Prompt mode hotkey") else { return }
+            guard let self = self else { return nil }
+            guard self.canTriggerRecordingAction("Prompt mode hotkey") else { return nil }
             DebugLogger.shared.info("Prompt mode hotkey triggered", source: "GlobalHotkeyManager")
-            await self.promptModeCallback?()
+            return await self.promptModeCallback?() ?? nil
         }
     }
 
     private func triggerPromptSelection(_ selection: SettingsStore.DictationPromptSelection) {
         self.performStartingHotkeyAction { [weak self] in
-            guard let self = self else { return }
-            guard self.canTriggerRecordingAction("Prompt selection hotkey") else { return }
+            guard let self = self else { return nil }
+            guard self.canTriggerRecordingAction("Prompt selection hotkey") else { return nil }
             DebugLogger.shared.info("Prompt selection hotkey triggered", source: "GlobalHotkeyManager")
-            await self.promptSelectionCallback?(selection)
+            return await self.promptSelectionCallback?(selection) ?? nil
         }
     }
 
     private func triggerCommandMode() {
         self.performStartingHotkeyAction { [weak self] in
-            guard let self = self else { return }
-            guard self.canTriggerRecordingAction("Command mode hotkey") else { return }
+            guard let self = self else { return nil }
+            guard self.canTriggerRecordingAction("Command mode hotkey") else { return nil }
             DebugLogger.shared.info("Command mode hotkey triggered", source: "GlobalHotkeyManager")
             DebugLogger.shared.debug(
                 "GlobalHotkeyManager: command callback path, isRunning=\(self.asrService.isRunning), isReady=\(self.asrService.isAsrReady)",
                 source: "GlobalHotkeyManager"
             )
-            await self.commandModeCallback?()
+            return await self.commandModeCallback?() ?? nil
         }
     }
 
     private func triggerRewriteMode() {
         self.performStartingHotkeyAction { [weak self] in
-            guard let self = self else { return }
-            guard self.canTriggerRecordingAction("Rewrite mode hotkey") else { return }
+            guard let self = self else { return nil }
+            guard self.canTriggerRecordingAction("Rewrite mode hotkey") else { return nil }
             DebugLogger.shared.info("Rewrite mode hotkey triggered", source: "GlobalHotkeyManager")
             DebugLogger.shared.debug(
                 "GlobalHotkeyManager: rewrite callback path, isRunning=\(self.asrService.isRunning), isReady=\(self.asrService.isAsrReady)",
                 source: "GlobalHotkeyManager"
             )
-            await self.rewriteModeCallback?()
+            return await self.rewriteModeCallback?() ?? nil
         }
     }
 
@@ -2485,8 +2521,8 @@ final class GlobalHotkeyManager: NSObject {
 
     private func triggerDictationMode() {
         self.performStartingHotkeyAction { [weak self] in
-            guard let self = self else { return }
-            guard self.canTriggerRecordingAction("Dictate mode hotkey") else { return }
+            guard let self = self else { return nil }
+            guard self.canTriggerRecordingAction("Dictate mode hotkey") else { return nil }
             let model = SettingsStore.shared.selectedSpeechModel
             DebugLogger.shared.info("Dictate mode hotkey triggered", source: "GlobalHotkeyManager")
             DebugLogger.shared.debug(
@@ -2495,26 +2531,30 @@ final class GlobalHotkeyManager: NSObject {
             )
             if let callback = self.dictationModeCallback {
                 DebugLogger.shared.debug("GlobalHotkeyManager: invoking dictationModeCallback", source: "GlobalHotkeyManager")
-                await callback()
+                return await callback()
             } else if let startCallback = self.startRecordingCallback {
                 DebugLogger.shared.debug(
                     "GlobalHotkeyManager: dictationModeCallback missing; invoking fallback callback",
                     source: "GlobalHotkeyManager"
                 )
-                await startCallback()
+                return await startCallback()
             } else {
                 DebugLogger.shared.warning(
                     "GlobalHotkeyManager: dictation callbacks missing; invoking ASRService.start directly",
                     source: "GlobalHotkeyManager"
                 )
+                // Awaited here, so the start has settled by the time the action returns.
                 await self.asrService.start()
+                return nil
             }
         }
     }
 
     func setHotkeyMode(_ mode: HotkeyActivationMode) {
+        // A held press is about to lose its tracking, so its release could no longer stop it. That
+        // includes a press whose capture is still starting.
         let shouldStopActivePress = self.hotkeyMode != .toggle
-            && self.asrService.isRunning
+            && (self.asrService.isRunning || self.holdReleaseStopLatch.isStartInFlight)
             && (self.isKeyPressed || self.isPromptModeKeyPressed || self.isCommandModeKeyPressed || self.isRewriteKeyPressed || self.isPromptAssignmentKeyPressed)
 
         self.hotkeyMode = mode
@@ -2527,7 +2567,12 @@ final class GlobalHotkeyManager: NSObject {
         self.activePrimaryShortcutPress = nil
 
         if shouldStopActivePress {
-            self.stopRecordingIfNeeded()
+            // Treated as a release: stop now if running, otherwise when the start in flight settles.
+            self.stopRecordingAfterRelease(
+                for: .transcription,
+                label: "Hotkey mode change",
+                requireTargetMode: false
+            )
         }
         DebugLogger.shared.info("Hotkey activation mode set to \(mode.displayName)", source: "GlobalHotkeyManager")
         self.scheduleActiveShortcutLog(reason: "shortcuts updated")
@@ -2563,9 +2608,10 @@ final class GlobalHotkeyManager: NSObject {
             if self.asrService.isRunningOrStarting {
                 await self.stopRecordingInternal()
             } else {
-                // Use callback if available, otherwise fallback to direct start
+                // Use callback if available, otherwise fallback to direct start. A toggle press has
+                // no release to latch, so the dispatched start is not tracked.
                 if let callback = self.startRecordingCallback {
-                    await callback()
+                    _ = await callback()
                 } else {
                     await self.asrService.start()
                 }
@@ -2575,19 +2621,18 @@ final class GlobalHotkeyManager: NSObject {
 
     private func startRecordingIfNeeded() {
         self.performStartingHotkeyAction { [weak self] in
-            guard let self = self else { return }
+            guard let self = self else { return nil }
 
             // Prevent starting while stop is processing
-            guard self.canTriggerRecordingAction("start") else { return }
+            guard self.canTriggerRecordingAction("start") else { return nil }
 
-            if !self.asrService.isRunning {
-                // Use callback if available, otherwise fallback to direct start
-                if let callback = self.startRecordingCallback {
-                    await callback()
-                } else {
-                    await self.asrService.start()
-                }
+            guard !self.asrService.isRunning else { return nil }
+            // Use callback if available, otherwise fallback to direct start
+            if let callback = self.startRecordingCallback {
+                return await callback()
             }
+            await self.asrService.start()
+            return nil
         }
     }
 

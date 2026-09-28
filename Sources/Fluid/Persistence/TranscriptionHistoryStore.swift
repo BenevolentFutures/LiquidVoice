@@ -153,6 +153,12 @@ nonisolated struct TranscriptionHistoryEntry: Codable, Identifiable, Equatable, 
 
 /// Writes the history to UserDefaults off the main thread. The store hands over immutable
 /// snapshots; only the newest pending one is encoded, so a burst of changes costs one write.
+///
+/// Durability: a write starts at once, but encoding a large history takes ~60-100 ms, so a crash
+/// in that window loses the newest entry (the text was already typed; the previous history is
+/// intact on disk). Quitting flushes (`flush()` from applicationWillTerminate). A crash handler
+/// cannot flush: encoding and UserDefaults are not async-signal-safe, and an uncaught exception
+/// may be raised on this very queue.
 nonisolated final class TranscriptionHistoryWriter: @unchecked Sendable {
     private let queue = DispatchQueue(label: "TranscriptionHistory.writer", qos: .utility)
     private let lock = NSLock()

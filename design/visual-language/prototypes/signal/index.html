@@ -7,18 +7,20 @@
 <link rel="stylesheet" href="../shared/stage.css">
 <style>
 /* =====================================================================================
-   SIGNAL v3: the overlay as an engineering drawing that stays quiet until you reach for it.
-   Zero gradients, zero blur, zero glow. Solid surfaces, 1 px rules, SF Mono for every number and
-   label, one accent (international orange). The 8-tick corner brackets draw only on pointer hover.
+   SIGNAL v4: the overlay as an engineering drawing that stays quiet until you reach for it.
+   Zero gradients, zero blur, zero glow, zero radius. Square solid surfaces, 1 px rules, SF Mono for
+   every number and label, one accent (international orange). Schematic selection brackets draw
+   OUTSIDE the box's corners, only under the pointer.
 
    Native mapping (SwiftUI / AppKit on macOS 15 and 26):
-   - Surfaces: RoundedRectangle(cornerRadius:, style: .continuous).fill(surface)
-     + .strokeBorder(edge, lineWidth: 1). Borderless non-activating NSPanel, hasShadow = false.
+   - Surfaces: Rectangle().fill(surface) + .strokeBorder(edge, lineWidth: 1). No corner radius anywhere.
+     Borderless non-activating NSPanel, hasShadow = false.
    - Drop rule: .shadow(color:, radius: 0, x: 0, y: 2) (a flat, unblurred offset), or a second
      shape offset y +2 behind the surface.
-   - Corner ticks (.tk): one Path in the surface's .overlay: four L sub-paths
-     (move(to: corner + len along y), addLine(to: corner), addLine(to: corner + len along x)),
-     stroked 1.5 pt, lineCap .butt, lineJoin .miter, inset 6 pt. Or eight small Rectangles.
+   - Selection brackets (.tk): one Path in the surface's .overlay, drawn OUTSIDE the frame
+     (.padding(-(gap + 0.75)) so the stroke's inner edge sits `gap` pt clear of the box): four L
+     sub-paths (move(to: corner + len along y), addLine(to: corner), addLine(to: corner + len along x)),
+     stroked 1.5 pt, lineCap .butt, lineJoin .miter. .allowsHitTesting(false), no layout effect.
      Shown on .onHover with .opacity(hovering ? 1 : 0).animation(.linear(duration: 0.06)).
    - Voice trace and graticule: one Canvas in a TimelineView(.animation); fill(Path(rect)) per
      bar and per graticule tick, integer-snapped.
@@ -34,10 +36,10 @@
   --sg-accent: #FF4F1F;          /* international orange: the only colour in the system */
   --sg-on-accent: #111214;
 
-  /* diagram grammar */
-  --tk-len: 10px;                /* corner tick arm length */
-  --tk-w: 1.5px;                 /* tick stroke */
-  --tk-inset: 6px;               /* from the surface corner, inside the 10 pt radius */
+  /* diagram grammar: schematic selection brackets, outside the box */
+  --tk-len: 10px;                /* bracket arm length, measured from the outer vertex */
+  --tk-w: 1.5px;                 /* bracket stroke */
+  --tk-gap: 3px;                 /* clear space between the box edge and the bracket's inner edge */
 
   /* dark (default) */
   --sg-surface: #111214;
@@ -53,8 +55,7 @@
   --sg-glyph-off: rgba(255, 255, 255, 0.28);
   --sg-rule: #2C2E33;
   --sg-midline: #2C2E33;
-  --sg-tick: rgba(255, 255, 255, 0.34);     /* corner ticks at rest */
-  --sg-bracket: rgba(255, 255, 255, 0.62);  /* bracket-chip ticks */
+  --sg-bracket: rgba(255, 255, 255, 0.78);  /* selection brackets (pill, card, chips) */
   --sg-grat: rgba(255, 255, 255, 0.20);     /* graticule and leader */
   --sg-inv-bg: #FFFFFF;
   --sg-inv-fg: #111214;
@@ -75,7 +76,6 @@
   --sg-glyph-off: rgba(17, 18, 20, 0.28);
   --sg-rule: #111214;
   --sg-midline: #D3D4D8;
-  --sg-tick: rgba(17, 18, 20, 0.42);
   --sg-bracket: #111214;
   --sg-grat: rgba(17, 18, 20, 0.30);
   --sg-inv-bg: #111214;
@@ -85,12 +85,21 @@
 }
 
 /* ---------- the tick primitive: an 8-tick corner bracket (four L corners, nothing along the edges) ---------- */
-.tk { position: absolute; inset: var(--tk-inset); pointer-events: none; z-index: 2; opacity: 0; transition: opacity 60ms linear; }
-.tk i { position: absolute; width: var(--tk-len); height: var(--tk-len); box-sizing: border-box; border: 0 solid currentColor; }
-.tk i:nth-child(1) { top: 0; left: 0; border-top-width: var(--tk-w); border-left-width: var(--tk-w); }
-.tk i:nth-child(2) { top: 0; right: 0; border-top-width: var(--tk-w); border-right-width: var(--tk-w); }
-.tk i:nth-child(3) { bottom: 0; left: 0; border-bottom-width: var(--tk-w); border-left-width: var(--tk-w); }
-.tk i:nth-child(4) { bottom: 0; right: 0; border-bottom-width: var(--tk-w); border-right-width: var(--tk-w); }
+/* Outside the box: no layout, no hit-testing. A surface with a drop rule measures its bottom gap from the rule's
+   bottom edge (--tk-drop), so the bracket never doubles the printed rule. Each bracket is drawn twice: a 1 pt
+   knockout halo in the surface colour (.tk-halo), then the ink stroke, so it reads over any backdrop (a black
+   terminal behind a light-mode overlay, a white page behind a dark one). Native: stroke the same Path twice. */
+.tk {
+  --tk-o: calc(var(--tk-gap) + var(--tk-w) + var(--tk-hx, 0px));
+  position: absolute; inset: calc(-1 * var(--tk-o)); bottom: calc(-1 * (var(--tk-o) + var(--tk-drop, 0px)));
+  pointer-events: none; z-index: 2; opacity: 0; transition: opacity 60ms linear; color: var(--sg-bracket);
+}
+.tk.tk-halo { --tk-hx: 1px; --tk-l: calc(var(--tk-len) + 2px); --tk-s: calc(var(--tk-w) + 2px); color: var(--sg-surface); z-index: 1; }
+.tk i { position: absolute; width: var(--tk-l, var(--tk-len)); height: var(--tk-l, var(--tk-len)); box-sizing: border-box; border: 0 solid currentColor; }
+.tk i:nth-child(1) { top: 0; left: 0; border-top-width: var(--tk-s, var(--tk-w)); border-left-width: var(--tk-s, var(--tk-w)); }
+.tk i:nth-child(2) { top: 0; right: 0; border-top-width: var(--tk-s, var(--tk-w)); border-right-width: var(--tk-s, var(--tk-w)); }
+.tk i:nth-child(3) { bottom: 0; left: 0; border-bottom-width: var(--tk-s, var(--tk-w)); border-left-width: var(--tk-s, var(--tk-w)); }
+.tk i:nth-child(4) { bottom: 0; right: 0; border-bottom-width: var(--tk-s, var(--tk-w)); border-right-width: var(--tk-s, var(--tk-w)); }
 
 /* ---------- overlay root: [rail] [pill] [rail], bottom-aligned ---------- */
 .sg {
@@ -114,26 +123,25 @@
 }
 
 /* ---------- chips: one style. At rest a solid square (the fill keeps glyphs legible over a busy terminal),
-   no edge, no bracket. Hover draws the chip's own 4-corner bracket in ink. Press and latch invert. ---------- */
+   no edge, no bracket. Hover draws a selection bracket OUTSIDE the chip (2 pt gap, 6 pt arms) in ink.
+   Press and latch invert. ---------- */
 .sg-chip {
   position: relative;
-  width: 30px; height: 30px; padding: 0; margin: 0; border: 0; border-radius: 2px;
+  width: 30px; height: 30px; padding: 0; margin: 0; border: 0; border-radius: 0; overflow: visible;
   background: var(--sg-chip); color: var(--sg-glyph); box-shadow: none;
   display: grid; place-items: center; cursor: default; outline: none;
   transition: background-color 60ms linear, color 60ms linear, box-shadow 60ms linear;
 }
 .sg-chip svg { display: block; width: 16px; height: 16px; }
 .sg-chip .g-check { display: none; }
-.sg-chip .tk { --tk-inset: 0px; --tk-len: 7px; color: var(--sg-bracket); }
+.sg-chip .tk { --tk-gap: 2px; --tk-len: 6px; }            /* chips carry no drop rule */
 .sg-chip:hover:not(:disabled) .tk, .sg-chip.is-hover .tk { opacity: 1; }
 /* Inverted (pressed, or latched while its card is open). A 1 px keyline in the surface colour keeps the key's
    shape on any backdrop: a black key over a black terminal would otherwise vanish. Native: an outer strokeBorder. */
 .sg-chip.is-latched, .sg-chip.is-pressed {
   background: var(--sg-inv-bg); color: var(--sg-inv-fg); box-shadow: 0 0 0 1px var(--sg-surface);
 }
-.sg-chip.is-latched .tk, .sg-chip.is-pressed .tk { color: var(--sg-inv-bg); }
 .sg-chip.is-copied { background: var(--sg-accent); color: var(--sg-on-accent); box-shadow: none; }
-.sg-chip.is-copied .tk { color: var(--sg-accent); }
 .sg-chip.is-copied .g-main { display: none; }
 .sg-chip.is-copied .g-check { display: block; }
 .sg-chip:disabled { color: var(--sg-glyph-off); }
@@ -143,15 +151,16 @@
 .sg-pill {
   position: relative; width: var(--pill-w); box-sizing: border-box;
   padding: 12px 18px 10px;
-  background: var(--sg-surface); border-radius: 10px;
-  box-shadow: inset 0 0 0 1px var(--sg-edge), var(--sg-drop);
-  overflow: hidden;
+  background: var(--sg-surface); border-radius: 0;
+  box-shadow: inset 0 0 0 1px var(--sg-edge), var(--sg-drop);   /* 1 px edge + flat 2 pt drop rule, unblurred */
+  overflow: visible;                                              /* the brackets live outside the frame */
   display: flex; flex-direction: column;
 }
-.sg-pill > .tk { color: var(--sg-tick); }
-/* Corners are a hover affordance: they draw in ink while the pointer is over the overlay (pill or rails),
-   never at rest and never orange. Recording is carried by the orange square and the timer. */
-.sg:hover .sg-pill > .tk, .sg.is-hover .sg-pill > .tk { opacity: 1; }
+.sg-pill { --tk-drop: 2px; }
+/* Brackets are a hover affordance that marks what is under the pointer: the pill's draw while the pointer is
+   over the pill or the rails' empty gutter; over a chip or the history card, that element's own brackets draw
+   instead (the 6 pt gutter cannot hold two brackets side by side). Never at rest, never orange. */
+.sg:hover:not(:has(.sg-chip:not(:disabled):hover, .sg-hist:hover)) .sg-pill > .tk, .sg.is-hover .sg-pill > .tk { opacity: 1; }
 
 .sg-top { position: relative; height: 54px; }           /* reserved: the 3-line preview, all non-failed states */
 .sg-gap { height: 6px; flex: none; }                     /* + the trace's own 2 pt top margin = 8 */
@@ -185,7 +194,7 @@
 /* delivered: swaps the preview for one statement of equal height */
 .sg-rec { position: relative; height: 54px; }
 .sg-done { position: absolute; inset: 0; display: none; align-items: center; gap: 14px; }
-.sg-stamp { width: 30px; height: 30px; flex: none; border-radius: 3px; background: var(--sg-accent); color: var(--sg-on-accent); display: grid; place-items: center; }
+.sg-stamp { width: 30px; height: 30px; flex: none; border-radius: 0; background: var(--sg-accent); color: var(--sg-on-accent); display: grid; place-items: center; }
 .sg-done-text { display: flex; flex-direction: column; gap: 3px; }
 .sg-done-text b { font: 600 16px/20px var(--sg-font); color: var(--sg-text); }
 .sg-done-text span { font: 500 10.5px/14px var(--sg-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--sg-text-2); }
@@ -206,7 +215,7 @@
 }
 .sg-actions { margin-top: 12px; height: 28px; display: flex; align-items: center; gap: 16px; }
 .sg-copy {
-  width: 88px; height: 28px; padding: 0; border: 0; border-radius: 3px;
+  width: 88px; height: 28px; padding: 0; border: 0; border-radius: 0;
   background: var(--sg-accent); color: var(--sg-on-accent);
   font: 600 13px/28px var(--sg-font); cursor: default; outline: none;
   display: grid; place-items: center;
@@ -230,12 +239,13 @@
 .sg-hist {
   position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 5;
   width: 480px; max-height: 480px; box-sizing: border-box;
-  background: var(--sg-surface); border-radius: 10px;
+  background: var(--sg-surface); border-radius: 0;
   border: 1px solid var(--sg-edge);                    /* a real border: an inverted row never paints over it */
   box-shadow: var(--sg-drop);
-  overflow: hidden; display: none; flex-direction: column;
+  overflow: visible; display: none; flex-direction: column;   /* the list scrolls; the brackets sit outside */
 }
-.sg-hist > .tk { --tk-inset: 5px; color: var(--sg-tick); }
+.sg-hist { --tk-drop: 2px; }
+.sg-hist > .tk { --tk-gap: 4px; }   /* absolute children start at the padding edge: 1 pt border + 3 pt clear */
 .sg-hist:hover > .tk { opacity: 1; }
 .sg-hist.is-open { display: flex; }
 /* The failed card grows the pill 61 pt above the rail (210 vs 149); a history card opened then clears it. */
@@ -281,7 +291,7 @@
 #lv-menubar-slot .lv-status:hover .mb-bracket, #lv-menubar-slot .lv-status.open .mb-bracket { opacity: 1; }
 .sg-menu {
   position: fixed; z-index: 120; min-width: 262px; box-sizing: border-box; padding: 5px;
-  background: var(--sg-menu); color: var(--sg-text); border-radius: 8px;
+  background: var(--sg-menu); color: var(--sg-text); border-radius: 0;
   box-shadow: inset 0 0 0 1px var(--sg-edge), var(--sg-drop);
   font: 400 13px/1 var(--sg-font); display: none;
 }
@@ -294,7 +304,7 @@
 .sg-mh b i { width: 6px; height: 6px; background: var(--sg-accent); display: none; }
 .sg-mh b.on i { display: block; }
 .sg-mi {
-  height: 22px; padding: 0 9px; border-radius: 4px; display: flex; align-items: center; gap: 8px;
+  height: 22px; padding: 0 9px; border-radius: 0; display: flex; align-items: center; gap: 8px;
   color: var(--sg-text); white-space: nowrap;
 }
 .sg-mi > span { flex: 1; }
@@ -361,7 +371,7 @@
     // SF Symbol: chevron.right (menu submenu arrow)
     chev: '<svg width="8" height="10" viewBox="0 0 8 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 1.5 L6 5 L2.5 8.5"/></svg>',
   };
-  const TK = '<span class="tk" aria-hidden="true"><i></i><i></i><i></i><i></i></span>';
+  const TK = '<span class="tk tk-halo" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="tk" aria-hidden="true"><i></i><i></i><i></i><i></i></span>';
   // Target app icon stand-in (the native build draws the real NSImage of the target app).
   const APP_C11 = '<svg width="20" height="20" viewBox="0 0 20 20"><rect width="20" height="20" rx="4.5" fill="#0D0F14"/><rect x="0.5" y="0.5" width="19" height="19" rx="4" fill="none" stroke="rgba(255,255,255,0.18)"/><path d="M5.6 6.8 L8.8 10 L5.6 13.2" fill="none" stroke="#E8EAF0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.4 13.2 H14.4" stroke="#E8EAF0" stroke-width="1.6" stroke-linecap="round"/></svg>';
 

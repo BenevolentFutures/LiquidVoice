@@ -78,6 +78,9 @@ final class SpokenSendController: ObservableObject {
         var isDictating: () -> Bool
         /// The app being dictated into, for the indicator only. The stop target decides the send.
         var recordingApp: () -> (bundleIdentifier: String?, name: String?)?
+        /// A hold-to-talk shortcut is held down: letting go ends the dictation, so the pause
+        /// countdown stays off (it could cut off speech while the key is still held).
+        var isHoldingShortcut: () -> Bool = { false }
         /// Stops the recording and processes it, exactly as the stop hotkey does.
         var stopAndProcess: () -> Void
     }
@@ -148,7 +151,7 @@ final class SpokenSendController: ObservableObject {
             self.setIndicator(.hidden)
             return
         }
-        guard config.stopsAfterPause else {
+        guard config.stopsAfterPause, !hooks.isHoldingShortcut() else {
             self.setIndicator(.armed)
             return
         }
@@ -273,11 +276,14 @@ final class SpokenSendController: ObservableObject {
     /// transcribes (which resets the controller) cannot change its outcome.
     struct StopSnapshot: Equatable {
         let session: UInt64
+        /// When dictation stopped (system uptime): input after it drops the key.
+        let stoppedAt: TimeInterval
         let wasArmed: Bool
         let isCanceled: Bool
         let autoStopped: Bool
-        /// The recording app is a terminal (c11 included): no sentence ending is added.
-        let inTerminal: Bool
+        /// The recording app is a terminal (c11 included). Only used when no stop target was
+        /// captured; the stop target decides otherwise.
+        let recordingAppIsTerminal: Bool
     }
 
     /// Called as dictation stops, before anything awaits. Ends the countdown; a stop that is
@@ -290,17 +296,33 @@ final class SpokenSendController: ObservableObject {
         let app = self.hooks?.recordingApp()
         return StopSnapshot(
             session: self.session,
+            stoppedAt: self.now(),
             wasArmed: self.arming.wasArmed,
             isCanceled: self.isCanceled,
             autoStopped: self.autoStopTriggered,
-            inTerminal: app.map { SpokenSendPolicy.isTerminal(bundleIdentifier: $0.bundleIdentifier, appName: $0.name) } ?? false
+            recordingAppIsTerminal: app.map { SpokenSendPolicy.isTerminal(bundleIdentifier: $0.bundleIdentifier, appName: $0.name) } ?? false
         )
     }
 
-    /// Strips a send phrase that ends `text` and says whether a key follows. `isNormalRoute` is
-    /// false for the onboarding sandbox, which never sends.
-    func finishDictation(_ text: String, stop: StopSnapshot, isNormalRoute: Bool) -> SpokenSendDecision {
+    /// Called on every way out of the stop path (an empty transcript, a rewrite or command
+    /// recording, a delivered one): the chip never outlives the dictation it belongs to.
+    func endStop(_ stop: StopSnapshot) {
+        guard stop.session == self.session else { return }
+        self.cancelCountdown()
+        self.setIndicator(.hidden)
+    }
+
+    /// Strips a send phrase that ends `text` and says whether a key follows. `target` is the
+    /// destination chosen at stop: for a terminal (c11 included) no sentence ending is added.
+    /// `isNormalRoute` is false for the onboarding sandbox, which never sends.
+    func finishDictation(_ text: String, stop: StopSnapshot, target: DictationTarget?, isNormalRoute: Bool) -> SpokenSendDecision {
         let config = self.configuration()
+        let inTerminal = target.map {
+            SpokenSendPolicy.isTerminal(
+                bundleIdentifier: $0.bundleIdentifier,
+                appName: NSRunningApplication(processIdentifier: $0.pid)?.localizedName
+            )
+        } ?? stop.recordingAppIsTerminal
         // Still this dictation's state: a cancel clicked while it transcribed counts too.
         let isCurrent = stop.session == self.session
         let wasArmed = isCurrent ? self.arming.wasArmed : stop.wasArmed
@@ -314,7 +336,7 @@ final class SpokenSendController: ObservableObject {
             phrase: config.phrase,
             enabled: true,
             wasArmed: wasArmed,
-            forTerminal: stop.inTerminal
+            forTerminal: inTerminal
         )
         let decision = SpokenSendDecision(
             text: parse.text,
@@ -323,7 +345,7 @@ final class SpokenSendController: ObservableObject {
         )
         DebugLogger.shared.info(
             "SPOKEN_SEND decision session=\(stop.session) current=\(isCurrent) phrase=\(decision.phraseDetected) send=\(decision.shouldSend) " +
-                "canceled=\(isCanceled) armed=\(wasArmed) autoStopped=\(stop.autoStopped) terminal=\(stop.inTerminal) phraseOnly=\(decision.isPhraseOnly)",
+                "canceled=\(isCanceled) armed=\(wasArmed) autoStopped=\(stop.autoStopped) terminal=\(inTerminal) phraseOnly=\(decision.isPhraseOnly)",
             source: "SpokenSend"
         )
         return decision
@@ -332,7 +354,8 @@ final class SpokenSendController: ObservableObject {
     /// The key to press after this dictation's text, or nil. Never when AI cleanup failed (the
     /// raw fallback is not what the user meant to submit), never without a destination chosen at
     /// stop, and never in a blocked terminal.
-    func sendKeyRequest(for decision: SpokenSendDecision, target: DictationTarget?, aiFailed: Bool) -> SendKeyRequest? {
+    /// `stoppedAt`: when dictation stopped; a key press or click after it drops the key.
+    func sendKeyRequest(for decision: SpokenSendDecision, target: DictationTarget?, aiFailed: Bool, stoppedAt: TimeInterval) -> SendKeyRequest? {
         guard decision.shouldSend else { return nil }
         let config = self.configuration()
         guard !aiFailed else {
@@ -351,7 +374,7 @@ final class SpokenSendController: ObservableObject {
             source: "SpokenSend"
         )
         guard verdict.allowsSend else { return nil }
-        return SendKeyRequest(key: key, target: target)
+        return SendKeyRequest(key: key, target: target, stoppedAt: stoppedAt)
     }
 
     /// Delivers the text, then the key, through the typing worker (queued behind any delivery

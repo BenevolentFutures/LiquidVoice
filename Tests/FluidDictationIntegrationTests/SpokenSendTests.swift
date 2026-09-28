@@ -63,6 +63,69 @@ final class SpokenSendParserTests: XCTestCase {
         XCTAssertEqual(self.parse("Rock and roll, send it"), SpokenSendParseResult(text: "Rock and roll.", shouldSend: true))
     }
 
+    func testThePhraseAfterANegationPronounModalOrToIsText() {
+        for text in [
+            "Draft the reply but don't send it.",
+            "Don't send it.",
+            "Do not send it",
+            "I'll send it.",
+            "I’ll just send it.",
+            "Can you send it.",
+            "Could you please send it",
+            "We should send it",
+            "I want to send it.",
+            "I'm going to send it",
+            "Let's send it.",
+            "Never send it",
+            "We shouldn't send it.",
+            "Did you send it",
+        ] {
+            XCTAssertEqual(self.parse(text), SpokenSendParseResult(text: text, shouldSend: false), text)
+        }
+        // A break before the phrase makes it a command again.
+        XCTAssertEqual(self.parse("Fix it, send it."), SpokenSendParseResult(text: "Fix it.", shouldSend: true))
+        XCTAssertEqual(self.parse("I said no. Send it."), SpokenSendParseResult(text: "I said no.", shouldSend: true))
+        XCTAssertEqual(self.parse("Please send it"), SpokenSendParseResult(text: "Please.", shouldSend: true))
+        XCTAssertEqual(self.parse("Just send it."), SpokenSendParseResult(text: "Just.", shouldSend: true))
+        // The sentence's own phrase, then the command.
+        XCTAssertEqual(self.parse("I'll send it, send it."), SpokenSendParseResult(text: "I'll send it.", shouldSend: true))
+    }
+
+    func testTheArmedNearMissAndArmingHonorTheSameRule() {
+        XCTAssertEqual(
+            SpokenSendParser.parseArmed("I already sent it", phrase: "send it", enabled: true, wasArmed: true),
+            SpokenSendParseResult(text: "I already sent it", shouldSend: false)
+        )
+        XCTAssertFalse(SpokenSendParser.parseArmed("Please don't sent it.", phrase: "send it", enabled: true, wasArmed: true).shouldSend)
+        XCTAssertTrue(SpokenSendParser.parseArmed("Ready, sent it.", phrase: "send it", enabled: true, wasArmed: true).shouldSend)
+
+        var state = SpokenSendArmingState()
+        for partial in ["Draft the reply but don't send it", "I'll send it", "Can you send it"] {
+            XCTAssertFalse(state.update(partial: partial, isEligible: true, phrase: "send it"), partial)
+        }
+        XCTAssertFalse(state.wasArmed, "a thinking pause after these never starts the countdown")
+    }
+
+    func testLiteralEscapesThePhraseDespitePunctuation() {
+        XCTAssertEqual(self.parse("Type literal, send it."), SpokenSendParseResult(text: "Type send it", shouldSend: false))
+        XCTAssertEqual(self.parse("Type literal: send it"), SpokenSendParseResult(text: "Type send it", shouldSend: false))
+        XCTAssertEqual(self.parse("Type literal, send it, send it."), SpokenSendParseResult(text: "Type send it.", shouldSend: true))
+    }
+
+    func testATerminalKeepsShellPunctuation() {
+        func terminal(_ text: String) -> SpokenSendParseResult {
+            SpokenSendParser.parse(text, phrase: "send it", enabled: true, forTerminal: true)
+        }
+        XCTAssertEqual(terminal("cd .. send it"), SpokenSendParseResult(text: "cd ..", shouldSend: true))
+        XCTAssertEqual(terminal("git add . send it"), SpokenSendParseResult(text: "git add .", shouldSend: true))
+        XCTAssertEqual(terminal("cd - send it"), SpokenSendParseResult(text: "cd -", shouldSend: true))
+        XCTAssertEqual(terminal("git log : send it"), SpokenSendParseResult(text: "git log :", shouldSend: true))
+        XCTAssertEqual(terminal("ls -la send it"), SpokenSendParseResult(text: "ls -la", shouldSend: true))
+        XCTAssertEqual(terminal("echo v1.2. Send it."), SpokenSendParseResult(text: "echo v1.2", shouldSend: true))
+        XCTAssertEqual(terminal("Ready: send it"), SpokenSendParseResult(text: "Ready", shouldSend: true))
+        XCTAssertEqual(terminal("Ready — send it"), SpokenSendParseResult(text: "Ready", shouldSend: true))
+    }
+
     func testATerminalGetsNoSentenceEndingBeforeTheReturn() {
         func terminal(_ text: String) -> SpokenSendParseResult {
             SpokenSendParser.parse(text, phrase: "send it", enabled: true, forTerminal: true)
@@ -111,7 +174,8 @@ final class SpokenSendParserTests: XCTestCase {
     }
 
     func testRepeatedTerminalPhrasesAreAllRemoved() {
-        XCTAssertEqual(self.parse("I wanna send it, send it."), SpokenSendParseResult(text: "I wanna.", shouldSend: true))
+        // Liquid Voice: "wanna" makes the first "send it" the sentence's own; the repeat is the command.
+        XCTAssertEqual(self.parse("I wanna send it, send it."), SpokenSendParseResult(text: "I wanna send it.", shouldSend: true))
         XCTAssertEqual(self.parse("Ready SEND IT send it"), SpokenSendParseResult(text: "Ready.", shouldSend: true))
         XCTAssertEqual(self.parse("send it, send it."), SpokenSendParseResult(text: "", shouldSend: true))
     }
@@ -407,10 +471,26 @@ final class SpokenSendPolicyTests: XCTestCase {
 
     func testC11BuildsAreC11AndLookAlikesAreNot() {
         XCTAssertEqual(SpokenSendPolicy.verdict(bundleIdentifier: "com.stage11.c11.debug", appName: "c11 DEV", allowsC11: true), .allowedC11)
+        XCTAssertEqual(SpokenSendPolicy.verdict(bundleIdentifier: "com.stage11.c11mux", appName: "c11mux", allowsC11: true), .allowedC11)
         XCTAssertEqual(SpokenSendPolicy.verdict(bundleIdentifier: "com.stage11.c11x", appName: "Other", allowsC11: true), .allowed)
         XCTAssertTrue(SpokenSendPolicy.isTerminal(bundleIdentifier: "com.stage11.c11", appName: "c11"))
         XCTAssertTrue(SpokenSendPolicy.isTerminal(bundleIdentifier: "com.apple.Terminal", appName: "Terminal"))
         XCTAssertFalse(SpokenSendPolicy.isTerminal(bundleIdentifier: "com.tinyspeck.slackmacgap", appName: "Slack"))
+    }
+
+    /// One c11 predicate: every build the send policy treats as c11 also gets c11's Reliable
+    /// Paste and frontmost gate, never the ordinary-app path.
+    func testThePastePathAndTheSendPolicyAgreeOnC11() {
+        for bundleID in ["com.stage11.c11", "com.stage11.c11.debug", "com.stage11.c11.nightly", "com.stage11.c11mux"] {
+            XCTAssertTrue(TypingService.isC11(bundleIdentifier: bundleID), bundleID)
+            XCTAssertTrue(TypingService.isGhosttyFamily(bundleIdentifier: bundleID), bundleID)
+            XCTAssertEqual(SpokenSendPolicy.verdict(bundleIdentifier: bundleID, appName: nil, allowsC11: true), .allowedC11, bundleID)
+        }
+        for bundleID in ["com.stage11.c11x", "com.stage11.acetate", "com.stage11"] {
+            XCTAssertFalse(TypingService.isC11(bundleIdentifier: bundleID), bundleID)
+            XCTAssertFalse(TypingService.isGhosttyFamily(bundleIdentifier: bundleID), bundleID)
+        }
+        XCTAssertTrue(TypingService.isGhosttyFamily(bundleIdentifier: "com.mitchellh.ghostty"))
     }
 
     func testTheC11ToggleTurnsItOff() {
@@ -481,29 +561,47 @@ final class SpokenSendPolicyTests: XCTestCase {
         XCTAssertFalse(GlobalHotkeyManager.isSelfPostedKeyboardEvent(type: .keyDown, event: physical))
     }
 
-    func testTheKeyInAnOrdinaryAppNeedsFocusStillInItAndATextField() {
+    func testTheKeyInAnOrdinaryAppNeedsTheStopTimeFieldAndATextField() {
         let editable = (assessment: DeliveryTargetAssessment.editable(role: "AXTextArea"), isSecure: false)
-        XCTAssertNil(TypingService.sendKeyVerdict(targetPID: 42, focusedPID: 42, focus: editable))
-        XCTAssertNil(
-            TypingService.sendKeyVerdict(targetPID: 42, focusedPID: 42, focus: (.unknown(reason: "role_AXGroup"), false)),
-            "an ambiguous element gets the key, as it got the text"
-        )
-        XCTAssertEqual(TypingService.sendKeyVerdict(targetPID: 42, focusedPID: 43, focus: editable), .targetNotInFront)
-        XCTAssertEqual(TypingService.sendKeyVerdict(targetPID: 42, focusedPID: nil, focus: editable), .targetNotInFront)
-        XCTAssertEqual(
-            TypingService.sendKeyVerdict(targetPID: 42, focusedPID: 42, focus: (.editable(role: "AXTextField"), true)),
-            .secureField
-        )
-        XCTAssertEqual(
-            TypingService.sendKeyVerdict(targetPID: 42, focusedPID: 42, focus: (.notEditable(role: "AXButton"), false)),
-            .focusNotEditable,
-            "Return must never press a focused button"
-        )
+        func verdict(
+            focusedPID: pid_t? = 42,
+            focus: (assessment: DeliveryTargetAssessment, isSecure: Bool)? = nil,
+            targetFocus: TargetFocus = .same
+        ) -> SendKeyOutcome? {
+            TypingService.sendKeyVerdict(targetPID: 42, focusedPID: focusedPID, focus: focus ?? editable, targetFocus: targetFocus)
+        }
+        XCTAssertNil(verdict())
+        XCTAssertNil(verdict(focus: (.unknown(reason: "role_AXGroup"), false)), "an ambiguous element gets the key, as it got the text")
+        XCTAssertEqual(verdict(focusedPID: 43), .targetNotInFront)
+        XCTAssertEqual(verdict(focusedPID: nil), .targetNotInFront)
+        XCTAssertEqual(verdict(targetFocus: .moved), .focusMoved, "another field of the same app has focus")
+        XCTAssertEqual(verdict(targetFocus: .unreadable), .focusUnreadable, "no key when the field cannot be shown to be the one")
+        XCTAssertEqual(verdict(focus: (.editable(role: "AXTextField"), true)), .secureField)
+        XCTAssertEqual(verdict(focus: (.notEditable(role: "AXButton"), false)), .focusNotEditable, "Return must never press a focused button")
+    }
+
+    func testTheFocusLooksCombineToTheWorst() {
+        XCTAssertEqual(TargetFocus.worst([.same, .same]), .same)
+        XCTAssertEqual(TargetFocus.worst([.same, .moved]), .moved)
+        XCTAssertEqual(TargetFocus.worst([.unreadable, .same]), .unreadable)
+        XCTAssertEqual(TargetFocus.worst([.unreadable, .moved]), .moved)
+        XCTAssertNil(TargetFocus.same.outcome)
+    }
+
+    func testAStepBuiltFromARequestCarriesTheStopTimeAndItsElement() {
+        let target = DictationTarget(pid: 99901, bundleIdentifier: "com.stage11.c11", window: nil, element: nil)
+        let step = SendKeyStep(request: SendKeyRequest(key: .enter, target: target, stoppedAt: 1234.5))
+        XCTAssertEqual(step.inputCutoff, 1234.5, "input after the stop, not after the paste, drops the key")
+        XCTAssertEqual(step.targetFocus(), .unreadable, "no element captured at stop: never shown to be the same pane")
+        XCTAssertEqual(SendKeyStep(key: .enter).targetFocus(), .unreadable, "an unconfigured step presses nothing")
     }
 
     func testOnlyASentKeyCountsAsSent() {
         XCTAssertTrue(SendKeyOutcome.sent.wasSent)
-        for outcome in [SendKeyOutcome.textNotDelivered, .targetNotInFront, .focusNotEditable, .secureField, .modifiersHeld, .userActed, .targetMismatch, .eventsUnavailable] {
+        for outcome in [
+            SendKeyOutcome.textNotDelivered, .targetNotInFront, .focusNotEditable, .secureField, .modifiersHeld,
+            .userActed, .focusMoved, .focusUnreadable, .targetMismatch, .eventsUnavailable,
+        ] {
             XCTAssertFalse(outcome.wasSent, outcome.rawValue)
         }
     }
@@ -550,6 +648,7 @@ final class SpokenSendControllerTests: XCTestCase {
     private var isDictating = true
     private var recordingApp: (bundleIdentifier: String?, name: String?)? = ("com.tinyspeck.slackmacgap", "Slack")
     private var stops = 0
+    private var holding = false
     private var config = SpokenSendController.Configuration(enabled: true, phrase: "send it", stopsAfterPause: true, key: .enter, allowsC11: true)
 
     override func setUp() async throws {
@@ -564,6 +663,7 @@ final class SpokenSendControllerTests: XCTestCase {
             hooks: SpokenSendController.Hooks(
                 isDictating: { [unowned self] in self.isDictating },
                 recordingApp: { [unowned self] in self.recordingApp },
+                isHoldingShortcut: { [unowned self] in self.holding },
                 stopAndProcess: { [unowned self] in self.stops += 1 }
             )
         )
@@ -578,8 +678,8 @@ final class SpokenSendControllerTests: XCTestCase {
         try await super.tearDown()
     }
 
-    private func finish(_ text: String, isNormalRoute: Bool) -> SpokenSendDecision {
-        self.controller.finishDictation(text, stop: self.controller.beginStop(), isNormalRoute: isNormalRoute)
+    private func finish(_ text: String, isNormalRoute: Bool, target: DictationTarget? = nil) -> SpokenSendDecision {
+        self.controller.finishDictation(text, stop: self.controller.beginStop(), target: target, isNormalRoute: isNormalRoute)
     }
 
     /// Lets the countdown's sleep run out, with the clock moved past the required silence.
@@ -629,19 +729,61 @@ final class SpokenSendControllerTests: XCTestCase {
     }
 
     func testSpeakingOnCancelsTheCountdown() async {
-        self.controller.handlePartial("I'll send it")
+        self.controller.handlePartial("Ship it, send it")
         self.clock += SpokenSendParser.immediateStopVoiceActivityGraceDuration + 0.1
         self.controller.handleVoiceLevel(0.5)
         XCTAssertEqual(self.controller.indicator, .armed)
         await self.letCountdownRunOut()
         XCTAssertEqual(self.stops, 0)
         // The next words disarm it for good.
-        self.controller.handlePartial("I'll send it tomorrow")
+        self.controller.handlePartial("Ship it, send it to Bob tomorrow")
         XCTAssertEqual(self.controller.indicator, .hidden)
         XCTAssertEqual(
-            self.finish("I'll send it tomorrow.", isNormalRoute: true),
-            SpokenSendDecision(text: "I'll send it tomorrow.", phraseDetected: false, shouldSend: false)
+            self.finish("Ship it, send it to Bob tomorrow.", isNormalRoute: true),
+            SpokenSendDecision(text: "Ship it, send it to Bob tomorrow.", phraseDetected: false, shouldSend: false)
         )
+    }
+
+    func testAThinkingPauseAfterISendItNeverStartsTheCountdown() async {
+        self.controller.handlePartial("I'll send it")
+        XCTAssertEqual(self.controller.indicator, .hidden)
+        await self.letCountdownRunOut()
+        XCTAssertEqual(self.stops, 0)
+    }
+
+    func testHoldToTalkNeverCountsDown() async {
+        self.holding = true
+        self.controller.handlePartial("Ship it, send it")
+        XCTAssertEqual(self.controller.indicator, .armed, "armed: letting go ends it and sends")
+        await self.letCountdownRunOut()
+        XCTAssertEqual(self.stops, 0, "the countdown must not cut off speech while the key is held")
+        XCTAssertTrue(self.finish("Ship it, send it.", isNormalRoute: true).shouldSend)
+    }
+
+    func testEveryWayOutOfTheStopHidesTheChip() {
+        self.config.stopsAfterPause = false
+        self.controller.handlePartial("Ship it, send it")
+        XCTAssertEqual(self.controller.indicator, .armed)
+        let stop = self.controller.beginStop()
+        // An empty transcript returns before any decision.
+        self.controller.endStop(stop)
+        XCTAssertEqual(self.controller.indicator, .hidden)
+
+        // An old stop never touches a newer recording's chip.
+        self.controller.beginRecording()
+        self.controller.handlePartial("Next, send it")
+        self.controller.endStop(stop)
+        XCTAssertEqual(self.controller.indicator, .armed)
+    }
+
+    func testTheStopTargetDecidesTheTerminalCleanup() {
+        let c11 = DictationTarget(pid: 99901, bundleIdentifier: "com.stage11.c11", window: nil, element: nil)
+        let slack = DictationTarget(pid: 99903, bundleIdentifier: "com.tinyspeck.slackmacgap", window: nil, element: nil)
+        // Recording started in Slack, stopped in c11: no period.
+        XCTAssertEqual(self.finish("Git status, send it.", isNormalRoute: true, target: c11).text, "Git status")
+        // Recording started in c11, stopped in Slack: a sentence.
+        self.recordingApp = ("com.stage11.c11", "c11")
+        XCTAssertEqual(self.finish("Git status, send it.", isNormalRoute: true, target: slack).text, "Git status.")
     }
 
     func testTheTailOfThePhraseItselfDoesNotCancelTheCountdown() async {
@@ -682,7 +824,7 @@ final class SpokenSendControllerTests: XCTestCase {
         self.controller.handlePartial("Next one, send it")
         XCTAssertEqual(self.controller.indicator, .armed)
 
-        let decision = self.controller.finishDictation("Ship it, send it.", stop: stop, isNormalRoute: true)
+        let decision = self.controller.finishDictation("Ship it, send it.", stop: stop, target: nil, isNormalRoute: true)
         XCTAssertEqual(decision, SpokenSendDecision(text: "Ship it.", phraseDetected: true, shouldSend: false), "the cancel still holds")
         XCTAssertEqual(self.controller.indicator, .armed, "the new recording's chip is left alone")
     }
@@ -692,7 +834,7 @@ final class SpokenSendControllerTests: XCTestCase {
         self.controller.handlePartial("Ship it, send it")
         let stop = self.controller.beginStop()
         self.controller.cancelSend()
-        let decision = self.controller.finishDictation("Ship it, send it.", stop: stop, isNormalRoute: true)
+        let decision = self.controller.finishDictation("Ship it, send it.", stop: stop, target: nil, isNormalRoute: true)
         XCTAssertFalse(decision.shouldSend)
     }
 
@@ -737,21 +879,22 @@ final class SpokenSendControllerTests: XCTestCase {
         let slack = DictationTarget(pid: 99903, bundleIdentifier: "com.tinyspeck.slackmacgap", window: nil, element: nil)
 
         self.config.key = .commandEnter
-        let c11Request = self.controller.sendKeyRequest(for: send, target: c11, aiFailed: false)
+        let c11Request = self.controller.sendKeyRequest(for: send, target: c11, aiFailed: false, stoppedAt: 77)
         XCTAssertEqual(c11Request?.target.pid, 99901)
         XCTAssertEqual(c11Request?.key, .enter, "c11 always gets a plain Return")
-        XCTAssertEqual(self.controller.sendKeyRequest(for: send, target: slack, aiFailed: false)?.key, .commandEnter)
+        XCTAssertEqual(c11Request?.stoppedAt, 77)
+        XCTAssertEqual(self.controller.sendKeyRequest(for: send, target: slack, aiFailed: false, stoppedAt: 0)?.key, .commandEnter)
 
-        XCTAssertNil(self.controller.sendKeyRequest(for: send, target: terminal, aiFailed: false))
-        XCTAssertNil(self.controller.sendKeyRequest(for: send, target: nil, aiFailed: false))
-        XCTAssertNil(self.controller.sendKeyRequest(for: send, target: c11, aiFailed: true), "never submit an AI fallback")
+        XCTAssertNil(self.controller.sendKeyRequest(for: send, target: terminal, aiFailed: false, stoppedAt: 0))
+        XCTAssertNil(self.controller.sendKeyRequest(for: send, target: nil, aiFailed: false, stoppedAt: 0))
+        XCTAssertNil(self.controller.sendKeyRequest(for: send, target: c11, aiFailed: true, stoppedAt: 0), "never submit an AI fallback")
         let own = DictationTarget(pid: ProcessInfo.processInfo.processIdentifier, bundleIdentifier: nil, window: nil, element: nil)
-        XCTAssertNil(self.controller.sendKeyRequest(for: send, target: own, aiFailed: false))
+        XCTAssertNil(self.controller.sendKeyRequest(for: send, target: own, aiFailed: false, stoppedAt: 0))
         let canceled = SpokenSendDecision(text: "Fix it.", phraseDetected: true, shouldSend: false)
-        XCTAssertNil(self.controller.sendKeyRequest(for: canceled, target: c11, aiFailed: false))
+        XCTAssertNil(self.controller.sendKeyRequest(for: canceled, target: c11, aiFailed: false, stoppedAt: 0))
 
         self.config.allowsC11 = false
-        XCTAssertNil(self.controller.sendKeyRequest(for: send, target: c11, aiFailed: false))
+        XCTAssertNil(self.controller.sendKeyRequest(for: send, target: c11, aiFailed: false, stoppedAt: 0))
     }
 
     func testTheOverlayIndicatorVisibility() {

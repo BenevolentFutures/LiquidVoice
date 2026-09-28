@@ -75,9 +75,16 @@ enum DeliveryDebugTriggers {
     }
 
     private static func deliverTextAndSend(_ text: String) async {
+        // Like a dictation stopping now: input after this point drops the key.
+        let stoppedAt = ProcessInfo.processInfo.systemUptime
         let target = await Task.detached(priority: .userInitiated) { TypingService.captureDictationTarget() }.value
         let decision = SpokenSendDecision(text: text, phraseDetected: true, shouldSend: true)
-        guard let sendKey = SpokenSendController.shared.sendKeyRequest(for: decision, target: target, aiFailed: false) else {
+        guard let sendKey = SpokenSendController.shared.sendKeyRequest(
+            for: decision,
+            target: target,
+            aiFailed: false,
+            stoppedAt: stoppedAt
+        ) else {
             DebugLogger.shared.info(
                 "DEBUG_DELIVERY deliverTextAndSend refused app=\(target?.bundleIdentifier ?? "none") chars=\(text.count)",
                 source: "DeliveryDebugTriggers"

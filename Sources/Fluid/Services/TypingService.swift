@@ -64,7 +64,8 @@ final class TypingService {
     private static var focusSnapshot: FocusSnapshot?
     /// Terminals built on Ghostty's input stack, where direct CGEvent unicode insertion is
     /// unreliable and the Reliable Paste path must be forced. c11 (Stage 11's multiplexer)
-    /// is a Ghostty derivative with its own bundle ID, so it needs the same carve-out.
+    /// is a Ghostty derivative with its own bundle IDs (see `isC11`), so it needs the same
+    /// carve-out.
     nonisolated static let ghosttyFamilyBundleIdentifiers: Set<String> = [
         "com.mitchellh.ghostty",
         "com.stage11.c11",
@@ -72,7 +73,17 @@ final class TypingService {
 
     nonisolated static func isGhosttyFamily(bundleIdentifier: String?) -> Bool {
         guard let bundleIdentifier else { return false }
-        return self.ghosttyFamilyBundleIdentifiers.contains(bundleIdentifier)
+        return self.ghosttyFamilyBundleIdentifiers.contains(bundleIdentifier) || self.isC11(bundleIdentifier: bundleIdentifier)
+    }
+
+    /// c11 in any of its builds: `com.stage11.c11`, its variants (`com.stage11.c11.debug`), and
+    /// the legacy `com.stage11.c11mux`. The one c11 predicate, for the paste path and for
+    /// Spoken Send's policy alike.
+    nonisolated static func isC11(bundleIdentifier: String?) -> Bool {
+        guard let bundleIdentifier else { return false }
+        return ["com.stage11.c11", "com.stage11.c11mux"].contains { base in
+            bundleIdentifier == base || bundleIdentifier.hasPrefix(base + ".")
+        }
     }
 
     private var textInsertionMode: SettingsStore.TextInsertionMode {
@@ -207,8 +218,7 @@ final class TypingService {
             return false
         }
 
-        guard let bundleIdentifier = app.bundleIdentifier else { return false }
-        return Self.ghosttyFamilyBundleIdentifiers.contains(bundleIdentifier)
+        return Self.isGhosttyFamily(bundleIdentifier: app.bundleIdentifier)
     }
 
     private func ghosttyTargetPID(preferredTargetPID: pid_t?) -> pid_t? {
@@ -749,14 +759,14 @@ final class TypingService {
         }
         Self.typingWorkQueue.async {
             let isTerminal = Self.isGhosttyFamily(bundleIdentifier: request.target.bundleIdentifier)
-            var step = SendKeyStep(key: request.key)
+            var step = SendKeyStep(request: request)
             // Nothing was pasted, so there is nothing to wait for.
             step.delay = 0
             let outcome: SendKeyOutcome = if isTerminal {
                 TerminalPaster(session: self.pasteSession) { _ in false }
                     .pressSendKeyAlone(step, to: request.target.pid)
             } else {
-                Self.pressSendKeyInApp(step, target: request.target, since: ProcessInfo.processInfo.systemUptime)
+                Self.pressSendKeyInApp(step, target: request.target, focusAtPaste: .same)
             }
             self.bench("send_key_return outcome=\(outcome.rawValue) terminal=\(isTerminal) elapsedMs=\(Self.elapsedMs(since: requestedAt))")
             if let completion {
@@ -868,7 +878,7 @@ final class TypingService {
         var sendKeyOutcome: SendKeyOutcome?
         if let sendKey {
             if deliveryPID == sendKey.target.pid {
-                sendStep = SendKeyStep(key: sendKey.key)
+                sendStep = SendKeyStep(request: sendKey)
             } else {
                 self.bench("send_key_skipped reason=target_mismatch deliveryPID=\(deliveryPID.map { String($0) } ?? "nil") sendPID=\(sendKey.target.pid)")
                 sendKeyOutcome = .targetMismatch
@@ -899,6 +909,9 @@ final class TypingService {
         // the text there (see pasteConsumptionWait).
         self.sendKeyFollowsCurrentDelivery = sendStep != nil
         defer { self.sendKeyFollowsCurrentDelivery = false }
+        // Right before the paste: is the element focused at stop still the focused one? (A
+        // terminal paste looks at its own dispatch instant instead.)
+        let focusAtPaste = terminalPID == nil ? sendStep?.targetFocus() : nil
         let outcome = self.insertTextInstantly(
             text,
             preferredTargetPID: preferredTargetPID,
@@ -912,7 +925,6 @@ final class TypingService {
                 }
             }
         )
-        let dispatchedAt = ProcessInfo.processInfo.systemUptime
         switch outcome {
         case let .failed(failure):
             self.bench("insert_path path=none failure=\(failure.rawValue)")
@@ -934,41 +946,68 @@ final class TypingService {
                 // The terminal paste pressed the key after its V key-up, or refused to.
                 return (.dispatched, terminalSendKeyOutcome ?? .eventsUnavailable)
             }
-            return (.dispatched, Self.pressSendKeyInApp(sendStep, target: sendKey.target, since: dispatchedAt))
+            return (.dispatched, Self.pressSendKeyInApp(sendStep, target: sendKey.target, focusAtPaste: focusAtPaste ?? .unreadable))
         }
     }
 
     /// The send key in an ordinary app, after its text was dispatched: only while focus is still
-    /// in the target app, not on a password field, and not on something that certainly takes no
-    /// text (Return would press a focused button). Blocks; runs on the typing worker.
-    private nonisolated static func pressSendKeyInApp(_ step: SendKeyStep, target: DictationTarget, since: TimeInterval) -> SendKeyOutcome {
+    /// on the element focused at stop (as it was right before the paste), with no key press or
+    /// click since the stop, not on a password field, and not on something that certainly takes
+    /// no text (Return would press a focused button). Blocks; runs on the typing worker.
+    private nonisolated static func pressSendKeyInApp(_ step: SendKeyStep, target: DictationTarget, focusAtPaste: TargetFocus) -> SendKeyOutcome {
         if step.delay > 0 {
             usleep(useconds_t(step.delay * 1_000_000))
         }
         guard step.modifiersReleased() else { return .modifiersHeld }
-        guard !step.userActedSince(since) else {
+        guard !step.userActedSince(step.inputCutoff) else {
             DeliveryLog.bench("send_key_refused reason=user_acted pid=\(target.pid)")
             return .userActed
         }
         let focus = self.focusedElementForSendKey()
-        let verdict = self.sendKeyVerdict(targetPID: target.pid, focusedPID: self.currentFocusedPID(), focus: focus)
+        let focusNow = step.targetFocus()
+        let verdict = self.sendKeyVerdict(
+            targetPID: target.pid,
+            focusedPID: self.currentFocusedPID(),
+            focus: focus,
+            targetFocus: TargetFocus.worst([focusAtPaste, focusNow])
+        )
         if let verdict {
-            DeliveryLog.bench("send_key_refused reason=\(verdict.rawValue) pid=\(target.pid) focus=\(focus.assessment.logDescription)")
+            DeliveryLog.bench(
+                "send_key_refused reason=\(verdict.rawValue) pid=\(target.pid) focus=\(focus.assessment.logDescription) " +
+                    "atPaste=\(focusAtPaste.rawValue) now=\(focusNow.rawValue)"
+            )
             return verdict
         }
         return step.post(target.pid, step.key) ? .sent : .eventsUnavailable
     }
 
     /// Why the send key may not go into an ordinary app, or nil when it may. Pure, so it is tested.
+    /// `targetFocus`: whether the element focused at stop was still the focused one at every look
+    /// (upstream's exact-focus check).
     nonisolated static func sendKeyVerdict(
         targetPID: pid_t,
         focusedPID: pid_t?,
-        focus: (assessment: DeliveryTargetAssessment, isSecure: Bool)
+        focus: (assessment: DeliveryTargetAssessment, isSecure: Bool),
+        targetFocus: TargetFocus
     ) -> SendKeyOutcome? {
         guard focusedPID == targetPID else { return .targetNotInFront }
+        if let refusal = targetFocus.outcome { return refusal }
         if focus.isSecure { return .secureField }
         if focus.assessment.isCertainlyNotEditable { return .focusNotEditable }
         return nil
+    }
+
+    /// Whether the element focused when dictation stopped (a c11 pane, a text field) is still the
+    /// focused element of its app. Compared with `CFEqual`; c11 exposes each pane as its own
+    /// AXTextArea, stable across reads. Bounded AX reads; call off the main thread.
+    nonisolated static func stopTimeFocus(of target: DictationTarget) -> TargetFocus {
+        guard AXIsProcessTrusted(), let element = target.element else { return .unreadable }
+        let appElement = self.boundedAXElement(AXUIElementCreateApplication(target.pid))
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(appElement, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
+              let focusedRef, CFGetTypeID(focusedRef) == AXUIElementGetTypeID()
+        else { return .unreadable }
+        return CFEqual(focusedRef, element) ? .same : .moved
     }
 
     /// The focused element's editability and whether it is a password field. Bounded AX reads.
@@ -1443,18 +1482,26 @@ final class TypingService {
         /// Returns nil once the paste is sent. `.targetRestoreFailed` when the terminal is not in
         /// front (nothing is sent; the clipboard is left or put back as it was). A clipboard
         /// race (snapshot or write) is retried once; a terminal that is not in front never is.
+        /// `atDispatch` runs once the terminal is confirmed in front, right before the Cmd+V goes.
         func paste(
             _ text: String,
             to pid: pid_t,
             activateFirst: Bool,
             beforeDispatch: () -> Void,
-            makeConsumptionWait: () -> () -> Void
+            makeConsumptionWait: () -> () -> Void,
+            atDispatch: () -> Void = {}
         ) -> TextDeliveryFailure? {
-            let first = self.attempt(text, to: pid, activateFirst: activateFirst, beforeDispatch: beforeDispatch, makeConsumptionWait: makeConsumptionWait)
+            let first = self.attempt(
+                text, to: pid, activateFirst: activateFirst, beforeDispatch: beforeDispatch,
+                makeConsumptionWait: makeConsumptionWait, atDispatch: atDispatch
+            )
             guard let first, Self.isClipboardRace(first) else { return first }
             DeliveryLog.bench("terminal_paste_retry reason=\(first.rawValue)")
             usleep(useconds_t(self.retryDelay * 1_000_000))
-            return self.attempt(text, to: pid, activateFirst: activateFirst, beforeDispatch: beforeDispatch, makeConsumptionWait: makeConsumptionWait)
+            return self.attempt(
+                text, to: pid, activateFirst: activateFirst, beforeDispatch: beforeDispatch,
+                makeConsumptionWait: makeConsumptionWait, atDispatch: atDispatch
+            )
         }
 
         static func isClipboardRace(_ failure: TextDeliveryFailure) -> Bool {
@@ -1466,6 +1513,11 @@ final class TypingService {
         /// refused or failed paste returns its failure and `.textNotDelivered`. The clipboard
         /// race retry cannot double the key either: a race fails before anything is sent, and the
         /// key follows only the one paste that went out.
+        ///
+        /// The frontmost gate sees c11, not the pane. So the key also needs the pane focused at
+        /// stop to be the focused one right before the paste and again right before the key, and
+        /// no key press or click since the stop (Cmd+2, a click into a shell pane). Otherwise the
+        /// text still lands where focus is, and the key is dropped.
         func pasteThenSend(
             _ text: String,
             to pid: pid_t,
@@ -1474,39 +1526,38 @@ final class TypingService {
             beforeDispatch: () -> Void,
             makeConsumptionWait: () -> () -> Void
         ) -> (failure: TextDeliveryFailure?, sendKey: SendKeyOutcome) {
+            var focusAtPaste: TargetFocus?
             if let failure = self.paste(
                 text,
                 to: pid,
                 activateFirst: activateFirst,
                 beforeDispatch: beforeDispatch,
-                makeConsumptionWait: makeConsumptionWait
+                makeConsumptionWait: makeConsumptionWait,
+                atDispatch: { focusAtPaste = send.targetFocus() }
             ) {
                 return (failure, .textNotDelivered)
             }
-            return (nil, self.pressSendKey(send, to: pid, since: ProcessInfo.processInfo.systemUptime))
+            return (nil, self.pressSendKey(send, to: pid, focusAtPaste: focusAtPaste ?? .unreadable))
         }
 
         /// The send key with nothing pasted first (the dictation was only the phrase): brought
-        /// forward like a paste, then the same gate.
+        /// forward like a paste, then the same gates.
         func pressSendKeyAlone(_ send: SendKeyStep, to pid: pid_t) -> SendKeyOutcome {
-            let requestedAt = ProcessInfo.processInfo.systemUptime
             if !self.isInFront(pid) {
                 self.bringToFront(pid)
             }
             let wait = self.waitUntilInFront(pid)
             TypingService.logFrontmostCheck(stage: "before_send_key_alone", target: pid, waitedMs: wait.waitedMs, inFront: wait.inFront)
             guard wait.inFront else { return .targetNotInFront }
-            return self.pressSendKey(send, to: pid, since: requestedAt)
+            return self.pressSendKey(send, to: pid, focusAtPaste: .same)
         }
 
-        /// `since`: when the text went out. A key press or click after it drops the key: the
-        /// frontmost gate sees the app, not the c11 pane, and the user may have moved to another.
-        private func pressSendKey(_ send: SendKeyStep, to pid: pid_t, since: TimeInterval) -> SendKeyOutcome {
+        private func pressSendKey(_ send: SendKeyStep, to pid: pid_t, focusAtPaste: TargetFocus) -> SendKeyOutcome {
             if send.delay > 0 {
                 usleep(useconds_t(send.delay * 1_000_000))
             }
             guard send.modifiersReleased() else { return .modifiersHeld }
-            guard !send.userActedSince(since) else {
+            guard !send.userActedSince(send.inputCutoff) else {
                 DeliveryLog.bench("send_key_refused reason=user_acted pid=\(pid)")
                 return .userActed
             }
@@ -1514,6 +1565,13 @@ final class TypingService {
             guard self.isInFront(pid) else {
                 TypingService.logFrontmostCheck(stage: "before_send_key", target: pid, waitedMs: 0, inFront: false)
                 return .targetNotInFront
+            }
+            let focusNow = send.targetFocus()
+            if let refusal = TargetFocus.worst([focusAtPaste, focusNow]).outcome {
+                DeliveryLog.bench(
+                    "send_key_refused reason=\(refusal.rawValue) pid=\(pid) atPaste=\(focusAtPaste.rawValue) now=\(focusNow.rawValue)"
+                )
+                return refusal
             }
             return send.post(pid, send.key) ? .sent : .eventsUnavailable
         }
@@ -1523,7 +1581,8 @@ final class TypingService {
             to pid: pid_t,
             activateFirst: Bool,
             beforeDispatch: () -> Void,
-            makeConsumptionWait: () -> () -> Void
+            makeConsumptionWait: () -> () -> Void,
+            atDispatch: () -> Void
         ) -> TextDeliveryFailure? {
             // A Cmd+V posted to a terminal that is not in front is dropped without a trace, so
             // the terminal must really be in front before the paste, not merely asked to come.
@@ -1544,6 +1603,7 @@ final class TypingService {
                         TypingService.logFrontmostCheck(stage: "at_dispatch", target: pid, waitedMs: 0, inFront: false)
                         return false
                     }
+                    atDispatch()
                     return self.postPaste(pid)
                 },
                 makeConsumptionWait: {

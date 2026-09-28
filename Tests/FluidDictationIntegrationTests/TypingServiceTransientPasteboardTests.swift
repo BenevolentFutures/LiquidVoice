@@ -1483,13 +1483,19 @@ final class TerminalPasteThenSendTests: XCTestCase {
         log: TerminalEventLog,
         delay: TimeInterval = 0,
         modifiersReleased: Bool = true,
-        userActed: Bool = false
+        userActed: Bool = false,
+        focus: @escaping () -> TargetFocus = { .same }
     ) -> SendKeyStep {
         var step = SendKeyStep(key: .enter)
         step.delay = delay
         step.modifiersReleased = { modifiersReleased }
-        // Never the real keyboard: a key Atin presses while tests run must not change a result.
+        // Never the real keyboard or AX: a key Atin presses while tests run must not change a result.
         step.userActedSince = { _ in userActed }
+        step.targetFocus = {
+            let look = focus()
+            log.append("focus \(look.rawValue)")
+            return look
+        }
         step.post = { pid, key in
             log.append("key \(pid) \(key.rawValue)")
             return true
@@ -1518,7 +1524,11 @@ final class TerminalPasteThenSendTests: XCTestCase {
 
         XCTAssertNil(result.failure)
         XCTAssertEqual(result.sendKey, .sent)
-        XCTAssertEqual(log.events, ["paste 4242", "key 4242 enter"], "Return strictly after the paste, to the same PID, once")
+        XCTAssertEqual(
+            log.events,
+            ["focus same", "paste 4242", "focus same", "key 4242 enter"],
+            "the stop-time pane looked at right before the paste and right before the Return; Return strictly after the paste, to the same PID, once"
+        )
         let gap = (log.time(of: "key 4242 enter") ?? 0) - (log.time(of: "paste 4242") ?? 0)
         XCTAssertGreaterThanOrEqual(gap, 0.045, "the terminal gets time to take the paste in first")
         XCTAssertEqual(self.pasteboard.string(forType: .string), "before", "the clipboard still comes back")
@@ -1565,7 +1575,7 @@ final class TerminalPasteThenSendTests: XCTestCase {
 
         XCTAssertNil(result.failure, "the text landed")
         XCTAssertEqual(result.sendKey, .targetNotInFront)
-        XCTAssertEqual(log.events, ["paste 4242"], "no Return into whatever is in front now")
+        XCTAssertEqual(log.events, ["focus same", "paste 4242"], "no Return into whatever is in front now")
     }
 
     func testAFailedPasteCommandSendsNoReturn() {
@@ -1578,7 +1588,7 @@ final class TerminalPasteThenSendTests: XCTestCase {
 
         XCTAssertEqual(result.failure, .pasteCommandFailed)
         XCTAssertEqual(result.sendKey, .textNotDelivered)
-        XCTAssertEqual(log.events, ["paste 4242"])
+        XCTAssertEqual(log.events, ["focus same", "paste 4242"])
     }
 
     func testTheClipboardRaceRetryStillSendsOneReturn() {
@@ -1593,7 +1603,7 @@ final class TerminalPasteThenSendTests: XCTestCase {
         XCTAssertEqual(flaky.snapshotAttempts, 2, "the race was retried")
         XCTAssertNil(result.failure)
         XCTAssertEqual(result.sendKey, .sent)
-        XCTAssertEqual(log.events, ["paste 4242", "key 4242 enter"], "one paste, one Return")
+        XCTAssertEqual(log.events.filter { !$0.hasPrefix("focus") }, ["paste 4242", "key 4242 enter"], "one paste, one Return")
     }
 
     func testAPersistentClipboardFailureSendsNoReturn() {
@@ -1619,21 +1629,83 @@ final class TerminalPasteThenSendTests: XCTestCase {
 
         XCTAssertNil(result.failure)
         XCTAssertEqual(result.sendKey, .modifiersHeld)
-        XCTAssertEqual(log.events, ["paste 4242"])
+        XCTAssertEqual(log.events, ["focus same", "paste 4242"])
     }
 
-    func testAKeyPressOrClickAfterThePasteDropsTheReturn() {
+    func testInputAfterTheStopDropsTheReturn() {
+        let session = self.session()
+        let log = TerminalEventLog()
+        let paster = self.makePaster(session, log: log) { _ in true }
+        // Cmd+2 to another c11 tab, or a click into another pane, while it transcribed: c11 is
+        // still in front, and the pane's element may even match again by the time of the key.
+        var step = self.makeStep(log: log)
+        step.inputCutoff = 555
+        var cutoffs: [TimeInterval] = []
+        step.userActedSince = { cutoff in
+            cutoffs.append(cutoff)
+            return true
+        }
+
+        let result = self.pasteThenSend(paster, step)
+        session.waitUntilIdle()
+
+        XCTAssertNil(result.failure, "the text still lands")
+        XCTAssertEqual(result.sendKey, .userActed)
+        XCTAssertEqual(cutoffs, [555], "input is counted from the stop, not from the paste")
+        XCTAssertFalse(log.events.contains { $0.hasPrefix("key") }, "no Return into the pane the user moved to")
+    }
+
+    func testAPaneSwitchedBeforeThePasteGetsTheTextButNoReturn() {
         let session = self.session()
         let log = TerminalEventLog()
         let paster = self.makePaster(session, log: log) { _ in true }
 
-        // Cmd+2 to another c11 tab, or a click into another pane: c11 is still in front.
-        let result = self.pasteThenSend(paster, self.makeStep(log: log, userActed: true))
+        // A socket-driven focus change: no input at all, c11 in front, another pane focused.
+        let result = self.pasteThenSend(paster, self.makeStep(log: log) { .moved })
+        session.waitUntilIdle()
+
+        XCTAssertNil(result.failure, "the text lands where focus is")
+        XCTAssertEqual(result.sendKey, .focusMoved)
+        XCTAssertEqual(log.events, ["focus moved", "paste 4242", "focus moved"])
+    }
+
+    func testAPaneSwitchedBackBetweenPasteAndReturnStillGetsNoReturn() {
+        let session = self.session()
+        let log = TerminalEventLog()
+        let paster = self.makePaster(session, log: log) { _ in true }
+        // The paste went to another pane; focus came back before the Return.
+        var looks: [TargetFocus] = [.moved, .same]
+        let result = self.pasteThenSend(paster, self.makeStep(log: log) { looks.removeFirst() })
+        session.waitUntilIdle()
+
+        XCTAssertEqual(result.sendKey, .focusMoved, "the Return must not submit a draft the text never reached")
+        XCTAssertFalse(log.events.contains { $0.hasPrefix("key") })
+    }
+
+    func testAPaneSwitchedBetweenPasteAndReturnGetsNoReturn() {
+        let session = self.session()
+        let log = TerminalEventLog()
+        let paster = self.makePaster(session, log: log) { _ in true }
+        var looks: [TargetFocus] = [.same, .moved]
+        let result = self.pasteThenSend(paster, self.makeStep(log: log) { looks.removeFirst() })
         session.waitUntilIdle()
 
         XCTAssertNil(result.failure)
-        XCTAssertEqual(result.sendKey, .userActed)
-        XCTAssertEqual(log.events, ["paste 4242"], "no Return into the pane the user moved to")
+        XCTAssertEqual(result.sendKey, .focusMoved)
+        XCTAssertEqual(log.events, ["focus same", "paste 4242", "focus moved"])
+    }
+
+    func testAnUnreadableElementGetsNoReturn() {
+        let session = self.session()
+        let log = TerminalEventLog()
+        let paster = self.makePaster(session, log: log) { _ in true }
+
+        let result = self.pasteThenSend(paster, self.makeStep(log: log) { .unreadable })
+        session.waitUntilIdle()
+
+        XCTAssertNil(result.failure, "the text still lands")
+        XCTAssertEqual(result.sendKey, .focusUnreadable)
+        XCTAssertFalse(log.events.contains { $0.hasPrefix("key") })
     }
 
     func testThePhraseOnlyReturnIsBehindTheSameGate() {
@@ -1647,7 +1719,19 @@ final class TerminalPasteThenSendTests: XCTestCase {
 
         let inFront = self.makePaster(session, log: log) { _ in true }
         XCTAssertEqual(inFront.pressSendKeyAlone(self.makeStep(log: log), to: self.terminalPID), .sent)
-        XCTAssertEqual(log.events, ["key 4242 enter"], "nothing pasted, one Return")
+        XCTAssertEqual(log.events, ["focus same", "key 4242 enter"], "nothing pasted, one Return")
+
+        let otherPane = TerminalEventLog()
+        XCTAssertEqual(
+            inFront.pressSendKeyAlone(self.makeStep(log: otherPane) { .moved }, to: self.terminalPID),
+            .focusMoved,
+            "\"send it\" alone never submits another pane's draft"
+        )
+        XCTAssertEqual(
+            inFront.pressSendKeyAlone(self.makeStep(log: otherPane, userActed: true), to: self.terminalPID),
+            .userActed
+        )
+        XCTAssertFalse(otherPane.events.contains { $0.hasPrefix("key") })
     }
 }
 

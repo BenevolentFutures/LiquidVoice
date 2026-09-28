@@ -5,11 +5,17 @@ import Foundation
 //   @c679506d add spoken send commands (the parser, the "literal" escape, the countdown checks)
 //   @95fe1b15 complete spoken send after quiet countdown (no fresh-partial requirement)
 //   @60480451 hold the armed phrase across noisy partials (arming state, near-miss final parse)
-// Liquid Voice additions: a phrase followed by a question mark is part of a question, not a
-// command ("Can you send it?"); a dangling "and" / "and then" before the phrase is dropped
-// with it ("Fix the typo and send it" types "Fix the typo."); and for a terminal (c11) no
-// sentence ending is added and a trailing period is dropped, since the text is a prompt or a
-// command that is about to be submitted ("slash compact send it" types "/compact").
+// Liquid Voice additions:
+// - The phrase is part of the sentence, not a command, when a question mark follows it ("Can
+//   you send it?") or when the word before it is a negation, pronoun, modal or "to" ("but
+//   don't send it", "I'll send it", "can you send it", "want to send it"). This holds for the
+//   final parse, for arming during streaming, and for the armed near miss ("I already sent it").
+// - A dangling "and" / "and then" before the phrase goes with it ("Fix the typo and send it"
+//   types "Fix the typo.").
+// - "literal" escapes the phrase even with punctuation after it ("literal, send it").
+// - For a terminal (c11) no sentence ending is added, and only one sentence-ending period right
+//   after a letter or digit is dropped: "slash compact send it" types "/compact", "cd .. send
+//   it" keeps "cd ..", "git add . send it" keeps "git add .".
 
 nonisolated struct SpokenSendParseResult: Equatable, Sendable {
     let text: String
@@ -121,11 +127,13 @@ nonisolated enum SpokenSendParser {
             let tail = textWords.suffix(tailLength)
             let precedingWord = textWords.dropLast(tailLength).last
             if precedingWord.map({ self.normalizeWord($0.text) }) == "literal" { continue }
+            guard let firstTailWord = tail.first else { continue }
+            // "I already sent it" reports; it does not command.
+            if self.phraseIsPartOfSentence(before: text[..<firstTailWord.range.lowerBound]) { continue }
 
             let normalizedTail = tail.map { self.normalizeWord($0.text) }.joined()
             guard normalizedTail.first == normalizedPhrase.first,
-                  self.editDistance(normalizedTail, normalizedPhrase) <= tolerance,
-                  let firstTailWord = tail.first
+                  self.editDistance(normalizedTail, normalizedPhrase) <= tolerance
             else { continue }
 
             let prefix = String(text[..<firstTailWord.range.lowerBound])
@@ -146,8 +154,9 @@ nonisolated enum SpokenSendParser {
     }
 
     /// Detects the send phrase at the very end of `text` and strips it, with its punctuation.
-    /// The phrase anywhere else ("I'll send it tomorrow"), or ending a question ("Can you send
-    /// it?"), is ordinary text. "literal send it" types the phrase without sending.
+    /// The phrase anywhere else ("I'll send it tomorrow"), ending a question ("Can you send
+    /// it?"), or after a negation, pronoun, modal or "to" ("but don't send it", "I'll send
+    /// it") is ordinary text. "literal send it" types the phrase without sending.
     /// `forTerminal`: the text goes to a terminal, so no sentence ending is added.
     static func parse(_ text: String, phrase: String, enabled: Bool, forTerminal: Bool = false) -> SpokenSendParseResult {
         guard enabled else {
@@ -168,7 +177,7 @@ nonisolated enum SpokenSendParser {
         let trailingPunctuation = #"[\s\p{P}]*$"#
 
         if let literalRegex = try? NSRegularExpression(
-            pattern: #"(?i)(?<![\p{L}\p{N}_])literal\s+("# + phrasePattern + #")"# + trailingPunctuation
+            pattern: #"(?i)(?<![\p{L}\p{N}_])literal[\s\p{P}]+("# + phrasePattern + #")"# + trailingPunctuation
         ), let match = literalRegex.firstMatch(
             in: text,
             range: NSRange(text.startIndex..., in: text)
@@ -192,19 +201,34 @@ nonisolated enum SpokenSendParser {
                 phrasePattern +
                 #")*"# +
                 trailingPunctuation
-        ), let match = commandRegex.firstMatch(
-            in: text,
-            range: NSRange(text.startIndex..., in: text)
-        ), match.range.location != NSNotFound,
-        let commandRange = Range(match.range, in: text),
-        let firstPhraseRange = Range(match.range(at: 1), in: text)
-        else {
+        ) else {
+            return SpokenSendParseResult(text: text, shouldSend: false)
+        }
+        // The run of phrases that ends the text. When the sentence owns its first phrase ("I'll
+        // send it, send it"), the command is the repeat after it, if there is one.
+        var searchStart = text.startIndex
+        var found: (command: Range<String.Index>, firstPhrase: Range<String.Index>)?
+        while found == nil {
+            guard let match = commandRegex.firstMatch(in: text, range: NSRange(searchStart..., in: text)),
+                  match.range.location != NSNotFound,
+                  let commandRange = Range(match.range, in: text),
+                  let firstPhraseRange = Range(match.range(at: 1), in: text)
+            else {
+                return SpokenSendParseResult(text: text, shouldSend: false)
+            }
+            if self.phraseIsPartOfSentence(before: text[..<firstPhraseRange.lowerBound]) {
+                searchStart = firstPhraseRange.upperBound
+            } else {
+                found = (commandRange, firstPhraseRange)
+            }
+        }
+        guard let (commandRange, firstPhraseRange) = found else {
             return SpokenSendParseResult(text: text, shouldSend: false)
         }
 
         var commandPrefix = String(text[..<commandRange.lowerBound])
         if let literalPrefixRegex = try? NSRegularExpression(
-            pattern: #"(?i)(?<![\p{L}\p{N}_])literal\s*$"#
+            pattern: #"(?i)(?<![\p{L}\p{N}_])literal[\s\p{P}]*$"#
         ), let literalMatch = literalPrefixRegex.firstMatch(
             in: commandPrefix,
             range: NSRange(commandPrefix.startIndex..., in: commandPrefix)
@@ -214,6 +238,53 @@ nonisolated enum SpokenSendParser {
 
         let cleaned = Self.polishCommandPrefix(commandPrefix, forTerminal: forTerminal)
         return SpokenSendParseResult(text: cleaned, shouldSend: true)
+    }
+
+    /// Words that make the phrase right after them part of the sentence: "but don't send it",
+    /// "I'll send it", "can you send it", "want to send it". Lowercased, straight apostrophes.
+    private static let sentenceWords: Set<String> = [
+        // negations (any word ending in "n't" counts too)
+        "not", "never", "cannot", "dont", "doesnt", "didnt", "wont", "cant", "shouldnt", "wouldnt",
+        "couldnt", "isnt", "arent", "wasnt", "werent", "havent", "hasnt", "mustnt",
+        // pronouns
+        "i", "you", "we", "they", "he", "she", "me", "us", "let's", "lets",
+        "i'll", "you'll", "we'll", "they'll", "he'll", "she'll", "i'd", "you'd", "we'd", "they'd",
+        // modals, auxiliaries, "to"
+        "will", "would", "can", "could", "should", "shall", "may", "might", "must",
+        "do", "does", "did", "gonna", "wanna", "gotta", "to",
+    ]
+
+    /// Adverbs looked past on the way back: "I'll just send it", "I already sent it".
+    private static let passedOverWords: Set<String> = [
+        "just", "already", "also", "really", "actually", "probably", "definitely", "still",
+        "ever", "even", "only", "then", "now", "please",
+    ]
+
+    /// Whether the phrase that starts where `prefix` ends belongs to the sentence before it. Only
+    /// words joined to the phrase by whitespace count: punctuation ("Fix it, send it") is a
+    /// break, and a break means the phrase is a command.
+    private static func phraseIsPartOfSentence(before prefix: Substring) -> Bool {
+        func isWordCharacter(_ character: Character) -> Bool {
+            character.isLetter || character.isNumber || character == "'" || character == "’"
+        }
+        var end = prefix.endIndex
+        for _ in 0..<3 {
+            var index = end
+            while index > prefix.startIndex, prefix[prefix.index(before: index)].isWhitespace {
+                index = prefix.index(before: index)
+            }
+            let wordEnd = index
+            while index > prefix.startIndex, isWordCharacter(prefix[prefix.index(before: index)]) {
+                index = prefix.index(before: index)
+            }
+            // The start of the text, or punctuation right before: a break.
+            guard index < wordEnd else { return false }
+            let word = prefix[index..<wordEnd].lowercased().replacingOccurrences(of: "’", with: "'")
+            if self.sentenceWords.contains(word) || word.hasSuffix("n't") { return true }
+            guard self.passedOverWords.contains(word) else { return false }
+            end = index
+        }
+        return false
     }
 
     /// Whether the punctuation after the last word holds a question mark.
@@ -278,25 +349,28 @@ nonisolated enum SpokenSendParser {
     /// sentence ending where the phrase was. For a terminal, the ending is taken off instead: a
     /// command or a slash command must not be submitted with a period ("git status.").
     private static func polishCommandPrefix(_ text: String, forTerminal: Bool) -> String {
-        var polished = self.trimTrailingSeparators(text)
+        let trim: (String) -> String = { forTerminal ? self.trimTerminalTail($0) : self.trimTrailingSeparators($0) }
+        var polished = trim(text)
         // "Fix the typo and send it": the "and" joined the text to the command. Only "and" (and
         // "and then") are dropped; "then" or "so" alone can end a real sentence ("See you then").
         let prefixWords = self.words(polished)
         if let last = prefixWords.last, self.normalizeWord(last.text) == "and", last.text.allSatisfy(\.isLetter) {
-            polished = self.trimTrailingSeparators(String(polished[..<last.range.lowerBound]))
+            polished = trim(String(polished[..<last.range.lowerBound]))
         } else if prefixWords.count >= 2,
                   self.normalizeWord(prefixWords[prefixWords.count - 2].text) == "and",
                   prefixWords[prefixWords.count - 2].text.allSatisfy(\.isLetter),
                   self.normalizeWord(prefixWords[prefixWords.count - 1].text) == "then",
                   prefixWords[prefixWords.count - 1].text.allSatisfy(\.isLetter)
         {
-            polished = self.trimTrailingSeparators(String(polished[..<prefixWords[prefixWords.count - 2].range.lowerBound]))
+            polished = trim(String(polished[..<prefixWords[prefixWords.count - 2].range.lowerBound]))
         }
 
         if forTerminal {
-            while polished.last == "." {
+            // One sentence-ending period, right after a letter or digit: "Git status." submits
+            // "Git status". Never "cd ..", "git add .", or "v1.2" beyond its last period.
+            let lastTwo = Array(polished.suffix(2))
+            if lastTwo.count == 2, lastTwo[1] == ".", lastTwo[0].isLetter || lastTwo[0].isNumber {
                 polished.removeLast()
-                polished = self.trimTrailingSeparators(polished)
             }
             return polished
         }
@@ -307,6 +381,21 @@ nonisolated enum SpokenSendParser {
             return polished
         }
         return polished + "."
+    }
+
+    /// The terminal version of `trimTrailingSeparators`: the transcriber's dashes go, and so does
+    /// a comma, semicolon, colon or hyphen stuck to the word before it ("README," "Ready:"), but
+    /// one standing alone after a space is an argument and stays ("cd -", "git log :").
+    private static func trimTerminalTail(_ text: String) -> String {
+        var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        while let last = trimmed.last {
+            let before = trimmed.dropLast().last
+            let stuckToWord = before.map { $0.isLetter || $0.isNumber } ?? false
+            guard last == "—" || last == "–" || (stuckToWord && [",", ";", ":", "-"].contains(last)) else { break }
+            trimmed.removeLast()
+            trimmed = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return trimmed
     }
 
     private static func trimTrailingSeparators(_ text: String) -> String {

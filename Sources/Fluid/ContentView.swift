@@ -2079,8 +2079,10 @@ struct ContentView: View {
         let stopTargetCapture: Task<DictationTarget?, Never>? = route == .normal && !wasRewriteMode && !wasCommandMode && !promptTest.isActive
             ? self.beginDictationStopTargetCapture()
             : nil
-        // Spoken Send's state as dictation stops, for the same reason.
+        // Spoken Send's state as dictation stops, for the same reason. Its chip goes with this
+        // dictation on every way out below.
         let spokenSendStop = SpokenSendController.shared.beginStop()
+        defer { SpokenSendController.shared.endStop(spokenSendStop) }
         DebugLogger.shared.info(
             "Routing decision snapshot | activeMode=\(modeAtStop.rawValue) | rewrite=\(wasRewriteMode) | command=\(wasCommandMode) | overlay=\(NotchContentState.shared.mode.rawValue)",
             source: "ContentView"
@@ -2205,6 +2207,7 @@ struct ContentView: View {
         let appInfo = self.recordingAppInfo ?? self.getCurrentAppInfo()
         // Spoken Send: a send phrase ending the dictation is stripped here, before AI cleanup;
         // it decides at delivery below whether a key follows the text.
+        let spokenSendTarget = await stopTargetCapture?.value
         let spokenSend = SpokenSendController.shared.finishDictation(
             ASRService.applySpokenPunctuationFormatting(
                 transcribedText,
@@ -2213,12 +2216,14 @@ struct ContentView: View {
                 windowTitle: appInfo.windowTitle
             ),
             stop: spokenSendStop,
+            target: spokenSendTarget,
             isNormalRoute: route == .normal
         )
         if spokenSend.isPhraseOnly {
             await self.finishPhraseOnlyDictation(
                 spokenSend,
-                stopTarget: await stopTargetCapture?.value,
+                stopTarget: spokenSendTarget,
+                stoppedAt: spokenSendStop.stoppedAt,
                 didRequestOverlayHideOnStop: didRequestOverlayHideOnStop
             )
             return
@@ -2439,7 +2444,12 @@ struct ContentView: View {
             )
             let isInHistory = shouldPersistOutputs && SettingsStore.shared.saveTranscriptionHistory
             if isTargetReady,
-               let sendKey = SpokenSendController.shared.sendKeyRequest(for: spokenSend, target: stopTarget, aiFailed: aiFallbackReason != nil)
+               let sendKey = SpokenSendController.shared.sendKeyRequest(
+                   for: spokenSend,
+                   target: stopTarget,
+                   aiFailed: aiFallbackReason != nil,
+                   stoppedAt: spokenSendStop.stoppedAt
+               )
             {
                 // Spoken Send: the text, then the key, in the same target (see SpokenSendController).
                 SpokenSendController.shared.deliver(finalOutputPlan, sendKey: sendKey, textReadyAt: finalTextReadyAt, transcriptInHistory: isInHistory)
@@ -2495,6 +2505,9 @@ struct ContentView: View {
                 recordingApp: {
                     self.recordingAppInfo.map { (bundleIdentifier: $0.bundleId, name: $0.name) }
                 },
+                isHoldingShortcut: {
+                    self.hotkeyManager?.isHoldingDictationShortcut ?? false
+                },
                 stopAndProcess: {
                     if let hotkeyManager = self.hotkeyManager {
                         hotkeyManager.requestStopAndProcess()
@@ -2512,9 +2525,15 @@ struct ContentView: View {
     private func finishPhraseOnlyDictation(
         _ spokenSend: SpokenSendDecision,
         stopTarget: DictationTarget?,
+        stoppedAt: TimeInterval,
         didRequestOverlayHideOnStop: Bool
     ) async {
-        if let sendKey = SpokenSendController.shared.sendKeyRequest(for: spokenSend, target: stopTarget, aiFailed: false) {
+        if let sendKey = SpokenSendController.shared.sendKeyRequest(
+            for: spokenSend,
+            target: stopTarget,
+            aiFailed: false,
+            stoppedAt: stoppedAt
+        ) {
             let preparation = await TypingService.prepareTargetForDelivery(sendKey.target)
             self.appBench("stop_target_prepare pid=\(sendKey.target.pid) result=\(preparation.rawValue) phraseOnly=true")
             if preparation.isReady {

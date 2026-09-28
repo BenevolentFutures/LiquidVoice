@@ -2030,7 +2030,7 @@ private extension SettingsView {
 
                     self.optionToggleRow(
                         title: "Send After a Pause",
-                        description: "Once the phrase ends what you said, stop listening after a second and a half of quiet and send. Keep talking, or click the plane on the overlay, to cancel.",
+                        description: "Once the phrase ends what you said, stop listening after a second and a half of quiet and send. Keep talking, or click the plane on the overlay, to cancel. Not while you hold the dictation key: letting go ends it.",
                         isOn: Binding(
                             get: { self.settings.spokenSendImmediatelyEnabled },
                             set: { self.settings.spokenSendImmediatelyEnabled = $0 }
@@ -2065,7 +2065,7 @@ private extension SettingsView {
 
                     self.optionToggleRow(
                         title: "Allow in c11",
-                        description: "Press Return in c11, for example to submit a Claude Code prompt. Other terminals never get it: Return there runs a shell command. The phrase is left out either way.",
+                        description: "Press Return in c11, for example to submit a Claude Code prompt. Only in the pane you stopped in, and not if you type or click before it goes. Other terminals never get it: Return there runs a shell command. The phrase is left out either way.",
                         isOn: Binding(
                             get: { self.settings.spokenSendAllowsC11 },
                             set: { self.settings.spokenSendAllowsC11 = $0 }

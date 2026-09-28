@@ -2556,6 +2556,17 @@ final class GlobalHotkeyManager: NSObject {
         }
     }
 
+    /// Whether a dictation shortcut is held down in hold or automatic mode, so letting go ends
+    /// the recording. Spoken Send's pause countdown stays off while it is. A quick tap in
+    /// automatic mode has been released by then, and counts as toggle.
+    var isHoldingDictationShortcut: Bool {
+        guard self.hotkeyMode != .toggle else { return false }
+        return self.state.withLock {
+            self.state.isKeyPressed || self.state.isPromptModeKeyPressed || self.state.isPromptAssignmentKeyPressed
+                || self.state.activePrimaryShortcutPress != nil
+        }
+    }
+
     /// Stops the recording and processes it exactly as the stop hotkey does, through the same
     /// in-progress guard, so a stop requested by Spoken Send's quiet countdown and one from the
     /// hotkey can never both run.

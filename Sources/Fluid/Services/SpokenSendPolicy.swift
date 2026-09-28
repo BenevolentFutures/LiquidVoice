@@ -26,12 +26,10 @@ nonisolated enum SpokenSendPolicy {
         }
     }
 
-    /// Checked before the block list: c11 and its own builds ("com.stage11.c11.<variant>").
-    static let c11BundleIdentifier = "com.stage11.c11"
-
+    /// Checked before the block list, with the paste path's own c11 predicate
+    /// (`TypingService.isC11`: c11, its build variants, and the legacy c11mux).
     static func isC11(bundleIdentifier: String?) -> Bool {
-        guard let bundleIdentifier else { return false }
-        return bundleIdentifier == self.c11BundleIdentifier || bundleIdentifier.hasPrefix(self.c11BundleIdentifier + ".")
+        TypingService.isC11(bundleIdentifier: bundleIdentifier)
     }
 
     /// Upstream's block list, matched against "<app name> <bundle ID>" in lowercase.
@@ -70,8 +68,36 @@ nonisolated enum SpokenSendPolicy {
 /// The key Spoken Send presses after a delivery, and the destination it belongs to.
 nonisolated struct SendKeyRequest: @unchecked Sendable {
     let key: SettingsStore.SpokenSendKey
-    /// The destination chosen when dictation stopped. The key goes to its PID only.
+    /// The destination chosen when dictation stopped. The key goes to its PID only, and only
+    /// while its focused element (a c11 pane, a text field) is still the one focused then.
     let target: DictationTarget
+    /// When dictation stopped (system uptime). Any key press or click after it drops the key:
+    /// the user may have moved to another pane or field (Cmd+2, a click) while it transcribed.
+    let stoppedAt: TimeInterval
+}
+
+/// Whether the element focused when dictation stopped is still the focused one.
+nonisolated enum TargetFocus: String, Equatable, Sendable {
+    case same
+    /// Another element has focus: another c11 pane, another field.
+    case moved
+    /// No element was captured at stop, or the focused element cannot be read now.
+    case unreadable
+
+    /// The send key goes only when every look found the same element.
+    static func worst(_ looks: [TargetFocus]) -> TargetFocus {
+        if looks.contains(.moved) { return .moved }
+        if looks.contains(.unreadable) { return .unreadable }
+        return .same
+    }
+
+    var outcome: SendKeyOutcome? {
+        switch self {
+        case .same: nil
+        case .moved: .focusMoved
+        case .unreadable: .focusUnreadable
+        }
+    }
 }
 
 /// What became of the send key. Only `.sent` means a key was posted.
@@ -87,9 +113,16 @@ nonisolated enum SendKeyOutcome: String, Equatable, Sendable {
     case secureField = "secure_field"
     /// A modifier key was still held: the key would have become a shortcut.
     case modifiersHeld = "modifiers_held"
-    /// The user pressed a key or clicked after the text went out (another c11 pane, say): the
-    /// key could land where they moved to, so it is dropped.
+    /// The user pressed a key or clicked after dictation stopped (Cmd+2 to another c11 tab, a
+    /// click into another pane): the key could land where they moved to, so it is dropped.
+    /// Liquid Voice's own keystrokes posted to a process do not count; a paste or typing that
+    /// fell back to the global event stream does, and drops the key too.
     case userActed = "user_acted"
+    /// The element focused at stop no longer has focus (another c11 pane, another field).
+    case focusMoved = "focus_moved"
+    /// No element was captured at stop, or the focused element cannot be read: the key cannot
+    /// be shown to be going where the text was meant to go.
+    case focusUnreadable = "focus_unreadable"
     /// The delivery went to another process than the send key's target.
     case targetMismatch = "target_mismatch"
     case eventsUnavailable = "events_unavailable"
@@ -141,20 +174,33 @@ nonisolated struct SendKeyStep {
 
     let key: SettingsStore.SpokenSendKey
     var delay: TimeInterval = SendKeyStep.defaultDelay
+    /// When dictation stopped: input after it drops the key.
+    var inputCutoff: TimeInterval = ProcessInfo.processInfo.systemUptime
     /// Waits briefly for the physical modifier keys to be released; false when still held.
     var modifiersReleased: () -> Bool = { TypingService.waitForPhysicalModifierRelease(timeout: SendKeyStep.modifierReleaseTimeout) }
-    /// Whether the user pressed a key or clicked since the given system uptime (the paste).
-    /// Modifier presses and mouse moves do not count.
-    var userActedSince: (TimeInterval) -> Bool = { since in
+    /// Whether the user pressed a key or clicked since the given system uptime. Modifier presses
+    /// and mouse moves do not count; keystrokes posted to a process do not either.
+    var userActedSince: (TimeInterval) -> Bool = { cutoff in
         PasteVerifier.userActedAfterPaste(
             secondsSinceLastInput: PasteVerifier.secondsSinceLastUserInput(),
-            secondsSincePaste: ProcessInfo.processInfo.systemUptime - since
+            secondsSincePaste: ProcessInfo.processInfo.systemUptime - cutoff
         )
     }
+    /// Whether the element focused at stop is still focused. Unconfigured, it is never shown to
+    /// be, so a step built without a target presses nothing.
+    var targetFocus: () -> TargetFocus = { .unreadable }
     /// Posts key down and key up to the PID; false when the events could not be made.
     var post: (pid_t, SettingsStore.SpokenSendKey) -> Bool = { SendKeyEvents.post($1, to: $0) }
 
     init(key: SettingsStore.SpokenSendKey) {
         self.key = key
+    }
+
+    /// The step for a request: its key, its stop time, and its stop-time element.
+    init(request: SendKeyRequest) {
+        self.key = request.key
+        self.inputCutoff = request.stoppedAt
+        let target = request.target
+        self.targetFocus = { TypingService.stopTimeFocus(of: target) }
     }
 }

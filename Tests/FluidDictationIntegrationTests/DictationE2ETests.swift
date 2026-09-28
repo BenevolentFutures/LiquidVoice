@@ -2861,3 +2861,24 @@ final class DictationStreamingFallbackPolicyTests: XCTestCase {
         XCTAssertFalse(DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: CancellationError()))
     }
 }
+
+@MainActor
+final class TranscriptionTimeoutTests: XCTestCase {
+    func testTheWaitForAStalledPreviewScalesWithTheRecording() {
+        XCTAssertEqual(ASRService.streamingChunkDrainTimeoutNanoseconds(forSampleCount: 16_000 * 8), 30_000_000_000)
+        XCTAssertEqual(ASRService.streamingChunkDrainTimeoutNanoseconds(forSampleCount: 16_000 * 60), 30_000_000_000)
+        XCTAssertEqual(ASRService.streamingChunkDrainTimeoutNanoseconds(forSampleCount: 16_000 * 600), 300_000_000_000)
+    }
+
+    func testTheTimeoutCardOffersReprocessOnlyWhenAudioIsKept() {
+        let controller = DeliveryFailureOverlayController.shared
+        controller.showTranscriptionTimeout(.timedOut)
+        XCTAssertEqual(controller.presentedTimeout, .timedOut)
+        XCTAssertNil(controller.presentedFailure)
+        controller.showTranscriptionTimeout(.recordingRefused(hasKeptAudio: false))
+        XCTAssertEqual(controller.presentedTimeout, .recordingRefused(hasKeptAudio: false))
+        controller.hide()
+        XCTAssertNil(controller.presentedTimeout)
+        XCTAssertEqual(TestHostQuietModeTests.onScreenWindowCount(), 0)
+    }
+}

@@ -2757,6 +2757,17 @@ struct ContentView: View {
     }
 
     private func reprocessLastDictation() {
+        // The last dictation timed out in the model: its audio was kept, so transcribe it now
+        // (unless a newer dictation has been saved since).
+        if let keptAt = self.asr.keptUntranscribedDictationStoppedAt,
+           keptAt > (TranscriptionHistoryStore.shared.entries.first?.timestamp ?? .distantPast)
+        {
+            Task { @MainActor in
+                await self.reprocessKeptDictationAudio()
+            }
+            return
+        }
+
         if let pendingText = self.pendingAIReprocessText?.trimmingCharacters(in: .whitespacesAndNewlines),
            !pendingText.isEmpty
         {
@@ -2781,6 +2792,28 @@ struct ContentView: View {
         DebugLogger.shared.info("Actions: Reprocessing latest dictation history entry", source: "ContentView")
         Task { @MainActor in
             await self.reprocessDictationText(rawText)
+        }
+    }
+
+    /// Reprocess for a dictation whose transcription timed out: transcribe its kept audio, then
+    /// finish it like any reprocess (formatting, AI cleanup, typing, history).
+    private func reprocessKeptDictationAudio() async {
+        guard !self.asr.isRecoveringFromStalledTranscription else {
+            DebugLogger.shared.info("Actions: kept dictation not reprocessed; the model is still recovering", source: "ContentView")
+            ASRService.transcriptionTimeoutHandler(.reprocessUnavailable)
+            return
+        }
+        do {
+            guard let text = try await self.asr.transcribeKeptUntranscribedDictation(),
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else {
+                DebugLogger.shared.info("Actions: kept dictation transcribed to nothing", source: "ContentView")
+                return
+            }
+            await self.reprocessDictationText(text)
+        } catch {
+            DebugLogger.shared.error("Actions: kept dictation could not be transcribed: \(error.localizedDescription)", source: "ContentView")
+            ASRService.transcriptionTimeoutHandler(.reprocessUnavailable)
         }
     }
 

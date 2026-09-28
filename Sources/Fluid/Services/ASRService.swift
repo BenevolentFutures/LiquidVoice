@@ -1352,7 +1352,50 @@ final class ASRService: ObservableObject {
     /// A streaming chunk never came back from the model; until it does, starts are refused so
     /// no recording is lost behind it.
     private var isRecoveringStalledStreamingChunk = false
-    private static let streamingChunkDrainTimeoutNanoseconds: UInt64 = 30_000_000_000
+    /// The audio of a dictation whose transcription timed out behind a stalled preview chunk,
+    /// kept (in memory) so Reprocess can transcribe it once the model is back.
+    private var keptUntranscribedDictation: (audio: DictationAudioSnapshot, stoppedAt: Date)?
+
+    /// How long a stop waits for a preview chunk still on the model: 30 s, or half the recording's
+    /// length for long recordings (a chunk re-transcribes everything recorded so far).
+    nonisolated static func streamingChunkDrainTimeoutNanoseconds(forSampleCount sampleCount: Int) -> UInt64 {
+        let recordingSeconds = Double(sampleCount) / 16_000
+        return UInt64(max(30, recordingSeconds * 0.5) * 1_000_000_000)
+    }
+
+    /// Where a transcription timeout is announced. The app shows the overlay card (with
+    /// Reprocess); tests replace it.
+    static var transcriptionTimeoutHandler: @MainActor (TranscriptionTimeoutNotice) -> Void = { notice in
+        DeliveryFailureOverlayController.shared.showTranscriptionTimeout(notice)
+    }
+
+    /// Whether a timed-out dictation's audio is waiting to be transcribed, and when it stopped.
+    var keptUntranscribedDictationStoppedAt: Date? {
+        self.keptUntranscribedDictation?.stoppedAt
+    }
+
+    /// The model has not yet returned a preview chunk that stalled; recording waits for it.
+    var isRecoveringFromStalledTranscription: Bool {
+        self.isRecoveringStalledStreamingChunk
+    }
+
+    /// Transcribes the kept audio of a timed-out dictation, and forgets it once that worked.
+    /// Nil when there is none. Throws while the model is still recovering.
+    func transcribeKeptUntranscribedDictation() async throws -> String? {
+        guard let kept = self.keptUntranscribedDictation else { return nil }
+        guard !self.isRecoveringStalledStreamingChunk else {
+            throw NSError(domain: "ASRService", code: -7, userInfo: [NSLocalizedDescriptionKey: "Speech recognition is still recovering."])
+        }
+        let result = try await self.transcribeSamplesForAPI(kept.audio.samples)
+        if self.keptUntranscribedDictation?.stoppedAt == kept.stoppedAt {
+            self.keptUntranscribedDictation = nil
+        }
+        DebugLogger.shared.info(
+            "Kept dictation transcribed audioMs=\(kept.audio.durationMilliseconds) chars=\(result.text.count)",
+            source: "ASRService"
+        )
+        return result.text
+    }
     private var lastProcessedSampleCount: Int = 0
     private var isProcessingChunk: Bool = false
     private var skipNextChunk: Bool = false
@@ -1976,8 +2019,11 @@ final class ASRService: ObservableObject {
             return .failed
         }
         guard !self.isRecoveringStalledStreamingChunk else {
+            // A new final pass would queue behind the stalled chunk on the model and never
+            // return, so no recording starts until it is back. Said on the overlay, not in a
+            // main-window alert nobody sees.
             DebugLogger.shared.warning("START() blocked - the speech model has not returned a stalled preview yet", source: "ASRService")
-            self.presentStalledStreamingError()
+            Self.transcriptionTimeoutHandler(.recordingRefused(hasKeptAudio: self.keptUntranscribedDictation != nil))
             return .failed
         }
         self.audioCaptureStartGeneration &+= 1
@@ -2737,12 +2783,18 @@ final class ASRService: ObservableObject {
         // The streaming loop was cancelled at the top of stop(). An idle loop (between previews)
         // needs no waiting at all; a chunk mid-inference is waited for, since the final pass
         // queues behind it on the model anyway, but never forever: a chunk that does not come
-        // back within 30 s means the model is wedged, and this dictation fails visibly instead
-        // of hanging the stop (and every hotkey) behind it.
+        // back in time (30 s, more for long recordings) means the model is wedged. Then the stop
+        // returns instead of hanging (and every hotkey behind it), the audio is kept for
+        // Reprocess, and the overlay says so.
         let streamingStopStartedAt = Date().timeIntervalSince1970
         if streamingChunkInFlight, self.isProcessingChunk {
-            guard await self.waitForInFlightStreamingChunk(timeoutNanoseconds: Self.streamingChunkDrainTimeoutNanoseconds) else {
-                self.beginStalledStreamingRecovery()
+            let timeout = Self.streamingChunkDrainTimeoutNanoseconds(forSampleCount: self.audioBuffer.count)
+            guard await self.waitForInFlightStreamingChunk(timeoutNanoseconds: timeout) else {
+                // The buffer is lock-guarded, and the stalled chunk works on its own copy.
+                let kept = DictationAudioSnapshot(samples: self.audioBuffer.getAll(), sampleRate: 16_000, channels: 1)
+                self.audioBuffer.clear()
+                self.keptUntranscribedDictation = (kept, Date())
+                self.beginStalledStreamingRecovery(keptAudioMs: kept.durationMilliseconds)
                 self.timingLog("stop_end result=error reason=streaming_chunk_stalled")
                 return ""
             }
@@ -5122,10 +5174,10 @@ final class ASRService: ObservableObject {
         waiters.forEach { $0.resume() }
         if self.isRecoveringStalledStreamingChunk {
             self.isRecoveringStalledStreamingChunk = false
-            DebugLogger.shared.info("Stalled streaming chunk returned; recording is available again", source: "ASRService")
-            if self.errorMessage == Self.stalledStreamingMessage {
-                self.errorMessage = "The speech model has recovered. Please record your dictation again."
-            }
+            DebugLogger.shared.info(
+                "Stalled streaming chunk returned; recording is available again keptAudio=\(self.keptUntranscribedDictation != nil)",
+                source: "ASRService"
+            )
         }
     }
 
@@ -5474,24 +5526,26 @@ private extension ASRService {
         return !outcome.timedOut
     }
 
-    /// The model kept a streaming chunk for 30 s: this dictation cannot be transcribed, and
-    /// starts are refused until the chunk returns (finishStreamingChunk ends the recovery).
-    func beginStalledStreamingRecovery() {
+    /// A preview chunk did not come back in time: this dictation's audio is kept for Reprocess,
+    /// and starts are refused until the chunk returns (finishStreamingChunk ends the recovery).
+    func beginStalledStreamingRecovery(keptAudioMs: Int) {
         self.isRecoveringStalledStreamingChunk = true
-        DebugLogger.shared.error("Streaming chunk did not return within 30 s; dictation dropped until the model recovers", source: "ASRService")
-        self.presentStalledStreamingError()
+        DebugLogger.shared.error(
+            "Streaming chunk did not return in time; dictation kept for Reprocess audioMs=\(keptAudioMs)",
+            source: "ASRService"
+        )
+        Self.transcriptionTimeoutHandler(.timedOut)
     }
+}
 
-    func presentStalledStreamingError() {
-        self.errorTitle = "Speech recognition needs recovery"
-        self.errorMessage = Self.stalledStreamingMessage
-        self.showError = true
-    }
-
-    static var stalledStreamingMessage: String {
-        "Speech recognition took too long to finish, so this recording could not be transcribed. " +
-            "Wait for the model to recover, or restart Liquid Voice before recording again."
-    }
+/// What the transcription-timeout card says.
+nonisolated enum TranscriptionTimeoutNotice: Equatable, Sendable {
+    /// A dictation's transcription timed out; its audio is kept for Reprocess.
+    case timedOut
+    /// A recording was refused because the model has not recovered yet.
+    case recordingRefused(hasKeptAudio: Bool)
+    /// Reprocess could not transcribe the kept audio yet (the model is not back); it stays kept.
+    case reprocessUnavailable
 }
 
 @MainActor

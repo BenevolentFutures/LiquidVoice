@@ -2473,3 +2473,50 @@ final class SimpleUpdaterTests: XCTestCase {
         XCTAssertTrue(gate.begin())
     }
 }
+
+/// The test host must stay invisible and silent on the operator's machine (see CLAUDE.md).
+@MainActor
+final class TestHostQuietModeTests: XCTestCase {
+    func testQuietModeIsDetectedUnderXCTest() {
+        XCTAssertTrue(TestHostQuietMode.isActive, "XCTest hosts the app, so quiet mode must be on")
+        XCTAssertTrue(TestHostQuietMode.detect(environment: ["XCTestConfigurationFilePath": "/tmp/x"], arguments: []))
+        XCTAssertTrue(TestHostQuietMode.detect(environment: [:], arguments: ["app", "-LiquidVoiceQuietMode", "YES"]))
+        XCTAssertFalse(TestHostQuietMode.detect(environment: [:], arguments: ["app", "-LiquidVoiceQuietMode", "NO"]))
+        XCTAssertFalse(TestHostQuietMode.detect(environment: [:], arguments: ["app"]))
+    }
+
+    func testTestHostNeverActivatesShowsWindowsOrPlaysSound() async throws {
+        XCTAssertEqual(TestHostQuietMode.activationPolicy(.regular), .prohibited)
+        // Launch-time policy changes are applied asynchronously; let them land.
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(NSApp.activationPolicy(), .prohibited)
+
+        let panel = NSPanel(
+            contentRect: NSRect(x: 200, y: 200, width: 120, height: 60),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        panel.orderFrontRegardless()
+        panel.makeKeyAndOrderFront(nil)
+        panel.orderFront(nil)
+        panel.setIsVisible(true)
+        XCTAssertFalse(panel.isVisible, "Quiet mode must swallow every way onto the screen")
+        panel.close()
+
+        TranscriptionSoundPlayer.shared.playStartSound()
+        TranscriptionSoundPlayer.shared.playStopSound()
+        OnboardingSoundPlayer.shared.playWelcomeSound()
+        XCTAssertEqual(TranscriptionSoundPlayer.shared.createdPlayerCount, 0)
+        XCTAssertFalse(OnboardingSoundPlayer.shared.hasCreatedPlayer)
+
+        XCTAssertEqual(Self.onScreenWindowCount(), 0, "The test host owns a window on screen")
+    }
+
+    /// Windows this process has on screen right now, as the window server sees them.
+    static func onScreenWindowCount() -> Int {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+        return windows.filter { ($0[kCGWindowOwnerPID as String] as? pid_t) == pid }.count
+    }
+}

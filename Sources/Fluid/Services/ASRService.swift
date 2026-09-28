@@ -1671,7 +1671,8 @@ final class ASRService: ObservableObject {
     }
 
     func requestMicAccess() {
-        guard self.isRequestingMicrophoneAccess == false else { return }
+        // The XCTest host never raises a system permission prompt.
+        guard self.isRequestingMicrophoneAccess == false, !TestHostQuietMode.isActive else { return }
         self.isRequestingMicrophoneAccess = true
         Task { @MainActor [weak self] in
             await AudioStartupGate.shared.scheduleOpenAfterInitialUISettled()

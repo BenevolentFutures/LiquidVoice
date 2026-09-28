@@ -69,6 +69,8 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
 
     func initializeMenuBar() {
         guard !self.isSetup else { return }
+        // The XCTest host shows nothing, a menu bar item included.
+        guard !TestHostQuietMode.isActive else { return }
 
         // Ensure we're on main thread and app is active
         DispatchQueue.main.async { [weak self] in

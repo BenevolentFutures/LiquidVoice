@@ -143,7 +143,9 @@ final class NotchOverlayManager {
             return nil // Consume the event
         }
 
-        // Global monitor - catches the cancel shortcut when OTHER apps have focus
+        // Global monitor - catches the cancel shortcut when OTHER apps have focus. Never in the
+        // XCTest host: the operator's own keystrokes must not reach tests.
+        guard !TestHostQuietMode.isActive else { return }
         self.globalEscapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
             _ = escapeHandler(event)
         }

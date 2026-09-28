@@ -17,6 +17,8 @@ struct FluidApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     init() {
+        // As the XCTest host, stay invisible and silent (see TestHostQuietMode).
+        TestHostQuietMode.install()
         // Use the shared singleton instance
         _appServices = StateObject(wrappedValue: AppServices.shared)
     }

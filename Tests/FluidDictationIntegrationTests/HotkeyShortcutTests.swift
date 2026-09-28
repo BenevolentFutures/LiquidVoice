@@ -436,8 +436,10 @@ final class HotkeyShortcutTests: XCTestCase {
     }
 
     func testMicrophoneChangeAlertsSupportProductionAndDebugAppsOnly() {
-        XCTAssertTrue(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.FluidApp.app"))
-        XCTAssertTrue(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.FluidApp.app.dev"))
+        XCTAssertTrue(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.stage11.liquidvoice"))
+        XCTAssertTrue(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.stage11.liquidvoice.dev"))
+        // FluidVoice's identifier is another app now.
+        XCTAssertFalse(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.FluidApp.app"))
         XCTAssertFalse(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.example.tests"))
         XCTAssertFalse(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: nil))
     }

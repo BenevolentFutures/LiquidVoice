@@ -28,6 +28,7 @@
 		7CFA1D0B2F500000C0DEF001 /* TypingServiceTransientPasteboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CFA1D0B2F500000C0DEF002 /* TypingServiceTransientPasteboardTests.swift */; };
 		803000000000000000000002 /* MediaPlaybackServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803000000000000000000001 /* MediaPlaybackServiceTests.swift */; };
 		5E0D5E0D0000000000000002 /* SpokenSendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E0D5E0D0000000000000001 /* SpokenSendTests.swift */; };
+		A1D3A1D30000000000000002 /* AppIdentityMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D3A1D30000000000000001 /* AppIdentityMigrationTests.swift */; };
 		803000000000000000000003 /* MediaRemoteAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = 803000000000000000000004 /* MediaRemoteAdapter */; };
 		7CDB0A2F2F3C4D5600FB7CAD /* dictation_fixture.wav in Resources */ = {isa = PBXBuildFile; fileRef = 7CDB0A2B2F3C4D5600FB7CAD /* dictation_fixture.wav */; };
 		7CDB0A302F3C4D5600FB7CAD /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7CDB0A2C2F3C4D5600FB7CAD /* XCTest.framework */; };
@@ -77,6 +78,7 @@
 		7CFA1D0B2F500000C0DEF002 /* TypingServiceTransientPasteboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingServiceTransientPasteboardTests.swift; sourceTree = "<group>"; };
 		803000000000000000000001 /* MediaPlaybackServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlaybackServiceTests.swift; sourceTree = "<group>"; };
 		5E0D5E0D0000000000000001 /* SpokenSendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpokenSendTests.swift; sourceTree = "<group>"; };
+		A1D3A1D30000000000000001 /* AppIdentityMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIdentityMigrationTests.swift; sourceTree = "<group>"; };
 		7CDB0A2A2F3C4D5600FB7CAD /* AudioFixtureLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFixtureLoader.swift; sourceTree = "<group>"; };
 		7CDB0A2B2F3C4D5600FB7CAD /* dictation_fixture.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = dictation_fixture.wav; sourceTree = "<group>"; };
 		7CDB0A2C2F3C4D5600FB7CAD /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework; sourceTree = DEVELOPER_DIR; };
@@ -161,6 +163,7 @@
 				7CFA1D0B2F500000C0DEF002 /* TypingServiceTransientPasteboardTests.swift */,
 				803000000000000000000001 /* MediaPlaybackServiceTests.swift */,
 				5E0D5E0D0000000000000001 /* SpokenSendTests.swift */,
+				A1D3A1D30000000000000001 /* AppIdentityMigrationTests.swift */,
 			);
 			path = FluidDictationIntegrationTests;
 			sourceTree = "<group>";
@@ -332,6 +335,7 @@
 				7CFA1D0B2F500000C0DEF001 /* TypingServiceTransientPasteboardTests.swift in Sources */,
 				803000000000000000000002 /* MediaPlaybackServiceTests.swift in Sources */,
 				5E0D5E0D0000000000000002 /* SpokenSendTests.swift in Sources */,
+				A1D3A1D30000000000000002 /* AppIdentityMigrationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -510,7 +514,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.5.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.FluidApp.app.dev;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stage11.liquidvoice.dev;
 				PRODUCT_NAME = "Liquid Voice Debug";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -565,7 +569,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.5.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.FluidApp.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stage11.liquidvoice;
 				PRODUCT_NAME = "Liquid Voice";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -598,7 +602,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.FluidApp.FluidDictationIntegrationTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stage11.liquidvoice.tests;
 				PRODUCT_NAME = FluidDictationIntegrationTests;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_VERSION = 5.0;
@@ -623,7 +627,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.FluidApp.FluidDictationIntegrationTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stage11.liquidvoice.tests;
 				PRODUCT_NAME = FluidDictationIntegrationTests;
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FluidVoice.app/Contents/MacOS/FluidVoice";

@@ -4,7 +4,7 @@ import Foundation
 final class TranscriptionSoundPlayer {
     static let shared = TranscriptionSoundPlayer()
 
-    private let playbackQueue = DispatchQueue(label: "app.fluidvoice.transcription-sounds", qos: .userInteractive)
+    private let playbackQueue = DispatchQueue(label: "com.stage11.liquidvoice.transcription-sounds", qos: .userInteractive)
     private var players: [String: AVAudioPlayer] = [:]
 
     private init() {}

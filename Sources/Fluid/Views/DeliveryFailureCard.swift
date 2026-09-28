@@ -17,6 +17,7 @@ final class DeliveryFailureOverlayController {
 
     static let displayDuration: TimeInterval = 10
     static let accessibilitySettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+    static let microphoneSettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
 
     private var panel: NSPanel?
     private var hostingView: NSHostingView<DeliveryFailureCardView>?
@@ -29,6 +30,7 @@ final class DeliveryFailureOverlayController {
     private(set) var presentedFailure: TextDeliveryFailure?
     private(set) var presentedTranscript: String?
     private(set) var presentedTimeout: TranscriptionTimeoutNotice?
+    private(set) var presentedMicrophoneAccessNeeded = false
 
     private init() {}
 
@@ -111,6 +113,30 @@ final class DeliveryFailureOverlayController {
         DebugLogger.shared.info("Transcription timeout card shown notice=\(notice)", source: "DeliveryFailureCard")
     }
 
+    /// A dictation hotkey pressed while macOS denies the microphone: recording cannot start, so
+    /// say so where the overlay would have appeared, with a way to the Microphone settings.
+    func showMicrophoneAccessNeeded() {
+        self.present(DeliveryFailureCardView(
+            title: "Microphone access is off",
+            transcript: "",
+            message: "macOS doesn't let \(Bundle.main.fluidAppDisplayName) use the microphone, so recording didn't start.",
+            detail: "Turn it on in Privacy & Security > Microphone.",
+            offersAccessibilitySettings: true,
+            settingsHelp: "Open Microphone Settings",
+            primaryAction: .none,
+            iconName: "mic.slash.fill",
+            onCopy: {},
+            onOpenSettings: { [weak self] in
+                if let url = Self.microphoneSettingsURL { NSWorkspace.shared.open(url) }
+                self?.hide()
+            },
+            onDismiss: { [weak self] in self?.hide() },
+            onHoverChanged: { [weak self] hovering in self?.hoverChanged(hovering) }
+        ))
+        self.presentedMicrophoneAccessNeeded = true
+        DebugLogger.shared.info("Microphone access card shown", source: "DeliveryFailureCard")
+    }
+
     private func present(_ rootView: DeliveryFailureCardView) {
         self.generation &+= 1
         self.dismissTask?.cancel()
@@ -118,6 +144,7 @@ final class DeliveryFailureOverlayController {
         self.presentedFailure = nil
         self.presentedTranscript = nil
         self.presentedTimeout = nil
+        self.presentedMicrophoneAccessNeeded = false
         // A fresh hosting view per card: the view's own state (Copied, hover) must never carry
         // over from the previous card.
         if self.panel == nil {
@@ -155,6 +182,7 @@ final class DeliveryFailureOverlayController {
         self.presentedFailure = nil
         self.presentedTranscript = nil
         self.presentedTimeout = nil
+        self.presentedMicrophoneAccessNeeded = false
         self.panel?.orderOut(nil)
     }
 
@@ -254,6 +282,8 @@ struct DeliveryFailureCardView: View {
     var message: String? = nil
     let detail: String
     let offersAccessibilitySettings: Bool
+    /// The settings chip's tooltip (the chip opens whatever `onOpenSettings` opens).
+    var settingsHelp: String = "Open Accessibility Settings"
     var primaryAction: PrimaryAction = .copy
     var iconName: String? = nil
     /// The primary chip's action (Copy or Reprocess).
@@ -278,7 +308,7 @@ struct DeliveryFailureCardView: View {
         HStack(alignment: .center, spacing: 6) {
             VStack(spacing: 6) {
                 if self.offersAccessibilitySettings {
-                    self.chip("settings", systemName: "gearshape", help: "Open Accessibility Settings", action: self.onOpenSettings)
+                    self.chip("settings", systemName: "gearshape", help: self.settingsHelp, action: self.onOpenSettings)
                 } else {
                     self.chipSpacer
                 }

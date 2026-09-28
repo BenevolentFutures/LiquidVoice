@@ -1739,9 +1739,9 @@ final class DictationE2ETests: XCTestCase {
     }
 
     func testDebugBuildLogsToItsOwnFolder() {
-        XCTAssertEqual(AppStorageLocation.logFolderName, "Fluid-Dev")
+        XCTAssertEqual(AppStorageLocation.logFolderName, "LiquidVoice-Dev")
         let logURL = FileLogger.shared.currentLogFileURL()
-        XCTAssertEqual(logURL.deletingLastPathComponent().lastPathComponent, "Fluid-Dev")
+        XCTAssertEqual(logURL.deletingLastPathComponent().lastPathComponent, "LiquidVoice-Dev")
         XCTAssertEqual(logURL.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent, "Logs")
     }
 

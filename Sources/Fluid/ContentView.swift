@@ -607,7 +607,11 @@ struct ContentView: View {
 
         if self.selectedSidebarItem == nil {
             let isOnboarded = self.asr.isAsrReady || self.asr.modelsExistOnDisk
-            self.selectedSidebarItem = isOnboarded ? .preferences : .welcome
+            // Getting Started lists Microphone and Accessibility first. Land there while
+            // Accessibility is missing, and on the launch that migrated FluidVoice-era data:
+            // macOS has granted the new bundle identifier neither permission yet.
+            let needsPermissionSetup = !self.accessibilityEnabled || AppIdentityMigration.launchReport?.copiedData == true
+            self.selectedSidebarItem = isOnboarded && !needsPermissionSetup ? .preferences : .welcome
         }
         self.handlePendingAppNavigation()
 

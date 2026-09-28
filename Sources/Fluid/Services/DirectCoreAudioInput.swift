@@ -399,7 +399,7 @@ private final nonisolated class DirectCoreAudioInput: DirectCoreAudioInputContro
     private var poisonedStopStatus: OSStatus?
     private let packetHandler: DirectCoreAudioPacketHandler
     private let workerQueue = DispatchQueue(
-        label: "com.fluidvoice.audio.direct-input-consumer",
+        label: "com.stage11.liquidvoice.audio.direct-input-consumer",
         qos: .userInteractive
     )
     private let workerGroup = DispatchGroup()
@@ -660,11 +660,11 @@ final nonisolated class DirectCoreAudioLifecycleController: @unchecked Sendable 
     }
 
     private let lifecycleQueue = DispatchQueue(
-        label: "com.fluidvoice.audio.direct-lifecycle",
+        label: "com.stage11.liquidvoice.audio.direct-lifecycle",
         qos: .userInitiated
     )
     private let listenerQueue = DispatchQueue(
-        label: "com.fluidvoice.audio.direct-format-listeners",
+        label: "com.stage11.liquidvoice.audio.direct-format-listeners",
         qos: .userInitiated
     )
     private let snapshotLock = NSLock()

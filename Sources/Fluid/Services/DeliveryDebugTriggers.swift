@@ -5,10 +5,10 @@ import Foundation
 // from altic-dev/FluidVoice@fadaed91 and the card preview trigger from @ff92b4b8.
 //
 // Debug builds only, and inert unless enabled on this machine:
-//   defaults write com.FluidApp.app.dev LiquidVoiceDebugDeliveryTriggers -bool YES
+//   defaults write com.stage11.liquidvoice.dev LiquidVoiceDebugDeliveryTriggers -bool YES
 // Then post a distributed notification, for example:
 //   swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(
-//     .init("com.FluidApp.debug.deliverText"), object: "hello from a script", userInfo: nil,
+//     .init("com.stage11.liquidvoice.debug.deliverText"), object: "hello from a script", userInfo: nil,
 //     deliverImmediately: true)'
 // Every trigger logs a DEBUG_DELIVERY line (result included) to the app log.
 
@@ -17,18 +17,18 @@ enum DeliveryDebugTriggers {
     static let enabledDefaultsKey = "LiquidVoiceDebugDeliveryTriggers"
 
     /// Types `object` (a String) into the focused field through the normal delivery pipeline.
-    static let deliverText = Notification.Name("com.FluidApp.debug.deliverText")
+    static let deliverText = Notification.Name("com.stage11.liquidvoice.debug.deliverText")
     /// Runs the Paste Last Transcription action, exactly as its hotkey does.
-    static let pasteLastTranscript = Notification.Name("com.FluidApp.debug.pasteLastTranscript")
+    static let pasteLastTranscript = Notification.Name("com.stage11.liquidvoice.debug.pasteLastTranscript")
     /// Shows the failure card; `object` may name a `TextDeliveryFailure` raw value.
-    static let showDeliveryFailure = Notification.Name("com.FluidApp.debug.showDeliveryFailure")
+    static let showDeliveryFailure = Notification.Name("com.stage11.liquidvoice.debug.showDeliveryFailure")
     /// Spoken Send without the microphone: takes the focused field as the target when it
     /// fires, then types `object` (a String; empty sends what is already there) and presses the
     /// send key, under the same policy as a dictation (c11 allowed, other terminals refused).
     /// Put a `sleep` before posting it to have time to click into the target. It presses Return
     /// in c11 even in a shell pane, where that runs the text as a command, and any local process
     /// can post it once the triggers are enabled: enable them only while checking.
-    static let deliverTextAndSend = Notification.Name("com.FluidApp.debug.deliverTextAndSend")
+    static let deliverTextAndSend = Notification.Name("com.stage11.liquidvoice.debug.deliverTextAndSend")
 
     private static var observers: [NSObjectProtocol] = []
     private static let typingService = TypingService()

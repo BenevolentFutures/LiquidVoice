@@ -179,7 +179,7 @@ extension SettingsStore {
         var errorInfo: NSDictionary?
         guard let script = NSAppleScript(source: source) else {
             throw NSError(
-                domain: "FluidVoiceLaunchAtStartup",
+                domain: "LiquidVoiceLaunchAtStartup",
                 code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "Could not create launch at startup cleanup script."]
             )
@@ -190,7 +190,7 @@ extension SettingsStore {
             let message = errorInfo[NSAppleScript.errorMessage] as? String ?? "Unknown AppleScript error"
             let number = errorInfo[NSAppleScript.errorNumber] as? Int ?? 2
             throw NSError(
-                domain: "FluidVoiceLaunchAtStartup",
+                domain: "LiquidVoiceLaunchAtStartup",
                 code: number,
                 userInfo: [NSLocalizedDescriptionKey: message]
             )

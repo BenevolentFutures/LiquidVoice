@@ -2485,13 +2485,15 @@ struct ContentView: View {
             let isInHistory = shouldPersistOutputs && SettingsStore.shared.saveTranscriptionHistory
             trace.mark(.handoff)
             if isTargetReady {
-                traceOutcome = "handoff"
+                // The typing service finishes the trace once the paste is posted.
+                trace.expectDelivery()
                 self.asr.typeOutputPlanToActiveField(
                     finalOutputPlan,
                     preferredTargetPID: typingTargetPID,
                     textReadyAt: finalTextReadyAt,
                     tracksDictionaryCorrections: true,
-                    transcriptInHistory: isInHistory
+                    transcriptInHistory: isInHistory,
+                    stopTrace: trace
                 )
             } else {
                 // The field chosen at stop could not be brought back. Typing into whatever

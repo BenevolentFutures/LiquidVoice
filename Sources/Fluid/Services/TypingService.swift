@@ -610,6 +610,7 @@ final class TypingService {
         tracksDictionaryCorrections: Bool = false,
         verifiesLanding: Bool = true,
         transcriptInHistory: Bool = false,
+        stopTrace: StopPathTrace? = nil,
         completion: ((TextDeliveryResult) -> Void)? = nil
     ) {
         let requestedAt = ProcessInfo.processInfo.systemUptime
@@ -631,6 +632,7 @@ final class TypingService {
         guard text.isEmpty == false else {
             self.bench("request_return reason=empty_text")
             self.log("[TypingService] ERROR: Empty text provided, aborting")
+            stopTrace?.finish(outcome: TextDeliveryFailure.emptyText.rawValue)
             completion?(.recoverableFailure(.emptyText))
             return
         }
@@ -640,6 +642,7 @@ final class TypingService {
             self.bench("request_return reason=accessibility_not_trusted")
             self.log("[TypingService] ERROR: Accessibility permissions required for text injection")
             Self.reportDeliveryFailure(.accessibilityNotTrusted, transcript: text, inHistory: transcriptInHistory, pasteSession: self.pasteSession)
+            stopTrace?.finish(outcome: TextDeliveryFailure.accessibilityNotTrusted.rawValue)
             completion?(.recoverableFailure(.accessibilityNotTrusted))
             return
         }
@@ -691,12 +694,23 @@ final class TypingService {
 
             let insertStartedAt = ProcessInfo.processInfo.systemUptime
             self.bench("insert_call")
-            result = self.deliver(
-                text,
-                preferredTargetPID: preferredTargetPID,
-                verifiesLanding: verifiesLanding,
-                transcriptInHistory: transcriptInHistory
-            )
+            // Bound for this delivery so the paste session marks the moment Cmd+V is posted.
+            result = StopPathTrace.$current.withValue(stopTrace) {
+                self.deliver(
+                    text,
+                    preferredTargetPID: preferredTargetPID,
+                    verifiesLanding: verifiesLanding,
+                    transcriptInHistory: transcriptInHistory
+                )
+            }
+            switch result {
+            case .dispatched:
+                // Typed or AX paths post no Cmd+V: the text was handed over when deliver returned.
+                stopTrace?.mark(.pastePosted)
+                stopTrace?.finish(outcome: "delivered")
+            case let .recoverableFailure(failure):
+                stopTrace?.finish(outcome: failure.rawValue)
+            }
             self.bench(
                 "insert_return result=\(Self.describe(result)) elapsedMs=\(Self.elapsedMs(since: insertStartedAt)) totalMs=\(Self.elapsedMs(since: requestedAt))"
             )

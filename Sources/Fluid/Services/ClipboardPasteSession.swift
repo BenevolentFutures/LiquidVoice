@@ -599,6 +599,7 @@ nonisolated final class ClipboardPasteSession: @unchecked Sendable {
             self.log("paste_session_failed reason=paste_command_failed")
             return .pasteCommandFailed
         }
+        StopPathTrace.current?.mark(.pastePosted)
 
         releasesGateOnReturn = false
         self.restoreQueue.async {

@@ -5052,6 +5052,7 @@ final class ASRService: ObservableObject {
         tracksDictionaryCorrections: Bool = false,
         verifiesLanding: Bool = true,
         transcriptInHistory: Bool = false,
+        stopTrace: StopPathTrace? = nil,
         completion: ((TextDeliveryResult) -> Void)? = nil
     ) {
         let requestedAt = ProcessInfo.processInfo.systemUptime
@@ -5069,6 +5070,7 @@ final class ASRService: ObservableObject {
             tracksDictionaryCorrections: tracksDictionaryCorrections,
             verifiesLanding: verifiesLanding,
             transcriptInHistory: transcriptInHistory,
+            stopTrace: stopTrace,
             completion: completion
         )
         let dispatchedAt = ProcessInfo.processInfo.systemUptime

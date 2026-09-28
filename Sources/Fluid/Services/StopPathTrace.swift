@@ -77,6 +77,10 @@ nonisolated final class StopPathTrace: @unchecked Sendable {
         self.marks[.trigger] = triggerTime
     }
 
+    /// The trace of the delivery running on this thread, bound by the typing worker for the
+    /// duration of one delivery, so the paste session can mark the moment Cmd+V is posted.
+    @TaskLocal static var current: StopPathTrace?
+
     // MARK: - Handoff from the hotkey manager to the stop pipeline
 
     @MainActor private static var pending: StopPathTrace?

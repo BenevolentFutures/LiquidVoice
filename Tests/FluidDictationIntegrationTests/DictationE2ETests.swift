@@ -1,6 +1,7 @@
 @testable import Liquid_Voice_Debug
 import Combine
 import Foundation
+import SwiftUI
 import XCTest
 
 @MainActor
@@ -2943,5 +2944,146 @@ final class KeptDictationStorageTests: XCTestCase {
         self.store.discardKeptDictation()
         wait(for: [discarded], timeout: 2)
         XCTAssertNil(self.store.keptDictationStoppedAt())
+    }
+}
+
+/// Offscreen renders of the Signal overlay's states, for comparison with the binding prototype
+/// (design/visual-language/native-renders). Nothing reaches the screen: the views are hosted in
+/// no window and drawn into bitmaps. Set TEST_RUNNER_LIQUID_VOICE_RENDER_DIR=<folder> to write
+/// the PNGs; without it the test only checks that every state renders at the designed size.
+@MainActor
+final class SignalOverlayRenderTests: XCTestCase {
+    private var outputFolder: URL? {
+        ProcessInfo.processInfo.environment["LIQUID_VOICE_RENDER_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
+
+    override func tearDown() {
+        SignalRenderStage.reset()
+        super.tearDown()
+    }
+
+    func testOverlayStatesRenderAtTheDesignedSize() throws {
+        for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+            let theme = appearance == .darkAqua ? "dark" : "light"
+            for (name, setUp) in SignalRenderStage.overlayStates {
+                SignalRenderStage.reset()
+                setUp()
+                let rep = try SignalRenderStage.render(BottomOverlayView(), appearance: appearance)
+                // Rails (30 + 6) either side of the 340 pill, plus the 6 pt bracket margin.
+                XCTAssertEqual(rep.size.width, 6 + 30 + 6 + 340 + 6 + 30 + 6 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
+                XCTAssertEqual(rep.size.height, 149 + 12 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
+                if let folder = self.outputFolder {
+                    try SignalRenderStage.write(rep, to: folder.appendingPathComponent("\(theme)-\(name).png"))
+                }
+            }
+        }
+    }
+}
+
+/// Drives the shared overlay state into each design state, and draws hosted views to bitmaps.
+@MainActor
+enum SignalRenderStage {
+    static let backdropMargin: CGFloat = 18
+    static let transcript = "worker sees the same job id land twice so key the admission set on job id plus lease epoch and do not touch the scheduler when you are done give me a one line summary and the diff stat and if the suite takes longer than a minute tell me which tests are"
+
+    static let overlayStates: [(String, () -> Void)] = [
+        ("01-listening", { SignalRenderStage.listening() }),
+        ("02-listening-hover", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionHover = "pill" }),
+        ("03-listening-hover-cancel", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionHover = "cancel" }),
+        ("04-listening-armed", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionPlacard = .send }),
+        ("05-transcribing", { SignalRenderStage.listening(); SignalRenderStage.stop(); NotchContentState.shared.setProcessing(true); SignalOverlayModel.shared.beginTranscribing() }),
+        ("06-pasted", { SignalRenderStage.listening(); SignalRenderStage.stop(); SignalOverlayModel.shared.showDelivered(SignalDelivery(appName: "c11", words: 118, method: .paste, sentReturn: false)) }),
+        ("13-countdown", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionPlacard = .send; SignalOverlayModel.shared.startSendCountdown(duration: 1.5, at: Date().addingTimeInterval(-0.55)) }),
+        ("14-countdown-canceled", {
+            SignalRenderStage.listening()
+            SignalOverlayModel.shared.startSendCountdown(duration: 1.5, at: Date().addingTimeInterval(-0.6))
+            SignalOverlayModel.shared.freezeSendCountdown()
+        }),
+        ("15-sent", { SignalRenderStage.listening(); SignalRenderStage.stop(placard: .send); SignalOverlayModel.shared.showDelivered(SignalDelivery(appName: "c11", words: 118, method: .paste, sentReturn: true)) }),
+        ("16-noreturn", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionPlacard = .noReturn }),
+    ]
+
+    static func listening() {
+        let state = NotchContentState.shared
+        let model = SignalOverlayModel.shared
+        state.setBottomOverlayPresented(true)
+        state.mode = .dictation
+        state.targetAppIcon = NSWorkspace.shared.icon(forFile: "/Applications/c11.app")
+        state.updateTranscription(self.transcript)
+        model.ensureTraceBars(SignalOverlayGeometry.forSize(.medium).traceBars)
+        model.microphoneName = "MacBook Pro Microphone"
+        let now = Date()
+        model.beginRecording(at: now.addingTimeInterval(-38.4), noiseThreshold: 0.4)
+        // A seeded voice envelope over the last few seconds, one level per 10.7 ms like a real tap.
+        var seed: UInt64 = 7
+        let start = now.timeIntervalSinceReferenceDate - 4
+        model.trace.begin(at: start)
+        for step in 0..<Int(4 / 0.0107) {
+            seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            let noise = CGFloat(seed >> 33) / CGFloat(1 << 31)
+            let t = Double(step) * 0.0107
+            let speech = max(0, sin(t * 2.1) * 0.5 + 0.5) * (t.truncatingRemainder(dividingBy: 1.3) < 0.9 ? 1 : 0.2)
+            model.trace.ingest(level: 0.35 + 0.65 * speech * (0.6 + 0.4 * noise), at: start + t)
+        }
+        model.trace.advance(to: now.timeIntervalSinceReferenceDate - 0.1)
+    }
+
+    static func stop(placard: SignalPlacard = .none) {
+        SignalOverlayModel.shared.stopRecording(at: Date().addingTimeInterval(-1), preview: self.transcript, placard: placard)
+    }
+
+    static func reset() {
+        let state = NotchContentState.shared
+        state.setProcessing(false)
+        state.setBottomOverlayPresented(false)
+        state.updateTranscription("")
+        state.targetAppIcon = nil
+        let model = SignalOverlayModel.shared
+        model.inspectionHover = nil
+        model.inspectionPlacard = nil
+        model.reset()
+    }
+
+    /// Draws `view` at 2x over a split backdrop like the prototype's stage (a dark terminal above,
+    /// the desktop below), so the brackets' knockout halo is exercised. SwiftUI's ImageRenderer
+    /// keeps the transparent margin transparent (NSView.cacheDisplay paints it white).
+    static func render(_ view: some View, appearance: NSAppearance.Name) throws -> NSBitmapImageRep {
+        let scheme: ColorScheme = appearance == .darkAqua ? .dark : .light
+        let renderer = ImageRenderer(content: view.environment(\.colorScheme, scheme))
+        renderer.scale = 2
+        let image = try XCTUnwrap(renderer.cgImage)
+        let content = NSSize(width: CGFloat(image.width) / 2, height: CGFloat(image.height) / 2)
+        let size = NSSize(width: content.width + 2 * self.backdropMargin, height: content.height + 2 * self.backdropMargin)
+        let rep = try XCTUnwrap(NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(size.width * 2),
+            pixelsHigh: Int(size.height * 2),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ))
+        rep.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSColor(srgbRed: 0.24, green: 0.29, blue: 0.40, alpha: 1).setFill()
+        NSRect(origin: .zero, size: size).fill()
+        NSColor(srgbRed: 0.06, green: 0.07, blue: 0.09, alpha: 1).setFill()
+        NSRect(x: 0, y: size.height * 0.45, width: size.width, height: size.height * 0.55).fill()
+        NSGraphicsContext.current?.cgContext.draw(
+            image,
+            in: CGRect(x: self.backdropMargin, y: self.backdropMargin, width: content.width, height: content.height)
+        )
+        NSGraphicsContext.restoreGraphicsState()
+        return rep
+    }
+
+    static func write(_ rep: NSBitmapImageRep, to url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let data = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
+        try data.write(to: url)
     }
 }

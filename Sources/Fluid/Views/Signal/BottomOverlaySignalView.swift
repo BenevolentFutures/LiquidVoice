@@ -114,6 +114,7 @@ struct BottomOverlayView: View {
             isEnabled: self.hasHistory,
             isInert: self.isInert(.always),
             isLatched: self.historyCard.isOpen,
+            isHoverForced: self.model.inspectionHover == "history",
             onHoverChanged: self.chipHover("history")
         ) {
             self.perform {
@@ -142,6 +143,7 @@ struct BottomOverlayView: View {
             isEnabled: self.isEnabled(.historyAction),
             isInert: self.isInert(.historyAction),
             isConfirming: self.isCopyConfirming,
+            isHoverForced: self.model.inspectionHover == "copy",
             onHoverChanged: self.chipHover("copy")
         ) {
             self.perform {
@@ -157,6 +159,7 @@ struct BottomOverlayView: View {
             systemName: "xmark",
             help: "Cancel Dictation (\(self.settings.cancelRecordingHotkeyShortcut.displayString))",
             isInert: self.isInert(.always),
+            isHoverForced: self.model.inspectionHover == "cancel",
             onHoverChanged: self.chipHover("cancel")
         ) {
             self.perform {
@@ -175,6 +178,7 @@ struct BottomOverlayView: View {
             help: self.hasHistory ? "Reprocess Last Dictation" : "No saved dictation history available",
             isEnabled: self.isEnabled(.historyAction),
             isInert: self.isInert(.historyAction),
+            isHoverForced: self.model.inspectionHover == "reprocess",
             onHoverChanged: self.chipHover("reprocess")
         ) {
             self.perform {
@@ -264,8 +268,8 @@ struct BottomOverlayView: View {
 
     private func pill(_ geometry: SignalOverlayGeometry) -> some View {
         let display = self.display
-        let pillBracket = self.isHoveringOverlay && self.hoveredChips.isEmpty && !self.historyCard.isHovered
-            && self.isInteractive
+        let pillBracket = (self.isHoveringOverlay && self.hoveredChips.isEmpty && !self.historyCard.isHovered
+            && self.isInteractive) || self.model.inspectionHover == "pill"
         return SignalPill(
             geometry: geometry,
             topHeight: geometry.topAreaHeight,
@@ -306,7 +310,13 @@ struct BottomOverlayView: View {
             )
         case .listening, .stopped, .transcribing, .idle:
             SignalPreview(
-                text: self.previewText(display),
+                text: SignalTextFitting.newestWords(
+                    of: self.previewText(display),
+                    wasCut: self.contentState.transcriptionText.count > self.contentState.cachedPreviewText.count,
+                    font: SignalTheme.Typography.preview.nsFont,
+                    width: geometry.innerWidth,
+                    lines: geometry.previewLines
+                ),
                 lines: geometry.previewLines,
                 height: geometry.topAreaHeight,
                 width: geometry.innerWidth,
@@ -323,6 +333,7 @@ struct BottomOverlayView: View {
     }
 
     private var placard: SignalPlacard {
+        if let placard = self.model.inspectionPlacard { return placard }
         switch self.display {
         case .listening:
             guard self.settings.spokenSendEnabled, self.contentState.mode == .dictation else { return .none }

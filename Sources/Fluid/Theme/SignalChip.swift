@@ -16,6 +16,8 @@ struct SignalChip: View {
     var isLatched = false
     /// The copy confirmation: orange with a check.
     var isConfirming = false
+    /// Draws the hover bracket regardless of the pointer (renders and inspection).
+    var isHoverForced = false
     var onHoverChanged: (Bool) -> Void = { _ in }
     let action: () -> Void
 
@@ -38,7 +40,7 @@ struct SignalChip: View {
             palette: self.palette
         ))
         .disabled(!self.isLive)
-        .signalBracket(.chip, visible: self.isHovered && self.isLive)
+        .signalBracket(.chip, visible: (self.isHovered || self.isHoverForced) && self.isLive)
         .onHover { hovering in
             let hovering = hovering && self.isLive
             guard hovering != self.isHovered else { return }

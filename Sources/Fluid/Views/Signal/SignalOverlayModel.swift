@@ -39,6 +39,12 @@ final class SignalOverlayModel: ObservableObject {
 
     private(set) var trace = SignalTraceModel()
 
+    /// Holds a hover state for renders and inspection, like the prototype's `?hover=1` and
+    /// `?hoverChip=`: "pill", or a chip id ("history", "copy", "cancel", "reprocess").
+    @Published var inspectionHover: String?
+    /// Holds Spoken Send's placard for renders and inspection (the prototype's `?armed=1`).
+    @Published var inspectionPlacard: SignalPlacard?
+
     /// The last recording's facts, for a failure card about it.
     private(set) var lastRecording: (duration: TimeInterval, endedAt: Date)?
 

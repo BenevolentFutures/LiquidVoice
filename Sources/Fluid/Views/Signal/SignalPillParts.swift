@@ -240,3 +240,63 @@ struct SignalRail<Top: View, Middle: View, Bottom: View>: View {
         .frame(width: SignalTheme.Metrics.chip, height: self.height)
     }
 }
+
+/// The prototype's head truncation for the live preview: drop whole leading words until the rest
+/// fits the reserved lines, with "…" in front, so the newest words are always visible. (SwiftUI's
+/// `.head` truncation trims only the last line of a wrapped paragraph.)
+@MainActor
+enum SignalTextFitting {
+    private static var cache: (key: String, value: String)?
+
+    /// `wasCut`: the text is already the tail of something longer (the preview's character limit),
+    /// so its first word may be partial and it starts with "…" whatever fits.
+    static func newestWords(of text: String, wasCut: Bool, font: NSFont, width: CGFloat, lines: Int) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard lines > 0, width > 0, !trimmed.isEmpty else { return "" }
+        let key = "\(wasCut)|\(font.pointSize)|\(width)|\(lines)|\(trimmed)"
+        if let cache = self.cache, cache.key == key { return cache.value }
+
+        var words = trimmed.split(whereSeparator: { $0 == " " || $0 == "\n" }).map(String.init)
+        if wasCut, words.count > 1 { words.removeFirst() }
+        func candidate(dropping count: Int) -> String {
+            let rest = words[count...].joined(separator: " ")
+            return count > 0 || wasCut ? "…" + rest : rest
+        }
+        var result = candidate(dropping: 0)
+        if self.lineCount(result, font: font, width: width) > lines, words.count > 1 {
+            var low = 1
+            var high = words.count - 1
+            while low < high {
+                let middle = (low + high) / 2
+                if self.lineCount(candidate(dropping: middle), font: font, width: width) <= lines {
+                    high = middle
+                } else {
+                    low = middle + 1
+                }
+            }
+            result = candidate(dropping: low)
+        }
+        self.cache = (key, result)
+        return result
+    }
+
+    static func lineCount(_ text: String, font: NSFont, width: CGFloat) -> Int {
+        let storage = NSTextStorage(string: text, attributes: [.font: font])
+        let layout = NSLayoutManager()
+        let container = NSTextContainer(size: NSSize(width: width, height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        layout.addTextContainer(container)
+        storage.addLayoutManager(layout)
+        layout.ensureLayout(for: container)
+        var lines = 0
+        var index = 0
+        let glyphs = layout.numberOfGlyphs
+        while index < glyphs {
+            var range = NSRange()
+            layout.lineFragmentRect(forGlyphAt: index, effectiveRange: &range)
+            index = NSMaxRange(range)
+            lines += 1
+        }
+        return lines
+    }
+}

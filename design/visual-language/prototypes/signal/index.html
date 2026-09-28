@@ -105,7 +105,7 @@
 .sg-chip:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--sg-accent), var(--sg-drop); }
 /* Inverted (pressed, or latched while its card is open). A 1 px keyline in the surface colour keeps the key's
    shape on any backdrop: a black key over a black terminal would otherwise vanish. Native: an outer strokeBorder. */
-.sg-chip.is-latched, .sg-chip.is-pressed {
+.sg-chip.is-latched, .sg-chip.is-pressed, .sg-chip.is-pressed:hover:not(:disabled) {
   background: var(--sg-inv-bg); color: var(--sg-inv-fg);
   box-shadow: inset 0 0 0 1px var(--sg-inv-bg), 0 0 0 1px var(--sg-surface), var(--sg-drop);
 }
@@ -153,7 +153,7 @@
 
 /* delivered: swaps the strip + preview for one statement of equal height */
 .sg-rec { height: 80px; }
-.sg-done { position: absolute; inset: 0; display: none; align-items: center; gap: 14px; }
+.sg-done { position: absolute; inset: 0 0 -10px 0; display: none; align-items: center; gap: 14px; }   /* centred between pill top and trace */
 .sg-stamp { width: 30px; height: 30px; flex: none; border-radius: 7px; background: var(--sg-accent); color: var(--sg-on-accent); display: grid; place-items: center; }
 .sg-done-text { display: flex; flex-direction: column; gap: 2px; }
 .sg-done-text b { font: 600 16px/20px var(--sg-font); color: var(--sg-text); }
@@ -205,6 +205,8 @@
   overflow: hidden; display: none; flex-direction: column;
 }
 .sg-hist.is-open { display: flex; }
+/* The failed card grows the pill 35 pt above the rail (193 vs 158); a history card opened then clears it. */
+.sg[data-state="failed"] .sg-hist { bottom: calc(100% + 6px + 35px); }
 .sg-hist header {
   flex: none; height: 36px; padding: 0 15px; display: flex; align-items: center; justify-content: space-between;
   font: 600 10.5px/1 var(--sg-font); letter-spacing: 0.06em; text-transform: uppercase; color: var(--sg-text-2);

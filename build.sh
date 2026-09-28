@@ -86,6 +86,30 @@ EOF
     exec xcodebuild "${build_args[@]}" DEVELOPMENT_TEAM="${development_team}"
 }
 
+# True when an entitlements plist grants com.apple.security.device.audio-input.
+has_audio_input_entitlement() {
+    [ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.device.audio-input' "$1" 2>/dev/null)" = "true" ]
+}
+
+# Stops unless the signed app grants the microphone. Under the hardened runtime a
+# missing com.apple.security.device.audio-input makes macOS deny the microphone
+# silently: no prompt, and the app never appears in Privacy & Security > Microphone.
+# Runs on every Release build, whether or not the CTranscribe layout needed fixing.
+verify_audio_input_entitlement() {
+    local app="$1"
+    local entitlements
+    entitlements="$(mktemp -t liquidvoice-entitlements)"
+    if codesign -d --entitlements - --xml "${app}" > "${entitlements}" 2>/dev/null \
+        && has_audio_input_entitlement "${entitlements}"; then
+        rm -f "${entitlements}"
+        echo "Microphone entitlement present."
+        return 0
+    fi
+    rm -f "${entitlements}"
+    printf >&2 '%s lacks com.apple.security.device.audio-input; the microphone would be denied. Stopping.\n' "${app}"
+    return 1
+}
+
 # The vendored CTranscribe.xcframework (altic-dev/transcribe-cpp-swift) ships a
 # malformed versioned-framework layout: Versions/Current is a real directory and
 # the top-level entries are copies, not symlinks. codesign then seals three
@@ -123,9 +147,32 @@ normalize_ctranscribe_framework() {
         | sed -n 's/.*"\(Apple Development:[^"]*\)".*/\1/p' | head -1)"
     [ -n "${identity}" ] || { printf >&2 'No signing identity for re-sign.\n'; return 1; }
 
-    codesign --force --sign "${identity}" --timestamp=none "${fw}"
-    codesign --force --sign "${identity}" --timestamp=none \
-        --entitlements Fluid.entitlements --options runtime "${app}"
+    # Re-sign with the entitlements Xcode signed the app with, not the bare
+    # Fluid.entitlements file. Xcode adds the hardened-runtime resource entitlements
+    # (ENABLE_RESOURCE_ACCESS_AUDIO_INPUT -> com.apple.security.device.audio-input) at
+    # build time; without that one, macOS denies the microphone silently: no prompt,
+    # and the app never appears in Privacy & Security > Microphone.
+    local entitlements
+    entitlements="$(mktemp -t liquidvoice-entitlements)"
+    if ! codesign -d --entitlements - --xml "${app}" > "${entitlements}" 2>/dev/null; then
+        printf >&2 'Could not read entitlements from the Xcode-signed app. Stopping.\n'
+        rm -f "${entitlements}"
+        return 1
+    fi
+    if ! has_audio_input_entitlement "${entitlements}"; then
+        printf >&2 'The built app lacks com.apple.security.device.audio-input; the microphone would be denied. Stopping.\n'
+        rm -f "${entitlements}"
+        return 1
+    fi
+
+    if ! codesign --force --sign "${identity}" --timestamp=none "${fw}" \
+        || ! codesign --force --sign "${identity}" --timestamp=none \
+            --entitlements "${entitlements}" --options runtime "${app}"; then
+        printf >&2 'Re-signing after the CTranscribe layout fix failed. Stopping.\n'
+        rm -f "${entitlements}"
+        return 1
+    fi
+    rm -f "${entitlements}"
 
     if codesign --verify --deep --strict "${app}"; then
         echo "Signature verified."
@@ -393,6 +440,7 @@ run_release_build() {
 
     [ -d "${product}" ] || { printf >&2 'Build succeeded but %s is missing.\n' "${product}"; exit 1; }
     normalize_ctranscribe_framework "${product}" "${development_team}"
+    verify_audio_input_entitlement "${product}"
     echo "Build product: ${product}"
 
     if [ "${do_install}" != "install" ]; then

@@ -72,13 +72,22 @@ nonisolated final class StopPathTrace: @unchecked Sendable {
     private static let idLock = NSLock()
     private nonisolated(unsafe) static var nextID = 0
 
-    init(trigger: Trigger, at triggerTime: TimeInterval = ProcessInfo.processInfo.systemUptime, latched: Bool = false) {
+    /// Where the summary line goes: the app log, or (tests) nowhere.
+    private let summarySink: @Sendable (String) -> Void
+
+    init(
+        trigger: Trigger,
+        at triggerTime: TimeInterval = ProcessInfo.processInfo.systemUptime,
+        latched: Bool = false,
+        summarySink: @escaping @Sendable (String) -> Void = { DebugLogger.shared.info($0, source: "StopPath") }
+    ) {
         self.id = Self.idLock.withLock {
             Self.nextID += 1
             return Self.nextID
         }
         self.trigger = trigger
         self.latched = latched
+        self.summarySink = summarySink
         self.marks[.trigger] = triggerTime
     }
 
@@ -145,7 +154,7 @@ nonisolated final class StopPathTrace: @unchecked Sendable {
             return (self.marks, self.details)
         }
         guard let snapshot else { return }
-        DebugLogger.shared.info(
+        self.summarySink(
             Self.summaryLine(
                 id: self.id,
                 trigger: self.trigger,
@@ -153,8 +162,7 @@ nonisolated final class StopPathTrace: @unchecked Sendable {
                 marks: snapshot.marks,
                 details: snapshot.details,
                 outcome: outcome
-            ),
-            source: "StopPath"
+            )
         )
     }
 

@@ -1399,13 +1399,13 @@ final class TerminalPasteTests: XCTestCase {
         let posted = CallCounter()
         let broughtForward = CallCounter()
 
-        let delivered = StopPathTrace(trigger: .toggle)
+        let delivered = StopPathTrace(trigger: .toggle) { _ in }
         let inFront = self.makePaster(session: session, posted: posted, broughtForward: broughtForward) { _ in true }
         XCTAssertNil(StopPathTrace.$current.withValue(delivered) { self.paste(with: inFront) })
         session.waitUntilIdle()
         XCTAssertNotNil(delivered.elapsedMilliseconds(from: .trigger, to: .pastePosted), "Cmd+V was posted")
 
-        let refused = StopPathTrace(trigger: .toggle)
+        let refused = StopPathTrace(trigger: .toggle) { _ in }
         let neverInFront = self.makePaster(session: session, posted: posted, broughtForward: broughtForward) { _ in false }
         XCTAssertEqual(StopPathTrace.$current.withValue(refused) { self.paste(with: neverInFront) }, .targetRestoreFailed)
         session.waitUntilIdle()

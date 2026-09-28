@@ -2577,15 +2577,27 @@ final class StopPathTraceTests: XCTestCase {
     }
 
     func testTraceIsFinishedOnceAndDeliveryOwnsItsEnd() {
-        let trace = StopPathTrace(trigger: .ui, at: 5.0)
+        let summaries = SummaryRecorder()
+        let trace = StopPathTrace(trigger: .ui, at: 5.0) { summaries.append($0) }
         trace.mark(.stopEnter, at: 5.1)
         trace.expectDelivery()
         trace.finishUnlessDelivering(outcome: "handoff")
         trace.mark(.pastePosted, at: 5.3)
         XCTAssertEqual(trace.elapsedMilliseconds(from: .trigger, to: .pastePosted) ?? 0, 300, accuracy: 0.001)
+        XCTAssertTrue(summaries.lines.isEmpty, "the typing service owns the end")
         trace.finish(outcome: "pasted")
+        trace.finish(outcome: "again")
         trace.mark(.handoff, at: 5.4) // after finishing: ignored
         XCTAssertNil(trace.elapsedMilliseconds(from: .trigger, to: .handoff))
+        XCTAssertEqual(summaries.lines.count, 1)
+        XCTAssertTrue(summaries.lines.first?.hasSuffix("outcome=pasted") == true)
+    }
+
+    private final class SummaryRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storage: [String] = []
+        var lines: [String] { self.lock.withLock { self.storage } }
+        func append(_ line: String) { self.lock.withLock { self.storage.append(line) } }
     }
 }
 

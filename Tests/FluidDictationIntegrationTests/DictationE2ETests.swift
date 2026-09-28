@@ -2957,9 +2957,51 @@ final class SignalOverlayRenderTests: XCTestCase {
         ProcessInfo.processInfo.environment["LIQUID_VOICE_RENDER_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
     }
 
+    private var savedHistory: [TranscriptionHistoryEntry] = []
+
+    override func setUp() {
+        super.setUp()
+        // The Debug test host's own history (never the installed app's), put back in tearDown.
+        self.savedHistory = TranscriptionHistoryStore.shared.makeBackupPayload()
+        TranscriptionHistoryStore.shared.restore(from: SignalRenderStage.sampleHistory)
+    }
+
     override func tearDown() {
         SignalRenderStage.reset()
+        TranscriptionHistoryStore.shared.restore(from: self.savedHistory)
         super.tearDown()
+    }
+
+    func testHistoryCardRendersAboveTheHistoryChip() throws {
+        for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+            let theme = appearance == .darkAqua ? "dark" : "light"
+            for (name, hoverRow) in [("09-history", nil), ("10-history-hover-row", 2)] as [(String, Int?)] {
+                SignalRenderStage.reset()
+                SignalRenderStage.listening()
+                let card = SignalHistoryCard(
+                    entries: SignalRenderStage.sampleHistory,
+                    totalCount: 247,
+                    notPasted: [SignalRenderStage.sampleHistory[2].processedText],
+                    now: SignalRenderStage.sampleNow,
+                    inspectionHoverRow: hoverRow,
+                    isStatic: true,
+                    onPick: { _ in }
+                )
+                // The card's box sits 6 pt above the History chip, on its leading edge; both views
+                // carry the 6 pt bracket margin, so they overlap by it.
+                let composite = VStack(alignment: .leading, spacing: -SignalTheme.Metrics.windowInset) {
+                    card.padding(SignalTheme.Metrics.windowInset).signalPalette()
+                    BottomOverlayView()
+                }
+                let rep = try SignalRenderStage.render(composite, appearance: appearance)
+                XCTAssertEqual(rep.size.width, 480 + 12 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
+                // The card at its 480 maximum over the overlay (161), overlapping by the 6 pt margin.
+                XCTAssertLessThanOrEqual(rep.size.height, 480 + 12 + 161 - 6 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
+                if let folder = self.outputFolder {
+                    try SignalRenderStage.write(rep, to: folder.appendingPathComponent("\(theme)-\(name).png"))
+                }
+            }
+        }
     }
 
     func testOverlayStatesRenderAtTheDesignedSize() throws {
@@ -2984,6 +3026,37 @@ final class SignalOverlayRenderTests: XCTestCase {
 @MainActor
 enum SignalRenderStage {
     static let backdropMargin: CGFloat = 18
+    static let sampleNow = Date()
+
+    /// Twelve dictations like the prototype's mock history: today and yesterday, c11 mostly.
+    static let sampleHistory: [TranscriptionHistoryEntry] = {
+        let texts: [(String, String, Int)] = [
+            ("Okay, take a look at the retry admission path in the queue worker. When the same job ID lands twice inside the lease window we are admitting both and the second one clobbers the first one's checkpoint.", "c11", 41),
+            ("Yes, go ahead and merge it. Then close the worktree.", "c11", 5),
+            ("Draft a reply to Marcus: the settings window gets four panes, general, microphone, hotkeys and dictionary, and the stats page goes.", "Mail", 22),
+            ("Run the full suite once more and paste the summary line into the PR description.", "c11", 7),
+            ("Looks good to me. One nit: the error message on line 42 says microphone unavailable but the actual cause is the permission being denied, so say that instead.", "Safari", 15),
+            ("New task. A small command line tool that reads the Aranet4 over Bluetooth and prints CO2, temperature, humidity and pressure as one line, with a JSON flag for agents.", "c11", 88),
+            ("Remind me to check the overnight benchmark on Atlas before standup.", "Notes", 4),
+            ("Rename the lane branch to port restyle and push it.", "c11", 6),
+            ("The trace should keep scrolling through silence at two points, not stop.", "c11", 9),
+            ("Thanks, that works. Ship it.", "Messages", 3),
+            ("Open the prototype, press three, then T, and compare the sweep with the native render.", "c11", 12),
+            ("Summarize what changed in round five in three bullets.", "c11", 8),
+        ]
+        return texts.enumerated().map { index, item in
+            let minutesAgo = index < 7 ? Double(index * 23 + 4) : Double(24 * 60 + index * 40)
+            return TranscriptionHistoryEntry(
+                timestamp: sampleNow.addingTimeInterval(-minutesAgo * 60),
+                rawText: item.0,
+                processedText: item.0,
+                appName: item.1,
+                windowTitle: "",
+                wasAIProcessed: false,
+                audio: DictationAudioMetadata(fileName: "sample-\(index).wav", durationMilliseconds: item.2 * 1000, byteCount: 0, sampleRate: 16000, channels: 1, model: nil)
+            )
+        }
+    }()
     static let transcript = "worker sees the same job id land twice so key the admission set on job id plus lease epoch and do not touch the scheduler when you are done give me a one line summary and the diff stat and if the suite takes longer than a minute tell me which tests are"
 
     static let overlayStates: [(String, () -> Void)] = [

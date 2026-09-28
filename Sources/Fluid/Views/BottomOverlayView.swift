@@ -1789,9 +1789,9 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        // A real window shadow: the browser hovers over the equally-dark overlay pill, and
-        // without a shadow the two black surfaces read as one shape.
-        panel.hasShadow = true
+        // No window shadow (DESIGN.md §6): the card's own 1 px edge and flat 2 pt drop rule
+        // separate it from the pill.
+        panel.hasShadow = false
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none
@@ -1841,10 +1841,11 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
         let fittingSize = hostingView.fittingSize
         guard fittingSize.width > 0, fittingSize.height > 0 else { return }
 
-        // Anchored to the history chip's leading edge rather than centered on it: the
-        // chip sits on the overlay's left rail and the menu is far wider than the chip.
-        let preferredX = self.selectorFrameInScreen.minX
-        let preferredY = self.selectorFrameInScreen.maxY + self.menuGap
+        // Anchored to the history chip's leading edge, `menuGap` (6 pt) above it (DESIGN.md §4).
+        // The panel keeps a transparent bracket margin around the card.
+        let inset = SignalTheme.Metrics.windowInset
+        let preferredX = self.selectorFrameInScreen.minX - inset
+        let preferredY = self.selectorFrameInScreen.maxY + self.menuGap - inset
 
         let screen = self.parentWindow?.screen
             ?? NSScreen.screens.first(where: { $0.frame.contains(NSPoint(x: self.selectorFrameInScreen.midX, y: self.selectorFrameInScreen.midY)) })
@@ -1886,137 +1887,32 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
     }
 }
 
-/// The history browser itself: recent dictations newest-first, full text per entry.
-/// Clicking an entry re-inserts its text into the dictation target app.
+/// The history browser: the Signal history card (the newest 12, newest first). Clicking an entry
+/// re-inserts its text into the dictation target app. Padded by the bracket margin.
 private struct BottomOverlayHistoryMenuView: View {
-    @ObservedObject private var contentState = NotchContentState.shared
     @ObservedObject private var historyStore = TranscriptionHistoryStore.shared
 
     let maxWidth: CGFloat
     let onDismissRequested: () -> Void
 
-    @State private var hoveredRowID: UUID?
-
     private static let maxEntriesShown = 12
-    private static let maxListHeight: CGFloat = 480
-
-    private static let timestampFormatter: RelativeDateTimeFormatter = {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter
-    }()
-
-    private var visibleEntries: [TranscriptionHistoryEntry] {
-        Array(self.historyStore.entries.prefix(Self.maxEntriesShown))
-    }
-
-    private func displayText(for entry: TranscriptionHistoryEntry) -> String {
-        let processed = entry.processedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let raw = entry.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return processed.isEmpty ? raw : processed
-    }
-
-    private func rowBackground(rowID: UUID) -> some View {
-        let isHovered = self.hoveredRowID == rowID
-        return RoundedRectangle(cornerRadius: 7)
-            .fill(isHovered ? Color.white.opacity(0.20) : Color.clear)
-            .overlay(
-                RoundedRectangle(cornerRadius: 7)
-                    .stroke(isHovered ? Color.white.opacity(0.24) : Color.clear, lineWidth: 1)
-            )
-    }
-
-    private func historyRow(_ entry: TranscriptionHistoryEntry) -> some View {
-        let text = self.displayText(for: entry)
-        return Button(action: {
-            self.contentState.onHistoryEntryPasteRequested?(entry)
-            self.restoreTypingTargetApp()
-            self.onDismissRequested()
-        }) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(text)
-                    .font(.system(size: 12.5, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.92))
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(10)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                HStack(spacing: 6) {
-                    Text(Self.timestampFormatter.localizedString(for: entry.timestamp, relativeTo: Date()))
-                    Text("·")
-                    Text(entry.appName)
-                        .lineLimit(1)
-                    Spacer()
-                    if entry.wasAIProcessed {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 9, weight: .semibold))
-                    }
-                }
-                .font(.system(size: 10.5, weight: .medium))
-                .foregroundStyle(.white.opacity(0.45))
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(self.rowBackground(rowID: entry.id))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            self.hoveredRowID = hovering ? entry.id : nil
-        }
-        .help("Insert this dictation into the focused app")
-    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Recent Dictations")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.55))
-                Spacer()
-                Text("click to insert")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.35))
+        SignalHistoryCard(
+            entries: Array(self.historyStore.entries.prefix(Self.maxEntriesShown)),
+            totalCount: self.historyStore.entries.count,
+            notPasted: DeliveryFailureOverlayController.shared.notPastedTranscripts,
+            onPick: { entry in
+                NotchContentState.shared.onHistoryEntryPasteRequested?(entry)
+                self.restoreTypingTargetApp()
+                self.onDismissRequested()
+            },
+            onHoverChanged: { hovering in
+                BottomOverlayHistoryMenuController.shared.isHovered = hovering
             }
-            .padding(.horizontal, 10)
-            .padding(.top, 8)
-
-            // Hairline under the header gives the card internal structure — part of what
-            // makes it read as its own surface rather than a growth off the overlay.
-            Rectangle()
-                .fill(Color.white.opacity(0.08))
-                .frame(height: 1)
-
-            if self.visibleEntries.isEmpty {
-                Text("No dictations yet")
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 10)
-            } else {
-                ScrollView(.vertical, showsIndicators: true) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(self.visibleEntries) { entry in
-                            self.historyRow(entry)
-                        }
-                    }
-                    .padding(.horizontal, 4)
-                    .padding(.bottom, 6)
-                }
-                .frame(maxHeight: Self.maxListHeight)
-            }
-        }
-        .frame(width: self.maxWidth)
-        // Elevated dark surface, deliberately a step lighter than the overlay's pure-black
-        // pill, with a stronger border — the panel's window shadow does the rest of the
-        // work of separating the two layers.
-        .background(Color(red: 0.09, green: 0.09, blue: 0.11))
-        .cornerRadius(10)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.white.opacity(0.22), lineWidth: 1)
         )
-        .preferredColorScheme(.dark)
+        .padding(SignalTheme.Metrics.windowInset)
+        .signalPalette()
     }
 
     private func restoreTypingTargetApp() {

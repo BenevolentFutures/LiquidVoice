@@ -31,6 +31,8 @@ final class DeliveryFailureOverlayController {
     private(set) var presentedTranscript: String?
     private(set) var presentedTimeout: TranscriptionTimeoutNotice?
     private(set) var presentedMicrophoneAccessNeeded = false
+    /// Transcripts whose paste failed this session, for the history card's NOT PASTED marker.
+    private(set) var notPastedTranscripts: Set<String> = []
 
     private init() {}
 
@@ -60,6 +62,8 @@ final class DeliveryFailureOverlayController {
         ))
         self.presentedFailure = failure
         self.presentedTranscript = transcript
+        if self.notPastedTranscripts.count > 200 { self.notPastedTranscripts.removeAll() }
+        self.notPastedTranscripts.insert(transcript.trimmingCharacters(in: .whitespacesAndNewlines))
         DebugLogger.shared.info("Delivery failure card shown failure=\(failure.rawValue) chars=\(transcript.count)", source: "DeliveryFailureCard")
     }
 

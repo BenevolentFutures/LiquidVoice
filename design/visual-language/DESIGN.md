@@ -1,0 +1,190 @@
+# Liquid Voice visual language: Signal
+
+**Status: locked by Atin, 2026-09-28** ("Awesome. This looks great. Let's go."), after four rounds on the recording overlay. This document is the binding design for the native build. Where it and the prototype disagree, the prototype wins and this file gets fixed.
+
+**Binding prototype:** [`prototypes/signal/index.html`](prototypes/signal/index.html) (tokens, native mapping and round history in [`prototypes/signal/DIRECTION.md`](prototypes/signal/DIRECTION.md)). Open it with [`prototypes/serve.sh`](prototypes/serve.sh) or double-click the self-contained copy [`prototypes/signal/standalone.html`](prototypes/signal/standalone.html). Keys: 1–6 pick a state, hold Space to talk, P plays a dictation, T toggles appearance, D toggles the age ruler.
+
+**Reference only, archived:** [Obsidian](prototypes/obsidian/index.html) (depth) and [Lumen](prototypes/lumen/index.html) (light). The current app's anatomy before this work: [`notes/overlay-anatomy.md`](notes/overlay-anatomy.md). Round history and decisions: [`notes/DIRECTIONS.md`](notes/DIRECTIONS.md).
+
+## 1. Thesis
+
+Liquid Voice is straight voice to text. Its overlay is seen hundreds of times a day, so the language is **an engineering drawing of an instrument that stays quiet until you reach for it**: square solid surfaces, 1 px rules, square-ended ink bars, mono numerals and placards, and schematic selection brackets that draw outside a box's corners only under the pointer. No gradients, no blur, no glow, no materials, no corner radius. International orange is the only colour, and it only ever marks something live. Every state reads in a tenth of a second, and nothing moves unless it means something.
+
+The diagram grammar (brackets, mono, thin rules, status in solid colour and words, never blinking) is inherited from Atin's Sekhem Prime. Its colours are not.
+
+## 2. Colour tokens
+
+| Token | Dark | Light | Used for |
+|---|---|---|---|
+| `accent` | `#FF4F1F` | `#FF4F1F` | record square, trace write head, transcribing sweep, delivered stamp, failed top rule, Copy button, NOT DELIVERED marker |
+| `on-accent` | `#111214` | `#111214` | glyphs and text on accent |
+| `surface` | `#111214` | `#FFFFFF` | pill, history card, failed card, menu |
+| `edge` | `#2C2E33` | `#111214` | 1 px pill and card edge, table rules |
+| `chip` | `#1A1B1F` | `#F2F2F4` | chip fill (no edge at rest) |
+| `drop` | `0 2 0 rgba(0,0,0,.35)` | `0 2 0 #111214` | flat, unblurred 2 pt offset rule under pill and card; on square corners it reads as a printed thick bottom rule |
+| `ink` | `#FFFFFF` | `#111214` | trace bars |
+| `midline` | `#2C2E33` | `#D3D4D8` | 1 px rule behind the trace |
+| `text` | white 0.92 | `#111214` | preview, headlines, timer |
+| `text-2` | white 0.58 | `#111214` | mic label, meta, table labels; in light it is true ink and size, case and face carry the hierarchy |
+| `text-dim` | white 0.46 | ink 0.50 | frozen preview while transcribing |
+| `inv-bg` / `inv-fg` | `#FFFFFF` / `#111214` | `#111214` / `#FFFFFF` | pressed and latched chips, hovered history and menu rows |
+| `bracket` | white 0.78 | `#111214` | selection brackets (hover only) |
+| `halo` | `surface` | `surface` | 1 pt knockout under every bracket |
+| `grat` | white 0.20 | ink 0.30 | age ruler ticks |
+
+No green, red or amber anywhere. State is carried by orange, by words, and by inversion.
+
+Dark is the default. The light variant is print on paper and follows the system appearance.
+
+## 3. Type scale
+
+Two families. **SF Pro Text/Display** for anything read as prose. **SF Mono** (`.system(design: .monospaced)`) for every number and label, so every number is tabular by construction. Labels are uppercase, tracked +0.06 em.
+
+| Role | Face | Size / line | Weight | Notes |
+|---|---|---|---|---|
+| Timer | Mono | 15 / 18 | semibold | right-aligned in a box reserved for "99:59" |
+| Mic label | Mono | 10.5 / 13 | medium, UPPERCASE | bottom-centre of the pill |
+| Meta (history, delivered, failed) | Mono | 10.5 / 14–15 | medium, UPPERCASE | "0:41 · 118 WORDS · C11" |
+| History index / time | Mono | 11.5 / 17 and 10 / 14 | semibold / medium | "01" over "3:04 PM" |
+| Table header, day rows, title block, menu header | Mono | 10 | medium, UPPERCASE | |
+| Delivered headline | Pro | 16 / 20 | semibold | "Delivered to c11" |
+| Live preview | Pro | 13.5 / 18 | medium | 3 lines, head-truncated so the newest words stay visible |
+| Failed headline | Pro | 13.5 / 18 | semibold | "Couldn't paste into c11" |
+| Transcripts (card, table) | Pro | 13 / 17–18 | regular | clamped to 3 and 4 lines |
+| Menu rows, Copy, Dismiss | Pro | 13 | regular / semibold / medium | |
+
+Nothing inside the overlay is smaller than 10 pt mono uppercase; prose never drops below 13 pt.
+
+## 4. Spacing and geometry
+
+| Token | Value |
+|---|---|
+| Pill | 340 × 149 pt, square |
+| Pill rows, top to bottom | padding 12 · preview 54 · gap 6 · trace row 50 (44 trace + 6 ruler) · gap 4 · mic 13 · padding 10 |
+| Pill padding, horizontal | 18 |
+| Failed card | the pill grown **upward** to 210 (+61); its bottom rows, rails and chips do not move |
+| Rails | 149 tall, bottom-aligned, 6 pt out from the pill; chips at the pill's top and bottom corners |
+| Chip | 30 × 30, square, no edge at rest |
+| Trace | 52 bars, 2 pt wide on a 4 pt pitch, 206 × 44, min 2 / max 40 tall, mirrored about a 1 px midline; 12 samples per second, so 4.3 s of history |
+| Trace row | target-app icon 20 pt (left) · trace · orange square 6 pt · timer (right), all centred on the midline |
+| Age ruler | static ticks at bar centres 1 pt below the trace: 2 pt every 0.25 s, 4 pt every 1 s; its 6 pt is reserved even when hidden |
+| History card | 480 wide, ≤ 480 tall, square, 1 px edge; 36 pt header, 28 pt day rows, 68 pt index column, 28 pt title-block footer; 6 pt above the History chip, anchored to its leading edge |
+| Copy button | 88 × 28, square |
+| Delivered stamp | 30 × 30, square |
+| Record square | 6 × 6, filled while listening, 1.5 pt outline while transcribing |
+| Screen placement | bottom-centre, 50 pt above the visible bottom; whole-surface drag with position memory as screen fractions; double-click resets |
+
+## 5. Corner radii
+
+**0 everywhere we own.** Pill, chips, history card, failed card, Copy button, delivered stamp, menu, menu rows, record square and the menu bar mark are all plain rectangles. The target-app icon keeps whatever shape the OS gives it; chip glyphs are SF Symbols.
+
+## 6. Materials
+
+None. Every surface is an opaque fill with a 1 px edge and a flat 2 pt drop rule. No `NSVisualEffectView`, no vibrancy, no glass, no noise, no blurred shadows.
+
+## 7. The selection brackets
+
+The one flourish. Four L marks sit **outside** a box's corners, a gap clear of the edges, arms running along the outside of the two edges. They mark whatever is under the pointer and nothing else.
+
+| Element | Gap | Arm | Shows when |
+|---|---|---|---|
+| Pill (and the failed card) | 3 pt (bottom gap measured from the drop rule) | 10 pt | pointer over the pill or the rails' gutter |
+| Chip | 2 pt | 6 pt | pointer over that chip |
+| History card | 3 pt | 10 pt | pointer over the card |
+| Menu bar mark | inside its 22 × 16 box | 4 pt | pointer over the item, or menu open |
+
+Rules: stroke 1.5 pt in `bracket` over a 1 pt `halo` in the surface colour (without the halo, ink marks vanish over a dark terminal in light mode). Never drawn at rest, never orange, never animated except a 60 ms linear fade in and out. One bracket at a time: over a chip or the card, the pill's hides, because the 6 pt gutter cannot hold two. Brackets never change layout or hit-testing. The window must be sized 6 pt larger than the visible content on every side so they are not clipped.
+
+## 8. Motion
+
+| Event | Duration | Curve | What happens |
+|---|---|---|---|
+| Entrance | 0 ms | none | The panel is simply there (first frame composed offscreen, as today) |
+| Dismiss | 120 ms | linear | Opacity 1 → 0. No scale, no drop |
+| Selection brackets | 60 ms | linear | Opacity in on hover, out on leave. Colour never changes, never blinks |
+| Trace sample | every 83.3 ms | none | 12 per second; one new bar enters at the right; continues through silence at 2 pt |
+| Bar morph | 60 ms | linear | Each slot morphs to its right neighbour's height, snapped to 2 pt steps |
+| Stop → flat | 60 ms | linear | All bars go to 2 pt; the write head goes ink |
+| Transcribing sweep | 1050 ms, repeating | linear | Solid 24 × 4 accent block stepped on the 4 pt pitch |
+| Chip press | ≥ 60 ms | 60 ms linear colour | Inverts to a solid square with a 1 pt surface keyline. No scale |
+| Copy feedback | 900 ms (chip), 1400 ms (card button) | none | Orange fill and check, same size |
+| Delivered hold | 1200 ms | none | Then dismiss |
+| Menu bar bars | 8 Hz | none | 2 pt steps while listening |
+| Reduced motion | | | Bars jump without morph; the sweep holds 4 positions per cycle; dismiss and bracket fades are cuts |
+
+No springs. Nothing eases softly. Everything is deliberate.
+
+## 9. Anatomy of each overlay state
+
+```
+┌──────────────────────────────────────────────┐
+│ …scheduler when you are done give me a one   │  preview, 3 lines, head-truncated
+│ line summary and the diff stat and if the    │
+│ suite takes longer than a minute tell me     │
+│ [c11]  ▏▎▍▌▏▎││▎▏··········▎│▍│▌▎▍  ■  0:38 │  trace row: icon · trace · square · timer
+│        ╵ ╵ ╵ │ ╵ ╵ ╵ │ ╵ ╵ ╵ │ ╵ ╵ ╵ │        │  age ruler (D toggles; height reserved)
+│            MACBOOK PRO MICROPHONE            │  mic, centred, in every visible state
+└──────────────────────────────────────────────┘
+```
+
+1. **Idle.** Hidden. The menu bar mark shows three bars.
+2. **Listening.** Live preview above. Trace live, the newest 6 bars orange (the write head). Solid orange square and a running timer at the right end of the trace row, opposite the target-app icon. Mic label bottom-centre. Chips at rest (solid squares, no edge). Menu bar: bars plus a solid square.
+3. **Transcribing.** Preview frozen and dimmed. Bars flat at 2 pt with the orange sweep crossing every 1.05 s. The square goes hollow, the timer freezes at the final duration. Copy and Reprocess dim. **No status word.** Menu bar: bars plus an outlined square.
+4. **Delivered.** The preview area swaps to the orange stamp, "Delivered to c11" and "118 WORDS" in mono. Trace flat, timer frozen (the duration appears once, here). Held 1.2 s, then dismissed. The text is already in the target app.
+5. **Failed → Copy.** The pill grows upward by 61 pt: an orange 2 pt top rule, "Couldn't paste into c11", the transcript clamped to 3 lines, a solid orange **Copy** (becomes "✓ Copied" at the same width for 1.4 s), **Dismiss**, and "118 WORDS". Trace row, mic row, rails and chips do not move. Stays until dismissed or the next dictation.
+6. **History.** The card opens 6 pt above the History chip, anchored to its leading edge, with the listening state live underneath. An engineering table: mono index column ("01" over the time), day rows, 1 px rules, transcripts clamped to 4 lines, mono meta with the orange NOT DELIVERED marker where the paste failed, and a title-block footer ("HISTORY · 12 OF 247 · NEWEST FIRST" | "LIQUID VOICE"). Rows invert on hover; click inserts. The History chip stays inverted (latched) while the card is open. Closes on outside click, re-tap, or a row pick.
+
+Chip glyphs and SF Symbols: History `clock.arrow.circlepath`, Copy `doc.on.doc`, Cancel `xmark`, Reprocess `arrow.clockwise`, feedback `checkmark`, submenu `chevron.right`, all semibold at 13 pt. Copy on a chip: orange fill with a black check for 900 ms.
+
+## 10. Menu bar
+
+A 22 × 16 template mark: three square-ended bars at rest; bars plus a solid square while listening (the bars follow the level at 8 Hz); bars plus an outlined square while transcribing. The width never changes. Hover draws the bracket inside the box. The menu is a plain `NSMenu` with a mono uppercase header: Start Dictation ⌥Space, the current microphone (submenu), History…, Settings…, Quit Liquid Voice.
+
+## 11. Native mapping (the load-bearing parts)
+
+| Effect | SwiftUI / AppKit, macOS 15 and 26 |
+|---|---|
+| Pill, card | `Rectangle().fill(surface)` + `.strokeBorder(edge, lineWidth: 1)`; drop rule `.shadow(color: drop, radius: 0, x: 0, y: 2)` |
+| Selection brackets | A `Bracket: Shape` whose path is four L sub-paths, one per corner. Overlay it stroked twice (halo 3.5 pt in `surface`, then 1.5 pt in `bracket`), with negative padding of `gap + 0.75` (plus the drop rule at the bottom) so it sits outside the frame without changing layout, `allowsHitTesting(false)`, opacity driven by a single `hoveredElement` enum from `.onHover` on the pill, each chip and the card, animated `.linear(duration: 0.06)`. The non-activating panel needs an `NSTrackingArea` with `.activeAlways` |
+| Chip | a `ButtonStyle`: `Rectangle` fill `chip`; `Bracket(len: 6)` at gap 2 on hover; `isPressed` or latched swaps to `inv-bg` with an outer 1 pt `surface` stroke |
+| Trace row | `HStack(alignment: .center)`: the target icon, the `Canvas`, `Spacer`, a 6 pt `Rectangle` (filled or 1.5 pt outline), then the timer `.system(size: 15, weight: .semibold, design: .monospaced)` in a fixed-width trailing frame |
+| Trace and ruler | one `Canvas` in `TimelineView(.animation)`: `fill(Path(rect))` per bar, then the static ruler ticks; the write head is the newest 6 bars in `accent`; the sweep is one accent rect stepped on the pitch |
+| Mic row | mono 10.5 medium, `.textCase(.uppercase)`, `.tracking(0.63)`, centred |
+| Failed top rule | `Rectangle().frame(height: 2)` aligned `.top` |
+| Menu bar mark | `NSStatusItem` with a square-cornered template `NSImage` per state |
+| Dismiss | `NSAnimationContext` 0.12 s linear `alphaValue` → 0, then park |
+
+The full table is in `prototypes/signal/DIRECTION.md`.
+
+## 12. Do / don't
+
+**Do**
+- Reserve height for every row that can appear; swap content in place. The only growth is the failed card, upward.
+- Use inversion (white on black, black on white) for pressed, latched and hovered rows.
+- Use orange only for something live or actionable right now.
+- Snap every rule, tick and bar to whole points.
+- Keep the trace scrolling through silence.
+- Mono uppercase for every label and number; SF Pro for anything read as prose.
+- Draw brackets only under the pointer, only outside the box, only one at a time.
+
+**Don't**
+- No corner radius on anything we draw.
+- No gradients, blur, glow, vibrancy, noise, springs or bounces.
+- No blinking. Status is solid colour and words.
+- No status words for transcribing; the hollow square, frozen timer and sweep carry it.
+- No red, green or amber.
+- No proportional digits.
+- No chrome beyond the four chips.
+
+## 13. Main window and onboarding
+
+Not prototyped in this pass; Atin locked the overlay and menu bar. The tokens, type scale, radii (0), materials (none) and motion rules above apply to the main window (history, settings, custom dictionary) and to onboarding. Guidance until a dedicated round: solid surfaces with 1 px rules, sidebar rows that invert on selection, mono uppercase section labels and counts, orange only for the one live thing on a page (a recording button, an unsaved change), and the history list as the same engineering table as the overlay's card. Upstream's cards, glossy effects and teal are retired.
+
+## 14. Decisions on record
+
+- Anatomy stays (four corner chips, rail, trace, target-app icon, history card, drag with memory); the language changes. (Atin, round 1)
+- Accent is not derived from the app icon; the icon should follow this language (square, ink, one orange mark). (Atin, round 1)
+- Direction: Signal, with Sekhem Prime's diagram grammar and not its colours. (Atin, round 2)
+- Corners are a hover affordance; no "LISTENING" word; mic bottom-centre; timer opposite the app icon. (Atin, round 3)
+- Square corners throughout; brackets outside the box. (Atin, round 4)
+- Assumed and unchallenged: dark by default with the light variant following the system; the delivered line stays; 52 bars; the mic label in every state; the bracket halo stays.

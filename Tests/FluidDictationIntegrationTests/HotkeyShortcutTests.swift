@@ -470,10 +470,12 @@ final class HotkeyShortcutTests: XCTestCase {
         XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
     }
 
-    /// Hiding sets alpha 0 in place (no offscreen parking, a WindowServer fence on the stop path),
-    /// the click fence waits until after the stop, and the next show undoes both.
+    /// Hiding sets alpha 0 at once (no WindowServer fence on the stop path) and parks the panel
+    /// offscreen right after the stop pipeline hands its text off, so it cannot take clicks meant
+    /// for the app beneath. ignoresMouseEvents is never set: once set, the pill's transparent
+    /// margin would take clicks for good.
     @MainActor
-    func testBottomOverlayHidesByAlphaAndDefersTheMouseFence() async throws {
+    func testBottomOverlayHidesByAlphaThenParksAfterTheHandoff() async throws {
         let audioPublisher = Just(CGFloat.zero).eraseToAnyPublisher()
         let controller = BottomOverlayWindowController.shared
 
@@ -482,21 +484,49 @@ final class HotkeyShortcutTests: XCTestCase {
         controller.show(audioPublisher: audioPublisher, mode: .dictation)
         let shown = try XCTUnwrap(controller.windowStateForTests)
         XCTAssertEqual(shown.alpha, 1)
-        XCTAssertFalse(shown.ignoresMouse)
+        XCTAssertFalse(shown.isParkedOffscreen)
 
+        // A stop pipeline is running: the hide must not park yet.
+        StopPipelineWindowWork.hold()
         let outcome = await controller.hideAndWait()
         XCTAssertEqual(outcome, .hidden)
         let hidden = try XCTUnwrap(controller.windowStateForTests)
         XCTAssertEqual(hidden.alpha, 0)
-        XCTAssertFalse(hidden.isParkedOffscreen, "hiding must not move the panel (a WindowServer fence)")
-        XCTAssertFalse(hidden.ignoresMouse, "the click fence waits until the stop is over")
+        XCTAssertFalse(hidden.isParkedOffscreen, "no window-management fence before the handoff")
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented, "controls are inert while hidden")
 
-        try await Task.sleep(nanoseconds: 450_000_000)
-        XCTAssertEqual(controller.windowStateForTests?.ignoresMouse, true)
+        // The text was handed off: parked offscreen, where no click can reach it.
+        StopPipelineWindowWork.release()
+        let parked = try XCTUnwrap(controller.windowStateForTests)
+        XCTAssertTrue(parked.isParkedOffscreen)
+        XCTAssertFalse(parked.ignoresMouse, "ignoresMouseEvents is never touched")
 
         controller.show(audioPublisher: audioPublisher, mode: .dictation)
         XCTAssertEqual(controller.windowStateForTests?.alpha, 1)
+        XCTAssertEqual(controller.windowStateForTests?.isParkedOffscreen, false)
         XCTAssertEqual(controller.windowStateForTests?.ignoresMouse, false)
+
+        // With no stop running, a hide parks on the next main-queue pass.
+        _ = await controller.hideAndWait()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(controller.windowStateForTests?.isParkedOffscreen, true)
+    }
+
+    /// A rapid restart between the hide and the handoff keeps the panel where the new
+    /// presentation put it.
+    @MainActor
+    func testARestartBeforeTheHandoffIsNotParked() async throws {
+        let audioPublisher = Just(CGFloat.zero).eraseToAnyPublisher()
+        let controller = BottomOverlayWindowController.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: audioPublisher, mode: .dictation)
+        StopPipelineWindowWork.hold()
+        _ = await controller.hideAndWait()
+        controller.show(audioPublisher: audioPublisher, mode: .dictation)
+        StopPipelineWindowWork.release()
+        XCTAssertEqual(controller.windowStateForTests?.isParkedOffscreen, false)
+        XCTAssertEqual(controller.windowStateForTests?.alpha, 1)
         _ = await controller.hideAndWait()
     }
 

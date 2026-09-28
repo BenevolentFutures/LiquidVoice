@@ -115,6 +115,7 @@ final class ASRService: ObservableObject {
         self.stopUIRefreshHoldGeneration &+= 1
         let generation = self.stopUIRefreshHoldGeneration
         self.holdsStopUIRefresh = true
+        StopPipelineWindowWork.hold()
         self.stopUIRefreshTimeout?.cancel()
         self.stopUIRefreshTimeout = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: Self.stopUIRefreshHoldLimitNanoseconds)
@@ -131,6 +132,7 @@ final class ASRService: ObservableObject {
         self.stopUIRefreshTimeout?.cancel()
         self.stopUIRefreshTimeout = nil
         self.stopUIRefreshReleased.send()
+        StopPipelineWindowWork.release()
     }
 
     nonisolated static func shouldAssessShortAudioSilence(

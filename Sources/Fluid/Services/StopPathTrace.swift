@@ -218,6 +218,37 @@ nonisolated final class StopPathTrace: @unchecked Sendable {
     }
 }
 
+/// Main-thread window work that blocks on WindowServer (a window-management transaction) waits
+/// while a dictation's stop pipeline runs, and happens right after the text has been handed to
+/// the typing worker, which does not need the main thread to paste. Driven by
+/// `ASRService.holdStopUIRefresh` / `releaseStopUIRefresh`.
+@MainActor
+enum StopPipelineWindowWork {
+    private static var isHeld = false
+    private static var pending: [@MainActor () -> Void] = []
+
+    static func hold() {
+        self.isHeld = true
+    }
+
+    static func release() {
+        self.isHeld = false
+        let work = self.pending
+        self.pending.removeAll()
+        work.forEach { $0() }
+    }
+
+    /// Runs `work` once the stop pipeline has handed its text off, or on the next main-queue pass
+    /// when no stop is running.
+    static func afterHandoff(_ work: @escaping @MainActor () -> Void) {
+        if self.isHeld {
+            self.pending.append(work)
+        } else {
+            DispatchQueue.main.async { MainActor.assumeIsolated { work() } }
+        }
+    }
+}
+
 #if DEBUG
 /// Debug builds only: for a couple of seconds after a stop, logs every main run loop stretch
 /// longer than 8 ms that was not spent waiting (`STOP_TRACE ... mainBusyMs=`), so the trace shows

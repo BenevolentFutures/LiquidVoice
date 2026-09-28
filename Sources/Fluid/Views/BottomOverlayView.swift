@@ -72,9 +72,6 @@ final class BottomOverlayWindowController {
     private var isHideInProgress = false
     private var activeHideGeneration: UInt64?
     private var hideWaiters: [CheckedContinuation<RecordingOverlayHideOutcome, Never>] = []
-    /// A hidden panel stops taking clicks a moment after it hides (see scheduleIgnoreMouseEvents).
-    private var pendingIgnoreMouseWorkItem: DispatchWorkItem?
-    private static let ignoreMouseEventsDelay: TimeInterval = 0.3
 
     /// The panel's alpha, and whether it sits outside every display. For tests.
     var windowStateForTests: (alpha: CGFloat, isParkedOffscreen: Bool, ignoresMouse: Bool)? {
@@ -105,9 +102,10 @@ final class BottomOverlayWindowController {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.targetScreen = OverlayScreenResolver.screenForCurrentPointer()
-                // A hidden panel sits at alpha 0 where it is; show() positions it again.
                 if NotchContentState.shared.isBottomOverlayPresented {
                     self.positionWindow()
+                } else {
+                    self.parkWindowOffscreen()
                 }
             }
         }
@@ -169,12 +167,6 @@ final class BottomOverlayWindowController {
         // Submit one complete frame to WindowServer.
         self.window?.setAccessibilityChildren(nil)
         self.window?.setAccessibilityElement(true)
-        self.pendingIgnoreMouseWorkItem?.cancel()
-        self.pendingIgnoreMouseWorkItem = nil
-        // A window-management fence: pay it only when a hide actually set it.
-        if self.window?.ignoresMouseEvents == true {
-            self.window?.ignoresMouseEvents = false
-        }
         self.window?.alphaValue = 1
         self.window?.orderFrontRegardless()
         self.window?.contentView?.displayIfNeeded()
@@ -286,16 +278,19 @@ final class BottomOverlayWindowController {
             return .superseded
         }
 
-        // Hide by alpha: a plain WindowServer property, no window-management transaction. Parking
-        // the panel offscreen (setFrameOrigin) blocked the main thread on a WindowServer fence,
-        // 70-300 ms on a busy host, right while the final transcription waited for main. The panel
-        // stays ordered in at alpha 0, surface warm for the next presentation; it stops taking
-        // clicks a moment later. (Ported from altic-dev/FluidVoice@094b8d0e and @6f929124's
-        // "window alpha drops to zero", keeping this overlay's own exit animation.)
+        // Hide by alpha first: a plain WindowServer property, no window-management transaction.
+        // Parking the panel offscreen (setFrameOrigin) blocks the main thread on a WindowServer
+        // fence, 70-300 ms on a busy host, and here that happened while the final transcription
+        // waited for main. So the panel vanishes now and is parked right after the dictation's
+        // text is handed to typing, where the fence delays nothing (StopPipelineWindowWork).
+        // Parking, not ignoresMouseEvents: setting that even once makes the panel's transparent
+        // margin around the pill take clicks for good. Until it is parked the overlay's controls
+        // do nothing (BottomOverlayView.isInteractive). (Adapted from altic-dev/FluidVoice@094b8d0e,
+        // @6f929124 and @fe05d7cb, keeping this overlay's own exit animation.)
         window.alphaValue = 0
         window.setAccessibilityChildren([])
         window.setAccessibilityElement(false)
-        self.scheduleIgnoreMouseEvents(generation: currentGeneration)
+        self.scheduleParkingAfterHandoff(generation: currentGeneration)
         NotchContentState.shared.setBottomOverlayPresented(false)
         self.endReleaseTransition(flushDeferredUpdate: false)
         NotchContentState.shared.setBottomOverlayDismissing(false)
@@ -325,21 +320,16 @@ final class BottomOverlayWindowController {
         OverlayAudioLevelState.shared.reset()
     }
 
-    /// ignoresMouseEvents is a window-management fence (70-90 ms): applied only if the panel is
-    /// still hidden a moment later, after the dictation's text has landed, and never for a rapid
-    /// restart. (Ported from altic-dev/FluidVoice@fcb54e49.)
-    private func scheduleIgnoreMouseEvents(generation: UInt64) {
-        self.pendingIgnoreMouseWorkItem?.cancel()
-        let workItem = DispatchWorkItem { [weak self] in
+    /// Parks the hidden panel offscreen once the stop pipeline has handed its text off (at once
+    /// when no stop is running), unless a rapid restart showed it again meanwhile.
+    private func scheduleParkingAfterHandoff(generation: UInt64) {
+        StopPipelineWindowWork.afterHandoff { [weak self] in
             guard let self,
                   self.presentationGeneration == generation,
-                  !NotchContentState.shared.isBottomOverlayPresented,
-                  self.window?.alphaValue == 0
+                  !NotchContentState.shared.isBottomOverlayPresented
             else { return }
-            self.window?.ignoresMouseEvents = true
+            self.parkWindowOffscreen()
         }
-        self.pendingIgnoreMouseWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.ignoreMouseEventsDelay, execute: workItem)
     }
 
     func setProcessing(_ processing: Bool) {
@@ -540,9 +530,10 @@ final class BottomOverlayWindowController {
     private func positionWindow() {
         // Safe check for window and screen availability
         guard let window = window else { return }
-        // A hidden panel sits at alpha 0 where it is: parking it here would cost WindowServer
-        // fences right after a hide.
-        guard NotchContentState.shared.isBottomOverlayPresented else { return }
+        guard NotchContentState.shared.isBottomOverlayPresented else {
+            self.parkWindowOffscreen()
+            return
+        }
         (window as? BottomOverlayPanel)?.allowsOffscreenParking = false
 
         let screen = self.targetScreen ?? window.screen ?? OverlayScreenResolver.screenForCurrentPointer()
@@ -2872,6 +2863,11 @@ struct BottomOverlayView: View {
         }
     }
 
+    /// On screen and not on its way out. Controls act only then.
+    private var isInteractive: Bool {
+        self.contentState.isBottomOverlayPresented && !self.contentState.isBottomOverlayDismissing
+    }
+
     private var overlayAnimatedOffsetY: CGFloat {
         if self.contentState.isBottomOverlayDismissing {
             return self.contentState.bottomOverlayDismissOffsetY
@@ -3228,7 +3224,9 @@ struct BottomOverlayView: View {
             isHovered.wrappedValue = hovering && !disabled
         }
         .onTapGesture {
-            guard self.layout.showsTopControls, !disabled else { return }
+            // Belt and braces with allowsHitTesting: a hidden overlay's Copy or Reprocess would
+            // copy or re-type the last dictation.
+            guard self.isInteractive, self.layout.showsTopControls, !disabled else { return }
             self.closePromptMenu()
             self.closeModeMenu()
             self.closeActionsMenu()
@@ -3399,6 +3397,9 @@ struct BottomOverlayView: View {
             BottomOverlayWindowController.shared.resetDraggedPositionToDefault()
         }
         .gesture(self.windowDragGesture)
+        // A hiding or hidden overlay (alpha 0 until it is parked) must never act on a click that
+        // was meant for the app beneath it: no chip fires, no menu opens, no drag starts.
+        .allowsHitTesting(self.isInteractive)
     }
 
     /// Moves the panel by tracking the pointer in screen coordinates. The gesture's own
@@ -3476,7 +3477,9 @@ struct BottomOverlayView: View {
             self.isHoveringHistoryChip = hovering && !disabled
         }
         .onTapGesture {
-            guard self.layout.showsTopControls, !disabled else { return }
+            // Belt and braces with allowsHitTesting: a hidden overlay's Copy or Reprocess would
+            // copy or re-type the last dictation.
+            guard self.isInteractive, self.layout.showsTopControls, !disabled else { return }
             self.closePromptMenu()
             self.closeModeMenu()
             self.closeActionsMenu()

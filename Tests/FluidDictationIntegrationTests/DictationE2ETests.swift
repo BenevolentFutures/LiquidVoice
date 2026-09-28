@@ -2621,7 +2621,10 @@ final class StopPathLatencyBenchmarkTests: XCTestCase {
         let history = TranscriptionHistoryStore.shared
         let originalHistory = history.makeBackupPayload().filter { $0.appName != StopPathBenchmark.appName }
         history.restore(from: originalHistory + Self.syntheticHistory(count: historySize))
-        defer { history.restore(from: originalHistory) }
+        defer {
+            history.restore(from: originalHistory)
+            history.flushPendingWrites()
+        }
 
         let fixture = try AudioFixtureLoader.load16kMonoFloatSamples(named: "dictation_fixture", ext: "wav")
         var samples: [Float] = []
@@ -2702,5 +2705,66 @@ final class StopPathLatencyBenchmarkTests: XCTestCase {
                 wasAIProcessed: false
             )
         }
+    }
+}
+
+@MainActor
+final class TranscriptionHistoryPersistenceTests: XCTestCase {
+    private var suiteName = ""
+    private var defaults: UserDefaults!
+
+    override func setUp() {
+        super.setUp()
+        self.suiteName = "LiquidVoiceHistoryTests.\(UUID().uuidString)"
+        self.defaults = UserDefaults(suiteName: self.suiteName)
+    }
+
+    override func tearDown() {
+        self.defaults.removePersistentDomain(forName: self.suiteName)
+        super.tearDown()
+    }
+
+    func testEntriesAreWrittenOffTheMainThreadAndSurviveAReload() {
+        let store = TranscriptionHistoryStore(defaults: self.defaults)
+        store.addEntry(rawText: "first", processedText: "First one.", appName: "c11", windowTitle: "")
+        store.addEntry(rawText: "second", processedText: "Second one.", appName: "c11", windowTitle: "")
+        store.flushPendingWrites()
+
+        let reloaded = TranscriptionHistoryStore(defaults: self.defaults)
+        XCTAssertEqual(reloaded.entries.map(\.processedText), ["Second one.", "First one."])
+    }
+
+    func testABurstOfChangesEndsWithTheLatestHistoryOnDisk() {
+        let store = TranscriptionHistoryStore(defaults: self.defaults)
+        let entries = (0..<500).map {
+            TranscriptionHistoryEntry(rawText: "r\($0)", processedText: "p\($0)", appName: "c11", windowTitle: "", wasAIProcessed: false)
+        }
+        store.restore(from: entries)
+        for index in 0..<20 {
+            store.addEntry(rawText: "burst", processedText: "Burst \(index).", appName: "c11", windowTitle: "")
+        }
+        store.deleteEntry(id: store.entries[1].id)
+        store.flushPendingWrites()
+
+        let reloaded = TranscriptionHistoryStore(defaults: self.defaults)
+        XCTAssertEqual(reloaded.entries.count, 519)
+        XCTAssertEqual(reloaded.entries.first?.processedText, "Burst 19.")
+        XCTAssertFalse(reloaded.entries.contains { $0.processedText == "Burst 18." })
+    }
+
+    func testTodaySummaryIsCachedAndFollowsTheHistory() async {
+        let store = TranscriptionHistoryStore(defaults: self.defaults)
+        store.restore(from: [
+            TranscriptionHistoryEntry(timestamp: Date().addingTimeInterval(-3 * 86_400), rawText: "old", processedText: "an old one here", appName: "c11", windowTitle: "", wasAIProcessed: false),
+        ])
+        store.addEntry(rawText: "a", processedText: "three words here", appName: "c11", windowTitle: "")
+        store.addEntry(rawText: "b", processedText: "two words", appName: "c11", windowTitle: "")
+        await store.waitForTodaySummary()
+        XCTAssertEqual(store.todaySummary, TranscriptionHistoryStore.TodaySummary(words: 5, transcriptions: 2))
+
+        store.deleteEntries(ids: Set(store.entries.map(\.id)))
+        await store.waitForTodaySummary()
+        XCTAssertEqual(store.todaySummary, TranscriptionHistoryStore.TodaySummary(words: 0, transcriptions: 0))
+        store.flushPendingWrites()
     }
 }

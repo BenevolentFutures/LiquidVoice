@@ -36,6 +36,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         _ = FileLogger.shared
         // Resolve the layout's Cmd+V key before any paste request can arrive.
         TypingService.startKeyboardLayoutTracking()
+        // Load the history now (decoding thousands of entries takes a while), not inside the
+        // first dictation's stop path.
+        _ = TranscriptionHistoryStore.shared
         DeliveryDebugTriggers.registerIfEnabled()
         // Must be read during the launch callback - the current Apple Event identifies
         // login-item launches (used to optionally start silently, see issue #369).
@@ -78,6 +81,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     func applicationWillTerminate(_ notification: Notification) {
         DebugLogger.shared.info("Application will terminate", source: "AppDelegate")
+        // History is written off the main thread; make sure the last dictation is on disk.
+        TranscriptionHistoryStore.shared.flushPendingWrites()
         self.shutdownASRRuntimeForTermination()
         LocalAPIServer.shared.stop()
         // Clean up the update check timer

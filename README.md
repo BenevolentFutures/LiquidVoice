@@ -16,13 +16,13 @@ the problem is not hearing you. the problem is. delivery.
 
 ## how it differs from FluidVoice.
 
-Liquid Voice is a fork of [FluidVoice](https://github.com/altic-dev/FluidVoice) by altic-dev, taken on 2026-08-15 at upstream [`d62adc9`][base]. it is a separate product now. what changed since the fork follows. some of it is upstream's later work, ported by hand; [UPSTREAM.md](UPSTREAM.md) credits each commit.
+Liquid Voice is a fork of [FluidVoice](https://github.com/altic-dev/FluidVoice) by altic-dev, taken on 2026-08-15 at upstream [`d62adc9`][base]. it is a separate product now. here is what changed since. some of it is upstream's later work, ported by hand; [UPSTREAM.md](UPSTREAM.md) credits each commit.
 
 - **no Fluid Intelligence.** the private AI layer is gone, with its settings and prompt routes. [#3]
 - **no telemetry.** analytics are hard-wired off and the keys are blank. [`0e2948a`][0e2948a], [#3]
 - **no upstream updater.** it would install stock FluidVoice over this build. you update by rebuilding. [`19202c1`][19202c1], [#3]
-- **no silent drops it can see.** when a paste fails in a way it can detect, a card shows, and the text goes on your clipboard unless you copied something since. your own clipboard comes back, images and files included. [#4]
-- **Reliable Paste for c11.** upstream forces Ghostty onto Reliable Paste; we added [c11](https://github.com/Stage-11-Agentics/c11), Stage 11's terminal multiplexer. back-to-back dictations queue instead of dropping. [`8ed75b9`][8ed75b9], [`8ab26a8`][8ab26a8]
+- **no silent drops it can see.** when a paste fails in a way it can detect, a card shows, and the text goes on your clipboard unless you copied something since. your own clipboard comes back, images and files included. back-to-back dictations queue instead of dropping. [#4], [`8ab26a8`][8ab26a8]
+- **Reliable Paste for c11.** upstream forces Ghostty onto Reliable Paste; we added [c11](https://github.com/Stage-11-Agentics/c11), Stage 11's terminal multiplexer. [`8ed75b9`][8ed75b9]
 - **Spoken Send, allowed in c11.** end with "send it" and Return follows the text. upstream blocks terminals; we allow c11, only in the pane you stopped in. off by default. [#7], [#8]
 - **a faster stop.** in a headless benchmark with a 13,600-entry history, stop-path work outside the model fell from a 145 ms median to 4 ms; model time is unchanged. a stalled model no longer loses the recording: it is kept for Reprocess, even across a restart. [#9], [#10]
 - **hotkey, mic and media fixes.** holds that always end, removed mics that stay removed, media resumed only if we paused it, a hung mic routed around, and a hotkey to reprocess the last dictation. [#2], [`8295536`][8295536], [`68afebc`][68afebc], [`0e2948a`][0e2948a]
@@ -30,7 +30,7 @@ Liquid Voice is a fork of [FluidVoice](https://github.com/altic-dev/FluidVoice) 
 
 ## install.
 
-no binaries yet. you build it. building needs Xcode 26, which needs macOS 15.6 or later; the app itself runs on macOS 15 or later. by engine: Parakeet, Nemotron and Cohere need Apple Silicon. Apple Speech needs macOS 26. Whisper up to Medium and Apple ASR Legacy also run on Intel, which this fork has not tested.
+no binaries yet. you build it. building needs Xcode 26, which needs macOS 15.6 or later; the app itself runs on macOS 15 or later. by engine: Parakeet, Nemotron and Cohere need Apple Silicon. Apple Speech needs macOS 26. Whisper up to Medium and Apple ASR Legacy, the older Apple engine, also run on Intel, which this fork has not tested.
 
 ```bash
 git clone -b liquid-voice https://github.com/BenevolentFutures/LiquidVoice.git
@@ -38,7 +38,9 @@ cd LiquidVoice
 ./build.sh install
 ```
 
-`./build.sh install` builds a signed Release, backs up the installed app to `~/Backups/`, quits it, and replaces `/Applications/Liquid Voice.app`. to update, pull and run it again.
+`./build.sh install` builds a signed Release, quits a running Liquid Voice, backs up the installed app to `~/Backups/`, and replaces `/Applications/Liquid Voice.app`. it prints the command to roll back. to update, pull and run it again.
+
+**coming from FluidVoice.** stock FluidVoice and older Liquid Voice builds share the bundle ID `com.FluidApp.app`. if you have used either on this Mac, Liquid Voice copies its settings, dictionary and history once, on first launch, and never changes the original. after that the two apps keep separate data and can run side by side. macOS does not carry permissions over, so you grant them again.
 
 **signing.** the install needs an Apple Development identity, so macOS keeps your permissions across rebuilds. a free Personal Team is enough: add an Apple Account in Xcode › Settings › Accounts, then create an Apple Development certificate. with several teams, set `FLUIDVOICE_DEVELOPMENT_TEAM` to the Team ID you want. without one, `./build.sh unsigned` makes an unsigned Debug build, `DerivedData/Build/Products/Debug/Liquid Voice Debug.app`. it is a separate app with its own settings and data, and macOS may ask for Accessibility again after each rebuild.
 

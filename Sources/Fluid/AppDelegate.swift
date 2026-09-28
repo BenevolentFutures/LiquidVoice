@@ -32,10 +32,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Bound every Accessibility round trip this process makes. Setting the timeout on the
+        // system-wide element sets it process-wide; TypingService's bounded elements already did
+        // so on the first dictation, so this only closes the gap before it (a busy app would
+        // otherwise hold the main thread, and the hotkey tap, for the ~6 s default). Adapted from
+        // altic-dev/FluidVoice@a35dba9c, with our 0.3 s bound instead of 2 s.
+        AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), TypingService.axMessagingTimeoutSeconds)
         // Bring up file logging + crash handlers immediately during launch.
         _ = FileLogger.shared
         // Resolve the layout's Cmd+V key before any paste request can arrive.
         TypingService.startKeyboardLayoutTracking()
+        // Load the history now (decoding thousands of entries takes a while), not inside the
+        // first dictation's stop path.
+        _ = TranscriptionHistoryStore.shared
         DeliveryDebugTriggers.registerIfEnabled()
         // Must be read during the launch callback - the current Apple Event identifies
         // login-item launches (used to optionally start silently, see issue #369).
@@ -78,6 +87,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     func applicationWillTerminate(_ notification: Notification) {
         DebugLogger.shared.info("Application will terminate", source: "AppDelegate")
+        // History is written off the main thread; make sure the last dictation is on disk.
+        TranscriptionHistoryStore.shared.flushPendingWrites()
         self.shutdownASRRuntimeForTermination()
         LocalAPIServer.shared.stop()
         // Clean up the update check timer

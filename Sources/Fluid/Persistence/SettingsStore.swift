@@ -1360,7 +1360,6 @@ final class SettingsStore: ObservableObject {
         set {
             objectWillChange.send()
             self.defaults.set(newValue, forKey: Keys.enableDebugLogs)
-            DebugLogger.shared.refreshLoggingEnabled()
         }
     }
 
@@ -1368,7 +1367,6 @@ final class SettingsStore: ObservableObject {
         if self.defaults.object(forKey: Keys.enableDebugLogs) == nil {
             self.defaults.set(true, forKey: Keys.enableDebugLogs)
         }
-        DebugLogger.shared.refreshLoggingEnabled()
     }
 
     var selectedModel: String? {
@@ -4013,6 +4011,8 @@ final class SettingsStore: ObservableObject {
 
     private func updateDockVisibility(_ visible: Bool) {
         #if os(macOS)
+        // The XCTest host never becomes a foreground app (TestHostQuietMode).
+        guard !TestHostQuietMode.isActive else { return }
         // IMPORTANT: This is a simplified implementation for development
         // In production, consider these approaches:
         // 1. Use LSUIElement in Info.plist to control default dock visibility

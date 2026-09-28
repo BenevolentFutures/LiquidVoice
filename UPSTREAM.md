@@ -88,10 +88,26 @@ Skip anything on the never-port list. Each commit that gets ported, or deliberat
 | `8a820022` | feat(overlay): redesign delivery failure card | ported into our overlay design | #4 |
 | `088efe13` | feat(overlay): show delivery failures on the transient notice panel | ported into our overlay design | #4 |
 | `9c25e758` | fix(overlay): show a card for every delivery failure | ported into our overlay design | #4 |
-| `fe05d7cb` | fix(overlay): stop swallowing clicks right after hide | skipped: our overlay parks off-screen; bug doesn't exist | #4 |
-| `42e33e68` | Reduce dictation latency and add pipeline evaluation (#950) | partial: PasteKeyCodeCache/Resolver (#4), readiness-gate test hook (#2); rest in the latency lane | #2, #4 |
-| `2e0345a9` | perf(typing): skip redundant AX reads on the stop path | partial: read-back baseline on clipboard paths; rest in the latency lane | #4 |
-| `a35dba9c` | fix(accessibility): bound AX round-trips to 2 seconds | skipped: every AX call already bounded at 0.3 s | #4 |
+| `fe05d7cb` | fix(overlay): stop swallowing clicks right after hide | adapted: the alpha-hidden panel is parked off-screen right after the text is handed off, and its controls are inert until shown; not ignoresMouseEvents, which would make the pill's transparent margin take clicks | #4, #9 |
+| `42e33e68` | Reduce dictation latency and add pipeline evaluation (#950) | partial: PasteKeyCodeCache/Resolver (#4), readiness-gate test hook (#2); history saved off main (no SQLite migration) and today summary cached, streaming teardown off the stop path with stall recovery and stale-preview guard, no UI rebuild before handoff, final ASR before the status UI, logging off main, AI transport-failure retry removed (#9). Skipped: FI handoff/prewarm/preview, analytics, beta summaries, request-correlated evaluation | #2, #4, #9 |
+| `2e0345a9` | perf(typing): skip redundant AX reads on the stop path | read-back baseline on clipboard paths only (#4); the stop-time focus audit does not exist here (#9) | #4, #9 |
+| `a35dba9c` | fix(accessibility): bound AX round-trips to 2 seconds | adapted: process-wide 0.3 s bound set at launch (bounded elements already set it from the first dictation) | #4, #9 |
+| `974cad2b` | chore(diagnostics): trace stop path timing end to end | adapted: StopPathTrace, one STOP_SUMMARY line per dictation, scripts/stop_path_latency.py | #9 |
+| `761f2c8c` | perf(asr): run final transcription off the main actor | adapted: the model round trips run from a @concurrent helper (our provider is main-actor isolated) | #9 |
+| `526c2aa2` | perf(asr): raise Transcribing status delay to 250 ms | ported | #9 |
+| `22270dcc` | perf(asr): cancel Transcribing status as soon as inference ends | ported | #9 |
+| `094b8d0e` | perf(overlay): hide panel by alpha instead of window transactions | adapted into our overlay; parking deferred until after the handoff (see fe05d7cb) | #9 |
+| `6335acc4` | perf(overlay): isolate waveform audio level from shared state | ported, without the level throttle (our voice trace scrolls one bar per level) | #9 |
+| `fcb54e49` | perf(overlay): freeze waveform at stop and defer mouse-events fence | partial: waveform freeze and unchanged-value cleanup; no ignoresMouseEvents (see fe05d7cb) | #9 |
+| `6f929124` | perf(overlay): use a single 80 ms fade on exit | partial: window alpha drops to zero; our own 20 ms exit kept | #9 |
+| `0be79c90` | fix(overlay): flush window ordering on immediate hide | skipped: superseded upstream by the alpha hide | #9 |
+| `ebcc71ab` | perf(overlay): commit hide before any post-stop state work | partial: the fences it deferred are gone or run after the handoff; state cleanup stays synchronous | #9 |
+| `fea6d6c9` | perf(menubar): stop redrawing the identical status icon | ported | #9 |
+| `ed9b4078` | perf(dictionary): probe target field off main thread | ported (clean cherry-pick) | #9 |
+| `0348e714` | fix(logging): exclude verbose diagnostics from production builds | ported; audio lifecycle and delivery decision lines kept in Release | #9 |
+| `a5d32e6a` | perf(diagnostics): keep stop-path tracing out of Release | ported; Release keeps one STOP_SUMMARY line per dictation | #9 |
+| `c32a110c` | perf(dictation): defer context reads until the mic stops | skipped: our stop path does no window-title or text-before-cursor reads | #9 |
+| `1ce13665` | perf: harden incremental parakeet previews | deferred: needs incremental previews, which we don't have; would shorten the wait on a preview running at stop | #9 |
 | `daa0f2d3` | feat(debug): trace clipboard writes and restoration metadata | skipped: debug tracing | #4 |
 | `208566c2` | feat(debug): trace clipboard shortcut event sources | skipped: debug tracing | #4 |
 | `74a1ee8b` | feat(bench): log stop input timing and post-dispatch waits | skipped: benchmark tracing | #4 |

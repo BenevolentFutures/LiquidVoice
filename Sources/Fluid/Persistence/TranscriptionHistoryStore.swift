@@ -10,7 +10,7 @@ import Foundation
 
 // MARK: - Transcription History Entry Model
 
-struct TranscriptionHistoryEntry: Codable, Identifiable, Equatable {
+nonisolated struct TranscriptionHistoryEntry: Codable, Identifiable, Equatable, Sendable {
     let id: UUID
     let timestamp: Date
     let rawText: String
@@ -151,21 +151,113 @@ struct TranscriptionHistoryEntry: Codable, Identifiable, Equatable {
 
 // MARK: - Transcription History Store
 
+/// Writes the history to UserDefaults off the main thread. The store hands over immutable
+/// snapshots; only the newest pending one is encoded, so a burst of changes costs one write.
+///
+/// Durability: a write starts at once, but encoding a large history takes ~60-100 ms, so a crash
+/// in that window loses the newest entry (the text was already typed; the previous history is
+/// intact on disk). Quitting flushes (`flush()` from applicationWillTerminate). A crash handler
+/// cannot flush: encoding and UserDefaults are not async-signal-safe, and an uncaught exception
+/// may be raised on this very queue.
+nonisolated final class TranscriptionHistoryWriter: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "TranscriptionHistory.writer", qos: .utility)
+    private let lock = NSLock()
+    private var pending: [TranscriptionHistoryEntry]?
+    private var isDraining = false
+    private let defaults: UserDefaults
+    private let key: String
+
+    init(defaults: UserDefaults, key: String) {
+        self.defaults = defaults
+        self.key = key
+    }
+
+    func write(_ snapshot: [TranscriptionHistoryEntry]) {
+        let shouldSchedule: Bool = self.lock.withLock {
+            self.pending = snapshot
+            guard !self.isDraining else { return false }
+            self.isDraining = true
+            return true
+        }
+        guard shouldSchedule else { return }
+        self.queue.async { self.drain() }
+    }
+
+    /// Blocks until every snapshot handed over so far is on disk. For termination and tests.
+    func flush() {
+        self.queue.sync {}
+    }
+
+    private func drain() {
+        while let snapshot = self.takePending() {
+            let startedAt = ProcessInfo.processInfo.systemUptime
+            guard let encoded = try? JSONEncoder().encode(snapshot) else {
+                DebugLogger.shared.error("Could not encode transcription history (\(snapshot.count) entries)", source: "TranscriptionHistoryStore")
+                continue
+            }
+            self.defaults.set(encoded, forKey: self.key)
+            DebugLogger.shared.debug(
+                "History saved off main entries=\(snapshot.count) bytes=\(encoded.count) " +
+                    "elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))",
+                source: "TranscriptionHistoryStore"
+            )
+        }
+    }
+
+    private func takePending() -> [TranscriptionHistoryEntry]? {
+        self.lock.withLock {
+            guard let snapshot = self.pending else {
+                self.isDraining = false
+                return nil
+            }
+            self.pending = nil
+            return snapshot
+        }
+    }
+}
+
 @MainActor
 final class TranscriptionHistoryStore: ObservableObject {
     static let shared = TranscriptionHistoryStore()
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
+    private let writer: TranscriptionHistoryWriter
 
     private enum Keys {
         static let transcriptionHistory = "TranscriptionHistoryEntries"
     }
 
-    @Published private(set) var entries: [TranscriptionHistoryEntry] = []
+    @Published private(set) var entries: [TranscriptionHistoryEntry] = [] {
+        didSet { self.refreshTodaySummary() }
+    }
+
     @Published var selectedEntryID: UUID?
 
-    private init() {
+    /// Today's words and dictations, recomputed off the main thread whenever the history (or the
+    /// day) changes. Views read it on every render, so it must never scan the history itself.
+    @Published private(set) var todaySummary = TodaySummary(words: 0, transcriptions: 0)
+    private var todaySummaryTask: Task<Void, Never>?
+    private var todaySummaryRevision: UInt64 = 0
+    private var dayChangeObserver: NSObjectProtocol?
+
+    /// `defaults` is injectable so tests and benchmarks never touch the app's own history.
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        self.writer = TranscriptionHistoryWriter(defaults: defaults, key: Keys.transcriptionHistory)
         self.loadEntries()
+        self.refreshTodaySummary()
+        self.dayChangeObserver = NotificationCenter.default.addObserver(
+            forName: .NSCalendarDayChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshTodaySummary() }
+        }
+    }
+
+    /// Blocks until every change so far is written. Called at termination.
+    func flushPendingWrites() {
+        self.writer.flush()
     }
 
     // MARK: - Public Methods
@@ -372,18 +464,60 @@ final class TranscriptionHistoryStore: ObservableObject {
         self.entries = decoded
     }
 
+    /// Hands the current history to the background writer. Encoding thousands of entries on
+    /// the main thread cost ~60 ms of every dictation's stop path; `entries` being @Published
+    /// already tells observers about the change.
     private func saveEntries() {
-        if let encoded = try? JSONEncoder().encode(entries) {
-            self.defaults.set(encoded, forKey: Keys.transcriptionHistory)
+        self.writer.write(self.entries)
+    }
+
+    // MARK: - Today summary
+
+    private func refreshTodaySummary() {
+        self.todaySummaryRevision &+= 1
+        guard self.todaySummaryTask == nil else { return }
+        self.todaySummaryTask = Task { @MainActor [weak self] in
+            // Coalesce a burst of changes (restore, delete-many) into one pass.
+            await Task.yield()
+            while let self {
+                let revision = self.todaySummaryRevision
+                let snapshot = self.entries
+                let day = Calendar.current.dateInterval(of: .day, for: Date())
+                let summary = await Task.detached(priority: .utility) {
+                    Self.calculateTodaySummary(entries: snapshot, day: day)
+                }.value
+                guard revision == self.todaySummaryRevision else { continue }
+                if self.todaySummary != summary {
+                    self.todaySummary = summary
+                }
+                self.todaySummaryTask = nil
+                return
+            }
         }
-        objectWillChange.send()
+    }
+
+    /// Waits for the today summary to catch up with the history. For tests.
+    func waitForTodaySummary() async {
+        while let task = self.todaySummaryTask {
+            await task.value
+        }
+    }
+
+    nonisolated static func calculateTodaySummary(entries: [TranscriptionHistoryEntry], day: DateInterval?) -> TodaySummary {
+        guard let day else { return TodaySummary(words: 0, transcriptions: 0) }
+        var totals = (words: 0, transcriptions: 0)
+        for entry in entries where entry.timestamp >= day.start && entry.timestamp < day.end {
+            totals.words += Self.countWords(in: entry.processedText)
+            totals.transcriptions += 1
+        }
+        return TodaySummary(words: totals.words, transcriptions: totals.transcriptions)
     }
 }
 
 // MARK: - Stats Computation Extension
 
 extension TranscriptionHistoryStore {
-    struct TodaySummary {
+    nonisolated struct TodaySummary: Equatable, Sendable {
         let words: Int
         let transcriptions: Int
 
@@ -419,6 +553,10 @@ extension TranscriptionHistoryStore {
 
     /// Count words in a string (handles multiple spaces, newlines)
     private func wordCount(in text: String) -> Int {
+        Self.countWords(in: text)
+    }
+
+    nonisolated static func countWords(in text: String) -> Int {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return 0 }
 
@@ -430,18 +568,6 @@ extension TranscriptionHistoryStore {
     /// Total words across all transcriptions
     var totalWords: Int {
         self.entries.reduce(0) { $0 + self.wordCount(in: $1.processedText) }
-    }
-
-    /// Summary for today's activity, calculated in one pass.
-    var todaySummary: TodaySummary {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let totals = self.entries.reduce(into: (words: 0, transcriptions: 0)) { result, entry in
-            guard calendar.isDate(entry.timestamp, inSameDayAs: today) else { return }
-            result.words += self.wordCount(in: entry.processedText)
-            result.transcriptions += 1
-        }
-        return TodaySummary(words: totals.words, transcriptions: totals.transcriptions)
     }
 
     /// Words transcribed today

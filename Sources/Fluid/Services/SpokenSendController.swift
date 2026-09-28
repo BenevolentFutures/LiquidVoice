@@ -379,7 +379,15 @@ final class SpokenSendController: ObservableObject {
 
     /// Delivers the text, then the key, through the typing worker (queued behind any delivery
     /// still in flight). A failed delivery shows the failure card and presses nothing.
-    func deliver(_ plan: DictationLiteralOutputPlan, sendKey: SendKeyRequest, textReadyAt: TimeInterval, transcriptInHistory: Bool) {
+    /// - Parameter stopTrace: the dictation's stop-path trace; the typing worker marks the paste
+    ///   and the send key on it.
+    func deliver(
+        _ plan: DictationLiteralOutputPlan,
+        sendKey: SendKeyRequest,
+        textReadyAt: TimeInterval,
+        transcriptInHistory: Bool,
+        stopTrace: StopPathTrace? = nil
+    ) {
         self.typingService.typeOutputPlanInstantly(
             plan,
             preferredTargetPID: sendKey.target.pid,
@@ -388,7 +396,8 @@ final class SpokenSendController: ObservableObject {
             sendKey: sendKey,
             onSendKey: { outcome in
                 DebugLogger.shared.info("SPOKEN_SEND outcome=\(outcome.rawValue) phraseOnly=false", source: "SpokenSend")
-            }
+            },
+            stopTrace: stopTrace
         )
     }
 

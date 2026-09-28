@@ -1,4 +1,5 @@
 @testable import Liquid_Voice_Debug
+import Combine
 import Foundation
 import XCTest
 
@@ -2518,5 +2519,370 @@ final class TestHostQuietModeTests: XCTestCase {
         let pid = ProcessInfo.processInfo.processIdentifier
         let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
         return windows.filter { ($0[kCGWindowOwnerPID as String] as? pid_t) == pid }.count
+    }
+}
+
+final class StopPathTraceTests: XCTestCase {
+    func testSummaryReportsEachStageFromThePreviousMark() {
+        let line = StopPathTrace.summaryLine(
+            id: 7,
+            trigger: .holdRelease,
+            latched: false,
+            marks: [
+                .trigger: 100.000,
+                .stopEnter: 100.002,
+                .captureStopped: 100.010,
+                .asrBegin: 100.030,
+                .asrEnd: 100.090,
+                .asrReturn: 100.095,
+                .textReady: 100.096,
+                .handoff: 100.100,
+                .pastePosted: 100.140,
+            ],
+            details: ["audioMs": "2500", "chars": "17"],
+            outcome: "pasted"
+        )
+        XCTAssertEqual(
+            line,
+            "STOP_SUMMARY id=7 trigger=hold_release latched=false releaseMs=2.0 captureMs=8.0 drainMs=20.0 " +
+                "asrMs=60.0 returnMs=5.0 postMs=1.0 handoffMs=4.0 pasteMs=40.0 sendMs=- totalMs=140.0 lastStage=paste_posted " +
+                "audioMs=2500 chars=17 outcome=pasted"
+        )
+    }
+
+    func testASpokenSendReturnIsReportedAfterTheTextNotInItsTotal() {
+        let line = StopPathTrace.summaryLine(
+            id: 2,
+            trigger: .spokenSend,
+            latched: false,
+            marks: [.trigger: 1.0, .stopEnter: 1.001, .handoff: 1.1, .pastePosted: 1.12, .sendKeyPosted: 1.25],
+            details: [:],
+            outcome: "delivered"
+        )
+        XCTAssertTrue(line.contains("trigger=spoken_send"), line)
+        XCTAssertTrue(line.contains("pasteMs=20.0 sendMs=130.0 totalMs=120.0 lastStage=send_key_posted"), line)
+    }
+
+    func testSummaryFoldsASkippedStageIntoTheNextOne() {
+        let line = StopPathTrace.summaryLine(
+            id: 1,
+            trigger: .toggle,
+            latched: true,
+            marks: [.trigger: 10.0, .stopEnter: 10.5, .asrReturn: 10.6],
+            details: [:],
+            outcome: "empty"
+        )
+        XCTAssertTrue(line.contains("releaseMs=500.0 captureMs=- drainMs=- asrMs=- returnMs=100.0 postMs=-"), line)
+        XCTAssertTrue(line.hasSuffix("totalMs=600.0 lastStage=asr_return outcome=empty"), line)
+    }
+
+    func testTraceIsFinishedOnceAndDeliveryOwnsItsEnd() {
+        let summaries = SummaryRecorder()
+        let trace = StopPathTrace(trigger: .ui, at: 5.0) { summaries.append($0) }
+        trace.mark(.stopEnter, at: 5.1)
+        trace.expectDelivery()
+        trace.finishUnlessDelivering(outcome: "handoff")
+        trace.mark(.pastePosted, at: 5.3)
+        XCTAssertEqual(trace.elapsedMilliseconds(from: .trigger, to: .pastePosted) ?? 0, 300, accuracy: 0.001)
+        XCTAssertTrue(summaries.lines.isEmpty, "the typing service owns the end")
+        trace.finish(outcome: "pasted")
+        trace.finish(outcome: "again")
+        trace.mark(.handoff, at: 5.4) // after finishing: ignored
+        XCTAssertNil(trace.elapsedMilliseconds(from: .trigger, to: .handoff))
+        XCTAssertEqual(summaries.lines.count, 1)
+        XCTAssertTrue(summaries.lines.first?.hasSuffix("outcome=pasted") == true)
+    }
+
+    private final class SummaryRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storage: [String] = []
+        var lines: [String] { self.lock.withLock { self.storage } }
+        func append(_ line: String) { self.lock.withLock { self.storage.append(line) } }
+    }
+}
+
+/// Times the real stop pipeline on the dictation fixture, N times in one test-host launch, and
+/// reports median and p90 per stage. Headless and silent (TestHostQuietMode): no window on screen,
+/// no sound, no focus change. Explicitly invoked, since it loads the Parakeet model:
+///
+///     xcodebuild ... test -only-testing:FluidDictationIntegrationTests/StopPathLatencyBenchmarkTests \
+///       TEST_RUNNER_LIQUID_VOICE_STOP_BENCH=30
+///
+/// Optional: TEST_RUNNER_LIQUID_VOICE_STOP_BENCH_AUDIO_SECONDS (fixture tiled to this length,
+/// default 8), TEST_RUNNER_LIQUID_VOICE_STOP_BENCH_JITTER (seconds of seeded random extra recording
+/// per run, so stops land at different points of the streaming preview cycle; default 0),
+/// TEST_RUNNER_LIQUID_VOICE_STOP_BENCH_HISTORY (history size, default 13600, the operator's
+/// real history) and TEST_RUNNER_LIQUID_VOICE_STOP_BENCH_OUT (JSON results path). Each run stops at
+/// the handoff to the typing service: it never types, pastes or touches the clipboard, and the
+/// Debug build's history is put back afterwards.
+@MainActor
+final class StopPathLatencyBenchmarkTests: XCTestCase {
+    func testStopPathLatencyOnFixture() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let runsValue = environment["LIQUID_VOICE_STOP_BENCH"], let runs = Int(runsValue), runs > 0 else {
+            throw XCTSkip("Set TEST_RUNNER_LIQUID_VOICE_STOP_BENCH=<runs> to run the stop-path benchmark.")
+        }
+        let audioSeconds = environment["LIQUID_VOICE_STOP_BENCH_AUDIO_SECONDS"].flatMap(Double.init) ?? 8
+
+        var runner = StopPathBenchmark.runDictation
+        for _ in 0..<200 where runner == nil {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            runner = StopPathBenchmark.runDictation
+        }
+        guard let runner else {
+            throw XCTSkip("The app window never appeared, so the stop pipeline is unavailable.")
+        }
+
+        let asr = AppServices.shared.asr
+        await asr.checkIfModelsExistAsync()
+        guard asr.modelsExistOnDisk || asr.isAsrReady else {
+            throw XCTSkip("The selected speech model (\(SettingsStore.shared.selectedSpeechModel.displayName)) is not downloaded.")
+        }
+        try await asr.ensureAsrReady()
+        print("STOP_BENCH model=\(SettingsStore.shared.selectedSpeechModel.displayName)")
+
+        // A long history is part of the real stop path (it is saved and summarized on each
+        // dictation). Seed the Debug build's history to that size, and put it back afterwards.
+        // Every benchmark entry (seeded or dictated) is recorded under StopPathBenchmark.appName,
+        // so a run that was killed midway is cleaned up by the next one.
+        let historySize = environment["LIQUID_VOICE_STOP_BENCH_HISTORY"].flatMap(Int.init) ?? 13_600
+        let history = TranscriptionHistoryStore.shared
+        let originalHistory = history.makeBackupPayload().filter { $0.appName != StopPathBenchmark.appName }
+        history.restore(from: originalHistory + Self.syntheticHistory(count: historySize))
+        defer {
+            history.restore(from: originalHistory)
+            history.flushPendingWrites()
+            // Audio saved for benchmark dictations (when the Debug build keeps audio) belonged to
+            // entries that are gone now.
+            let referenced = Set(history.entries.compactMap { $0.audio?.fileName })
+            _ = DictationAudioHistoryStore.shared.deleteUnreferencedAudioFiles(referencedFileNames: referenced)
+        }
+
+        let fixture = try AudioFixtureLoader.load16kMonoFloatSamples(named: "dictation_fixture", ext: "wav")
+        var samples: [Float] = []
+        while Double(samples.count) / 16_000 < audioSeconds {
+            samples.append(contentsOf: fixture)
+        }
+        let recordingSeconds = Double(samples.count) / 16_000
+
+        // Warm-up: first overlay presentation and first inference are not representative.
+        for _ in 0..<2 {
+            _ = await runner(samples, recordingSeconds)
+            try await Task.sleep(nanoseconds: 500_000_000)
+        }
+
+        let stages: [(name: String, from: StopPathTrace.Stage, to: StopPathTrace.Stage)] = [
+            ("stop_enter -> capture_stopped", .stopEnter, .captureStopped),
+            ("capture_stopped -> asr_begin", .captureStopped, .asrBegin),
+            ("asr_begin -> asr_end (model)", .asrBegin, .asrEnd),
+            ("asr_end -> asr_return", .asrEnd, .asrReturn),
+            ("asr_return -> text_ready", .asrReturn, .textReady),
+            ("text_ready -> handoff", .textReady, .handoff),
+            ("stop_enter -> handoff (total)", .stopEnter, .handoff),
+        ]
+        // Optional stop-time jitter (seconds, uniform, same seeded sequence every run): without it
+        // every stop lands at the same point of the streaming preview cycle.
+        let jitter = environment["LIQUID_VOICE_STOP_BENCH_JITTER"].flatMap(Double.init) ?? 0
+        var generator = SeededGenerator(seed: 0x5EED)
+        var samplesByStage: [String: [Double]] = [:]
+        for _ in 0..<runs {
+            let holdSeconds = recordingSeconds + (jitter > 0 ? Double.random(in: 0..<jitter, using: &generator) : 0)
+            let finished = await runner(samples, holdSeconds)
+            let trace = try XCTUnwrap(finished, "A recording was already active")
+            XCTAssertEqual(TestHostQuietModeTests.onScreenWindowCount(), 0, "The benchmark put a window on screen")
+            for stage in stages {
+                if let value = trace.elapsedMilliseconds(from: stage.from, to: stage.to) {
+                    samplesByStage[stage.name, default: []].append(value)
+                }
+            }
+            try await Task.sleep(nanoseconds: 500_000_000)
+        }
+
+        func percentile(_ values: [Double], _ p: Double) -> Double {
+            let sorted = values.sorted()
+            guard !sorted.isEmpty else { return .nan }
+            let rank = p * Double(sorted.count - 1)
+            let lower = Int(rank.rounded(.down))
+            let upper = min(lower + 1, sorted.count - 1)
+            return sorted[lower] + (sorted[upper] - sorted[lower]) * (rank - Double(lower))
+        }
+
+        var report: [[String: Any]] = []
+        var lines = ["STOP_BENCH runs=\(runs) audioMs=\(Int(recordingSeconds * 1000)) history=\(historySize) jitterMs=\(Int(jitter * 1000))"]
+        for stage in stages {
+            let values = samplesByStage[stage.name] ?? []
+            let median = percentile(values, 0.5)
+            let p90 = percentile(values, 0.9)
+            lines.append(String(format: "STOP_BENCH %-32@ n=%3d median=%7.1f p90=%7.1f", stage.name as NSString, values.count, median, p90))
+            report.append(["stage": stage.name, "n": values.count, "medianMs": median, "p90Ms": p90, "valuesMs": values])
+        }
+        lines.forEach { print($0) }
+        DebugLogger.shared.info(lines.joined(separator: "\n"), source: "StopPathBenchmark")
+        if let outPath = environment["LIQUID_VOICE_STOP_BENCH_OUT"] {
+            let data = try JSONSerialization.data(withJSONObject: ["audioMs": Int(recordingSeconds * 1000), "runs": runs, "stages": report], options: [.prettyPrinted])
+            try data.write(to: URL(fileURLWithPath: outPath))
+        }
+        XCTAssertEqual(samplesByStage["stop_enter -> handoff (total)"]?.count, runs, "Every run should reach the handoff")
+        XCTAssertEqual(TranscriptionSoundPlayer.shared.createdPlayerCount, 0, "The benchmark created a sound player")
+    }
+
+    /// SplitMix64: a reproducible jitter sequence, the same for every build that is compared.
+    private struct SeededGenerator: RandomNumberGenerator {
+        var state: UInt64
+        init(seed: UInt64) { self.state = seed }
+        mutating func next() -> UInt64 {
+            self.state &+= 0x9E37_79B9_7F4A_7C15
+            var z = self.state
+            z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+            z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+            return z ^ (z >> 31)
+        }
+    }
+
+    /// Entries shaped like real dictations: about 150 characters, spread over 60 days with a
+    /// busy "today".
+    private static func syntheticHistory(count: Int) -> [TranscriptionHistoryEntry] {
+        let sentence = "Please look at the stop path and tell me where the time goes before the text lands in the terminal window today"
+        let now = Date()
+        return (0..<count).map { index in
+            let age = index < 200 ? Double(index) * 60 : Double(index) * 380
+            return TranscriptionHistoryEntry(
+                timestamp: now.addingTimeInterval(-age),
+                rawText: sentence,
+                processedText: sentence + " \(index).",
+                appName: StopPathBenchmark.appName,
+                windowTitle: "",
+                wasAIProcessed: false
+            )
+        }
+    }
+}
+
+@MainActor
+final class TranscriptionHistoryPersistenceTests: XCTestCase {
+    private var suiteName = ""
+    private var defaults: UserDefaults!
+
+    override func setUp() {
+        super.setUp()
+        self.suiteName = "LiquidVoiceHistoryTests.\(UUID().uuidString)"
+        self.defaults = UserDefaults(suiteName: self.suiteName)
+    }
+
+    override func tearDown() {
+        self.defaults.removePersistentDomain(forName: self.suiteName)
+        super.tearDown()
+    }
+
+    func testEntriesAreWrittenOffTheMainThreadAndSurviveAReload() {
+        let store = TranscriptionHistoryStore(defaults: self.defaults)
+        store.addEntry(rawText: "first", processedText: "First one.", appName: "c11", windowTitle: "")
+        store.addEntry(rawText: "second", processedText: "Second one.", appName: "c11", windowTitle: "")
+        store.flushPendingWrites()
+
+        let reloaded = TranscriptionHistoryStore(defaults: self.defaults)
+        XCTAssertEqual(reloaded.entries.map(\.processedText), ["Second one.", "First one."])
+    }
+
+    func testABurstOfChangesEndsWithTheLatestHistoryOnDisk() {
+        let store = TranscriptionHistoryStore(defaults: self.defaults)
+        let entries = (0..<500).map {
+            TranscriptionHistoryEntry(rawText: "r\($0)", processedText: "p\($0)", appName: "c11", windowTitle: "", wasAIProcessed: false)
+        }
+        store.restore(from: entries)
+        for index in 0..<20 {
+            store.addEntry(rawText: "burst", processedText: "Burst \(index).", appName: "c11", windowTitle: "")
+        }
+        store.deleteEntry(id: store.entries[1].id)
+        store.flushPendingWrites()
+
+        let reloaded = TranscriptionHistoryStore(defaults: self.defaults)
+        XCTAssertEqual(reloaded.entries.count, 519)
+        XCTAssertEqual(reloaded.entries.first?.processedText, "Burst 19.")
+        XCTAssertFalse(reloaded.entries.contains { $0.processedText == "Burst 18." })
+    }
+
+    func testTodaySummaryIsCachedAndFollowsTheHistory() async {
+        let store = TranscriptionHistoryStore(defaults: self.defaults)
+        store.restore(from: [
+            TranscriptionHistoryEntry(timestamp: Date().addingTimeInterval(-3 * 86_400), rawText: "old", processedText: "an old one here", appName: "c11", windowTitle: "", wasAIProcessed: false),
+        ])
+        store.addEntry(rawText: "a", processedText: "three words here", appName: "c11", windowTitle: "")
+        store.addEntry(rawText: "b", processedText: "two words", appName: "c11", windowTitle: "")
+        await store.waitForTodaySummary()
+        XCTAssertEqual(store.todaySummary, TranscriptionHistoryStore.TodaySummary(words: 5, transcriptions: 2))
+
+        store.deleteEntries(ids: Set(store.entries.map(\.id)))
+        await store.waitForTodaySummary()
+        XCTAssertEqual(store.todaySummary, TranscriptionHistoryStore.TodaySummary(words: 0, transcriptions: 0))
+        store.flushPendingWrites()
+    }
+}
+
+@MainActor
+final class StopUIRefreshHoldTests: XCTestCase {
+    func testASRChangesDuringAStopReachTheAppUIOnceWhenTheHoldEnds() {
+        let asr = AppServices.shared.asr
+        var forwarded = 0
+        let subscription = AppServices.shared.objectWillChange.sink { forwarded += 1 }
+        defer { subscription.cancel() }
+
+        let hold = asr.holdStopUIRefresh()
+        XCTAssertTrue(asr.holdsStopUIRefresh)
+        asr.objectWillChange.send()
+        asr.objectWillChange.send()
+        XCTAssertEqual(forwarded, 0, "no whole-app rebuild while the stop pipeline runs")
+
+        asr.releaseStopUIRefresh(hold)
+        XCTAssertFalse(asr.holdsStopUIRefresh)
+        XCTAssertEqual(forwarded, 1, "one refresh when the text has been handed off")
+
+        asr.releaseStopUIRefresh(hold)
+        asr.objectWillChange.send()
+        XCTAssertEqual(forwarded, 2, "released twice is harmless; later changes forward as usual")
+    }
+
+    func testAnOlderHoldCannotEndANewerOne() {
+        let asr = AppServices.shared.asr
+        let older = asr.holdStopUIRefresh()
+        let newer = asr.holdStopUIRefresh()
+        asr.releaseStopUIRefresh(older)
+        XCTAssertTrue(asr.holdsStopUIRefresh)
+        asr.releaseStopUIRefresh(newer)
+        XCTAssertFalse(asr.holdsStopUIRefresh)
+    }
+}
+
+final class DictationStreamingFallbackPolicyTests: XCTestCase {
+    func testOnlyAResponseTheServerCouldNotStreamIsRetriedWithoutStreaming() {
+        XCTAssertTrue(DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: LLMError.invalidResponse))
+        XCTAssertTrue(DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: LLMError.httpError(400, "no stream")))
+
+        XCTAssertFalse(DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: LLMError.timeout(30)))
+        XCTAssertFalse(DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: LLMError.networkError(URLError(.notConnectedToInternet))))
+        XCTAssertFalse(DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: LLMError.invalidURL))
+        XCTAssertFalse(DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: URLError(.timedOut)))
+        XCTAssertFalse(DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: CancellationError()))
+    }
+}
+
+@MainActor
+final class TranscriptionTimeoutTests: XCTestCase {
+    func testTheWaitForAStalledPreviewScalesWithTheRecording() {
+        XCTAssertEqual(ASRService.streamingChunkDrainTimeoutNanoseconds(forSampleCount: 16_000 * 8), 30_000_000_000)
+        XCTAssertEqual(ASRService.streamingChunkDrainTimeoutNanoseconds(forSampleCount: 16_000 * 60), 30_000_000_000)
+        XCTAssertEqual(ASRService.streamingChunkDrainTimeoutNanoseconds(forSampleCount: 16_000 * 600), 300_000_000_000)
+    }
+
+    func testTheTimeoutCardOffersReprocessOnlyWhenAudioIsKept() {
+        let controller = DeliveryFailureOverlayController.shared
+        controller.showTranscriptionTimeout(.timedOut)
+        XCTAssertEqual(controller.presentedTimeout, .timedOut)
+        XCTAssertNil(controller.presentedFailure)
+        controller.showTranscriptionTimeout(.recordingRefused(hasKeptAudio: false))
+        XCTAssertEqual(controller.presentedTimeout, .recordingRefused(hasKeptAudio: false))
+        controller.hide()
+        XCTAssertNil(controller.presentedTimeout)
+        XCTAssertEqual(TestHostQuietModeTests.onScreenWindowCount(), 0)
     }
 }

@@ -15,6 +15,25 @@ import SwiftUI
 
 // MARK: - AI Processing Errors
 
+/// Whether a failed streaming AI call is worth retrying without streaming. Only a response the
+/// server could not stream (bad response, HTTP error) is; a transport failure or cancellation
+/// would fail the same way again. Ported from altic-dev/FluidVoice@42e33e68 (#950, "remove
+/// fallback and history stalls").
+nonisolated enum DictationStreamingFallbackPolicy {
+    static func shouldRetryWithoutStreaming(after error: Error) -> Bool {
+        if error is CancellationError || error is URLError {
+            return false
+        }
+        guard let llmError = error as? LLMError else { return true }
+        switch llmError {
+        case .networkError, .timeout, .invalidURL, .encodingError, .invalidRequest:
+            return false
+        case .invalidResponse, .httpError:
+            return true
+        }
+    }
+}
+
 enum AIProcessingError: LocalizedError {
     case noVerifiedProvider
     case missingAPIKey(provider: String)
@@ -609,7 +628,41 @@ struct ContentView: View {
 
         self.loadProviderState()
         self.installShortcutCaptureMonitor()
+        #if DEBUG
+        StopPathBenchmark.runDictation = { samples, recordingSeconds in
+            await self.runStopPathBenchmarkDictation(samples: samples, recordingSeconds: recordingSeconds)
+        }
+        #endif
     }
+
+    #if DEBUG
+    /// One fixture dictation through the real stop pipeline (see `StopPathBenchmark`). Starts
+    /// like `beginDictationRecording` minus the microphone, then stops like the hotkey does.
+    private func runStopPathBenchmarkDictation(samples: [Float], recordingSeconds: Double) async -> StopPathTrace? {
+        guard !self.asr.isRunningOrStarting else { return nil }
+        self.applyDictationShortcutSelectionContext(for: .primary)
+        self.setActiveRecordingMode(.dictate)
+        self.advanceOverlayLifecycle()
+        self.menuBarManager.setOverlayMode(.dictation)
+        self.menuBarManager.showRecordingOverlayImmediately()
+        guard self.asr.beginSyntheticCaptureForBenchmark(samples: samples) else {
+            self.clearActiveRecordingMode()
+            self.menuBarManager.hideRecordingOverlayImmediately(reason: "benchmark_start_failed")
+            return nil
+        }
+        // A fixed target instead of reading the operator's focused app: the benchmark never
+        // looks at, or records, what is on this Mac's screen. c11 is where dictation usually lands.
+        self.recordingAppInfo = (name: StopPathBenchmark.appName, bundleId: "com.stage11.c11", windowTitle: "")
+        self.recordingStartTarget = nil
+        self.recordingPrecedingText = ""
+        NotchContentState.shared.recordingTargetPID = nil
+        try? await Task.sleep(nanoseconds: UInt64(max(recordingSeconds, 0) * 1_000_000_000))
+        let trace = StopPathTrace(trigger: .benchmark)
+        StopPathTrace.stagePending(trace)
+        await self.stopAndProcessTranscription(route: .normal)
+        return trace
+    }
+    #endif
 
     private func scheduleDelayedAudioInitialization() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
@@ -1349,7 +1402,7 @@ struct ContentView: View {
             isTranscriptionFocused: self.$isTranscriptionFocused,
             accessibilityEnabled: self.accessibilityEnabled,
             stopAndProcessTranscription: { await self.stopAndProcessTranscription() },
-            startRecording: self.startRecording,
+            startRecording: { self.startRecording() },
             openAccessibilitySettings: self.openAccessibilitySettings,
             restartApp: self.restartApp
         )
@@ -1498,7 +1551,7 @@ struct ContentView: View {
             copyToClipboard: self.$copyToClipboard,
             hotkeyManager: self.hotkeyManager,
             menuBarManager: self.menuBarManager,
-            startRecording: self.startRecording,
+            startRecording: { self.startRecording() },
             refreshDevices: self.refreshDevices,
             openAccessibilitySettings: self.openAccessibilitySettings,
             restartApp: self.restartApp,
@@ -1512,7 +1565,7 @@ struct ContentView: View {
         RecordingView(
             appear: self.$appear,
             stopAndProcessTranscription: { await self.stopAndProcessTranscription() },
-            startRecording: self.startRecording
+            startRecording: { self.startRecording() }
         )
     }
 
@@ -1712,7 +1765,7 @@ struct ContentView: View {
                 ownPID: ownPID,
                 ownFocusIsOverlay: ownFocusIsOverlay
             )
-            DeliveryLog.bench(
+            DeliveryLog.info(
                 "stop_target_capture pid=\(target.map { String($0.pid) } ?? "nil") element=\(target?.element != nil) " +
                     "elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))"
             )
@@ -2008,6 +2061,15 @@ struct ContentView: View {
             do {
                 response = try await LLMClient.shared.call(config)
             } catch {
+                // A transport failure (offline, timeout, bad URL) would only fail again without
+                // streaming, doubling the wait before the raw text is typed as the fallback.
+                guard DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: error) else {
+                    DebugLogger.shared.warning(
+                        "Streaming dictation post-processing failed; not retrying (transport): \(error.localizedDescription)",
+                        source: "ContentView"
+                    )
+                    throw error
+                }
                 DebugLogger.shared.warning(
                     "Streaming dictation post-processing failed; retrying without streaming: \(error.localizedDescription)",
                     source: "ContentView"
@@ -2053,6 +2115,16 @@ struct ContentView: View {
     // MARK: - Stop and Process Transcription
 
     private func stopAndProcessTranscription(route: DictationOutputRoute = .normal) async {
+        let trace = StopPathTrace.takePending()
+        trace.mark(.stopEnter)
+        #if DEBUG
+        MainRunLoopProbe.watch(traceID: trace.id)
+        #endif
+        var traceOutcome = "stopped"
+        defer { trace.finishUnlessDelivering(outcome: traceOutcome) }
+        // No whole-app UI rebuild until the text is handed off (see ASRService.holdsStopUIRefresh).
+        let uiRefreshHold = self.asr.holdStopUIRefresh()
+        defer { self.asr.releaseStopUIRefresh(uiRefreshHold) }
         DebugLogger.shared.debug("stopAndProcessTranscription called", source: "ContentView")
         DebugLogger.shared.info("Output route selected: \(route.rawValue)", source: "ContentView")
         self.appBench("stop_path_enter route=\(route.rawValue)")
@@ -2090,21 +2162,18 @@ struct ContentView: View {
 
         self.clearActiveRecordingMode()
 
+        var deferredTranscribingStatus: (@MainActor () -> Void)?
         if shouldHideOverlayOnStop {
             didRequestOverlayHideOnStop = true
             DebugLogger.shared.debug("Hiding dictation overlay at stop path", source: "ContentView")
             self.hideOverlayAsync(reason: "stop_path")
         } else {
-            // Show "Transcribing" state before calling stop() when the overlay needs
-            // to remain available for prompt, command, rewrite, or AI feedback.
-            DebugLogger.shared.debug("Showing transcription processing state", source: "ContentView")
-            self.appBench("processing_ui_request status=Transcribing")
-            self.menuBarManager.setProcessing(true)
-            NotchOverlayManager.shared.updateTranscriptionText("Transcribing")
-            self.appBench("processing_ui_requested status=Transcribing")
-
-            // Give SwiftUI a chance to render the processing state before heavier work.
-            await Task.yield()
+            // The overlay stays for prompt, command, rewrite, or AI feedback. For AI dictation
+            // with the model loaded, a fast final pass (the usual case) finishes before a
+            // "Transcribing" render could queue ahead of its result, so that status waits.
+            let defersStatus = route == .normal && !wasRewriteMode && !wasCommandMode &&
+                !promptTest.isActive && self.asr.isFinalTranscriptionReady
+            deferredTranscribingStatus = await self.prepareOverlayForKeptStop(defersStatus: defersStatus)
         }
 
         // Stop the ASR service and wait for transcription to complete
@@ -2114,9 +2183,16 @@ struct ContentView: View {
         // Play the stop cue as soon as the audio engine has stopped, before the
         // (potentially slow) final transcription pass. Scoped to dictation only —
         // Command/Edit modes call asr.stop() without this callback.
-        let transcribedText = await asr.stop(onCaptureStopped: {
-            TranscriptionSoundPlayer.shared.playStopSound()
-        })
+        let transcribedText = await asr.stop(
+            onCaptureStopped: {
+                // The benchmark stays silent (the stop cue plays off the main thread anyway).
+                guard trace.trigger != .benchmark else { return }
+                TranscriptionSoundPlayer.shared.playStopSound()
+            },
+            onFinalTranscriptionStarted: deferredTranscribingStatus,
+            trace: trace
+        )
+        trace.mark(.asrReturn)
         self.appBench("asr_stop_return elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - asrStopStartedAt) * 1000).rounded()))")
         let audioSnapshot = self.asr.consumeLastCompletedAudioSnapshot()
         DebugLogger.shared.info(
@@ -2128,6 +2204,7 @@ struct ContentView: View {
         NotchOverlayManager.shared.updateTranscriptionText("")
 
         guard transcribedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+            traceOutcome = "empty"
             DebugLogger.shared.debug("Transcription returned empty text", source: "ContentView")
             // Finish the same short exit transition even when no text is emitted.
             if !didRequestOverlayHideOnStop {
@@ -2138,6 +2215,7 @@ struct ContentView: View {
 
         // Prompt Test Mode: reroute dictation hotkey output into the prompt editor (no typing/clipboard/history).
         if promptTest.isActive {
+            traceOutcome = "prompt_test"
             promptTest.lastTranscriptionText = transcribedText
             promptTest.lastOutputText = ""
             promptTest.lastError = ""
@@ -2178,6 +2256,7 @@ struct ContentView: View {
 
         // If this was a rewrite recording, process the rewrite instead of typing
         if wasRewriteMode {
+            traceOutcome = "rewrite"
             DebugLogger.shared.info("Processing rewrite with instruction: \(transcribedText)", source: "ContentView")
             AnalyticsService.shared.recordModelUsage(
                 role: .transcription,
@@ -2191,6 +2270,7 @@ struct ContentView: View {
 
         // If this was a command recording, process the command
         if wasCommandMode {
+            traceOutcome = "command"
             DebugLogger.shared.info("Processing command: \(transcribedText)", source: "ContentView")
             AnalyticsService.shared.recordModelUsage(
                 role: .transcription,
@@ -2220,6 +2300,7 @@ struct ContentView: View {
             isNormalRoute: route == .normal
         )
         if spokenSend.isPhraseOnly {
+            traceOutcome = "spoken_send_phrase_only"
             await self.finishPhraseOnlyDictation(
                 spokenSend,
                 stopTarget: spokenSendTarget,
@@ -2248,13 +2329,17 @@ struct ContentView: View {
         )
 
         if shouldUseAI {
+            // The AI call takes far longer than any UI refresh: let the app catch up now.
+            self.asr.releaseStopUIRefresh(uiRefreshHold)
             DebugLogger.shared.debug("Routing transcription through AI post-processing", source: "ContentView")
             postProcessingModel = postProcessingModelInfo.model
             let postProcessingInputChars = normalizedTranscribedText.count
             let postProcessingStart = Date()
 
-            // Update overlay text to show we're now refining (processing already true)
+            // Update overlay text to show we're now refining. Processing may only have been
+            // reserved (a fast final pass never showed "Transcribing"), so make it visible.
             self.appBench("processing_ui_request status=Refining")
+            self.menuBarManager.setProcessing(true)
             NotchOverlayManager.shared.updateTranscriptionText("Refining")
             self.appBench("processing_ui_requested status=Refining")
 
@@ -2346,6 +2431,10 @@ struct ContentView: View {
 
         DebugLogger.shared.info("Transcription finalized (chars: \(finalText.count))", source: "ContentView")
         let finalTextReadyAt = ProcessInfo.processInfo.systemUptime
+        trace.mark(.textReady, at: finalTextReadyAt)
+        trace.note("chars", String(finalText.count))
+        trace.note("ai", String(postProcessingModel != nil))
+        traceOutcome = aiFallbackReason == nil ? "not_typed" : "ai_fallback_not_typed"
         let finalOutputPlan = ASRService.makeDictationLiteralOutputPlan(
             for: finalText,
             appName: appInfo.name,
@@ -2407,7 +2496,8 @@ struct ContentView: View {
         // itself is frontmost and nothing is typed externally (ported from
         // altic-dev/FluidVoice@7d6d0e7c).
         let shouldCopyToClipboard = shouldPersistOutputs &&
-            SettingsStore.shared.copyTranscriptionToClipboard
+            SettingsStore.shared.copyTranscriptionToClipboard &&
+            trace.trigger != .benchmark // never touch the clipboard from the benchmark
 
         if shouldCopyToClipboard {
             // Through the paste session, so a clipboard restore still in flight cannot undo it.
@@ -2415,9 +2505,16 @@ struct ContentView: View {
         }
 
         var didTypeExternally = false
-        let shouldTypeExternally = shouldPersistOutputs && !isFluidFrontmost
+        // The fixture benchmark stops at the handoff: it must never restore focus to, or type
+        // into, whatever app has focus on this Mac.
+        let isBenchmark = trace.trigger == .benchmark
+        let shouldTypeExternally = shouldPersistOutputs && !isFluidFrontmost && !isBenchmark
+        if isBenchmark {
+            trace.mark(.handoff)
+            traceOutcome = "benchmark_handoff"
+        }
 
-        DebugLogger.shared.debug(
+        DebugLogger.shared.info(
             "Typing decision → frontmost: \(frontmostName), fluidFrontmost: \(isFluidFrontmost), editorFocused: \(self.isTranscriptionFocused), willTypeExternally: \(shouldTypeExternally)",
             source: "ContentView"
         )
@@ -2431,7 +2528,7 @@ struct ContentView: View {
                 typingTargetPID = stopTarget.pid
                 let preparation = await TypingService.prepareTargetForDelivery(stopTarget)
                 isTargetReady = preparation.isReady
-                self.appBench("stop_target_prepare pid=\(stopTarget.pid) result=\(preparation.rawValue)")
+                DeliveryLog.info("stop_target_prepare pid=\(stopTarget.pid) result=\(preparation.rawValue)")
             } else {
                 let typingTarget = self.resolveTypingTargetPID()
                 typingTargetPID = typingTarget.pid
@@ -2443,6 +2540,7 @@ struct ContentView: View {
                 "text_ready_to_type_request elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - finalTextReadyAt) * 1000).rounded()))"
             )
             let isInHistory = shouldPersistOutputs && SettingsStore.shared.saveTranscriptionHistory
+            trace.mark(.handoff)
             if isTargetReady,
                let sendKey = SpokenSendController.shared.sendKeyRequest(
                    for: spokenSend,
@@ -2452,18 +2550,30 @@ struct ContentView: View {
                )
             {
                 // Spoken Send: the text, then the key, in the same target (see SpokenSendController).
-                SpokenSendController.shared.deliver(finalOutputPlan, sendKey: sendKey, textReadyAt: finalTextReadyAt, transcriptInHistory: isInHistory)
+                // The typing service finishes the trace once the paste (and the key) are posted.
+                trace.expectDelivery()
+                SpokenSendController.shared.deliver(
+                    finalOutputPlan,
+                    sendKey: sendKey,
+                    textReadyAt: finalTextReadyAt,
+                    transcriptInHistory: isInHistory,
+                    stopTrace: trace
+                )
             } else if isTargetReady {
+                // The typing service finishes the trace once the paste is posted.
+                trace.expectDelivery()
                 self.asr.typeOutputPlanToActiveField(
                     finalOutputPlan,
                     preferredTargetPID: typingTargetPID,
                     textReadyAt: finalTextReadyAt,
                     tracksDictionaryCorrections: true,
-                    transcriptInHistory: isInHistory
+                    transcriptInHistory: isInHistory,
+                    stopTrace: trace
                 )
             } else {
                 // The field chosen at stop could not be brought back. Typing into whatever
                 // has focus now could land the text in the wrong place, so keep it instead.
+                traceOutcome = "target_restore_failed"
                 TypingService.reportDeliveryFailure(.targetRestoreFailed, transcript: finalText, inHistory: isInHistory)
             }
             didTypeExternally = true
@@ -2475,6 +2585,27 @@ struct ContentView: View {
         if !didTypeExternally, !shouldShowAIProcessingFailure, !didRequestOverlayHideOnStop {
             self.hideOverlayAfterOutput()
         }
+    }
+
+    /// For a stop that keeps the overlay on screen (AI, prompt test, command, rewrite): owns the
+    /// overlay now. Returns the "Transcribing" status to show if the final pass turns out slow,
+    /// or nil when the status was shown right away (`defersStatus` false).
+    private func prepareOverlayForKeptStop(defersStatus: Bool) async -> (@MainActor () -> Void)? {
+        let showTranscribingStatus: @MainActor () -> Void = {
+            DebugLogger.shared.debug("Showing transcription processing state", source: "ContentView")
+            self.appBench("processing_ui_request status=Transcribing")
+            self.menuBarManager.setProcessing(true)
+            NotchOverlayManager.shared.updateTranscriptionText("Transcribing")
+            self.appBench("processing_ui_requested status=Transcribing")
+        }
+        guard defersStatus else {
+            showTranscribingStatus()
+            // Give SwiftUI a chance to render the processing state before heavier work.
+            await Task.yield()
+            return nil
+        }
+        self.menuBarManager.reserveProcessingOverlay()
+        return showTranscribingStatus
     }
 
     private func hideOverlayAfterOutput() {
@@ -2535,7 +2666,7 @@ struct ContentView: View {
             stoppedAt: stoppedAt
         ) {
             let preparation = await TypingService.prepareTargetForDelivery(sendKey.target)
-            self.appBench("stop_target_prepare pid=\(sendKey.target.pid) result=\(preparation.rawValue) phraseOnly=true")
+            DeliveryLog.info("stop_target_prepare pid=\(sendKey.target.pid) result=\(preparation.rawValue) phraseOnly=true")
             if preparation.isReady {
                 SpokenSendController.shared.sendExistingDraft(sendKey)
             } else {
@@ -2626,6 +2757,17 @@ struct ContentView: View {
     }
 
     private func reprocessLastDictation() {
+        // The last dictation timed out in the model: its audio was kept, so transcribe it now
+        // (unless a newer dictation has been saved since).
+        if let keptAt = self.asr.keptUntranscribedDictationStoppedAt,
+           keptAt > (TranscriptionHistoryStore.shared.entries.first?.timestamp ?? .distantPast)
+        {
+            Task { @MainActor in
+                await self.reprocessKeptDictationAudio()
+            }
+            return
+        }
+
         if let pendingText = self.pendingAIReprocessText?.trimmingCharacters(in: .whitespacesAndNewlines),
            !pendingText.isEmpty
         {
@@ -2650,6 +2792,28 @@ struct ContentView: View {
         DebugLogger.shared.info("Actions: Reprocessing latest dictation history entry", source: "ContentView")
         Task { @MainActor in
             await self.reprocessDictationText(rawText)
+        }
+    }
+
+    /// Reprocess for a dictation whose transcription timed out: transcribe its kept audio, then
+    /// finish it like any reprocess (formatting, AI cleanup, typing, history).
+    private func reprocessKeptDictationAudio() async {
+        guard !self.asr.isRecoveringFromStalledTranscription else {
+            DebugLogger.shared.info("Actions: kept dictation not reprocessed; the model is still recovering", source: "ContentView")
+            ASRService.transcriptionTimeoutHandler(.reprocessUnavailable)
+            return
+        }
+        do {
+            guard let text = try await self.asr.transcribeKeptUntranscribedDictation(),
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else {
+                DebugLogger.shared.info("Actions: kept dictation transcribed to nothing", source: "ContentView")
+                return
+            }
+            await self.reprocessDictationText(text)
+        } catch {
+            DebugLogger.shared.error("Actions: kept dictation could not be transcribed: \(error.localizedDescription)", source: "ContentView")
+            ASRService.transcriptionTimeoutHandler(.reprocessUnavailable)
         }
     }
 
@@ -3114,7 +3278,10 @@ struct ContentView: View {
     }
 
     /// Capture app context at start to avoid mismatches if the user switches apps mid-session
-    private func startRecording() {
+    /// Returns the task running the capture start (nil if nothing was started): the hotkey
+    /// manager counts the start as in flight until it finishes (HoldReleaseStopLatch.trackStart).
+    @discardableResult
+    private func startRecording() -> HotkeyCaptureStartTask? {
         let model = SettingsStore.shared.selectedSpeechModel
         DebugLogger.shared.info(
             "ContentView: startRecording() for model=\(model.displayName), supportsStreaming=\(model.supportsStreaming)",
@@ -3122,7 +3289,7 @@ struct ContentView: View {
         )
         guard !self.asr.isRunningOrStarting else {
             DebugLogger.shared.debug("ContentView: start ignored because capture is already active", source: "ContentView")
-            return
+            return nil
         }
 
         self.advanceOverlayLifecycle()
@@ -3145,7 +3312,7 @@ struct ContentView: View {
             )
         }
 
-        Task {
+        let captureStart = Task {
             let startOutcome = await self.asr.start(onCaptureStarted: {
                 if shouldPlayStartSound {
                     TranscriptionSoundPlayer.shared.playStartSound()
@@ -3172,6 +3339,7 @@ struct ContentView: View {
                 DebugLogger.shared.error("Failed to pre-load model: \(error)", source: "ContentView")
             }
         }
+        return captureStart
     }
 
     /// Best-effort: re-activate the app that was focused when recording started.
@@ -3327,9 +3495,12 @@ struct ContentView: View {
             promptModeShortcutEnabled: self.isPromptModeShortcutEnabled,
             commandModeShortcutEnabled: self.isCommandModeShortcutEnabled,
             rewriteModeShortcutEnabled: self.isRewriteModeShortcutEnabled,
+            // Start callbacks return the task running the capture start they dispatch (nil when
+            // they start nothing). The release-stop latch counts the start as in flight until
+            // that task finishes, whatever the callback awaits before it (see trackStart).
             startRecordingCallback: {
                 DebugLogger.shared.debug("ContentView: startRecordingCallback invoked by hotkey", source: "ContentView")
-                self.startRecording()
+                return self.startRecording()
             },
             dictationModeCallback: {
                 DebugLogger.shared.info("Dictate mode triggered", source: "ContentView")
@@ -3337,7 +3508,7 @@ struct ContentView: View {
                     "ContentView: selected model for dictate hotkey=\(SettingsStore.shared.selectedSpeechModel.displayName)",
                     source: "ContentView"
                 )
-                self.beginDictationRecording(for: .primary, mode: .dictate)
+                return self.beginDictationRecording(for: .primary, mode: .dictate)
             },
             stopAndProcessCallback: {
                 let route = self.currentDictationOutputRouteForHotkeyStop()
@@ -3346,11 +3517,11 @@ struct ContentView: View {
             },
             promptModeCallback: {
                 DebugLogger.shared.info("Prompt mode triggered", source: "ContentView")
-                self.beginDictationRecording(for: .secondary, mode: .promptMode)
+                return self.beginDictationRecording(for: .secondary, mode: .promptMode)
             },
             promptSelectionCallback: { selection in
                 DebugLogger.shared.info("Prompt selection shortcut triggered", source: "ContentView")
-                self.beginDictationRecording(for: selection, mode: .promptMode)
+                return self.beginDictationRecording(for: selection, mode: .promptMode)
             },
             commandModeCallback: {
                 DebugLogger.shared.info("Command mode triggered", source: "ContentView")
@@ -3362,7 +3533,7 @@ struct ContentView: View {
                 // Set overlay mode to command
                 self.menuBarManager.setOverlayMode(.command)
 
-                guard !self.asr.isRunningOrStarting else { return }
+                guard !self.asr.isRunningOrStarting else { return nil }
 
                 self.advanceOverlayLifecycle()
 
@@ -3371,7 +3542,7 @@ struct ContentView: View {
                     "Starting voice recording for command",
                     source: "ContentView"
                 )
-                Task {
+                return Task {
                     let startOutcome = await self.asr.start(onCaptureStarted: {
                         TranscriptionSoundPlayer.shared.playStartSound()
                         self.appBench("overlay_phase phase=recording trigger=first_pcm mode=command")
@@ -3409,13 +3580,13 @@ struct ContentView: View {
                 // Set flag so stopAndProcessTranscription knows to process as rewrite
                 self.setActiveRecordingMode(.edit)
 
-                guard !self.asr.isRunningOrStarting else { return }
+                guard !self.asr.isRunningOrStarting else { return nil }
 
                 self.advanceOverlayLifecycle()
 
                 // Start recording immediately for the edit instruction
                 DebugLogger.shared.info("Starting voice recording for edit mode", source: "ContentView")
-                Task {
+                return Task {
                     let startOutcome = await self.asr.start(onCaptureStarted: {
                         TranscriptionSoundPlayer.shared.playStartSound()
                         self.appBench("overlay_phase phase=recording trigger=first_pcm mode=edit")
@@ -3733,7 +3904,10 @@ extension ContentView {
         }
     }
 
-    private func beginDictationRecording(for slot: SettingsStore.DictationShortcutSlot, mode: ActiveRecordingMode) {
+    /// Returns the task running the capture start (nil if nothing was started): the hotkey
+    /// manager counts the start as in flight until it finishes (HoldReleaseStopLatch.trackStart).
+    @discardableResult
+    private func beginDictationRecording(for slot: SettingsStore.DictationShortcutSlot, mode: ActiveRecordingMode) -> HotkeyCaptureStartTask? {
         DebugLogger.shared.debug("Begin dictation recording for slot \(slot.rawValue)", source: "ContentView")
         self.appBench("begin_recording slot=\(slot.rawValue) mode=\(mode.rawValue)")
         if self.isOnboardingVoicePlaygroundStepActive {
@@ -3749,7 +3923,7 @@ extension ContentView {
 
         guard !self.asr.isRunningOrStarting else {
             self.appBench("asr_start_skipped reason=already_running_or_starting")
-            return
+            return nil
         }
         self.advanceOverlayLifecycle()
         if self.asr.micStatus == .authorized {
@@ -3759,7 +3933,7 @@ extension ContentView {
             self.appBench("overlay_mode_requested mode=Dictation")
             self.appBench("overlay_phase phase=connecting")
         }
-        Task {
+        return Task {
             let asrStartStartedAt = ProcessInfo.processInfo.systemUptime
             DebugLogger.shared.benchmark("APP_BENCH", message: "asr_start_call", source: "AppBenchmark")
             let startOutcome = await self.asr.start(onCaptureStarted: {
@@ -3780,10 +3954,11 @@ extension ContentView {
         }
     }
 
-    private func beginDictationRecording(for selection: SettingsStore.DictationPromptSelection, mode: ActiveRecordingMode) {
+    @discardableResult
+    private func beginDictationRecording(for selection: SettingsStore.DictationPromptSelection, mode: ActiveRecordingMode) -> HotkeyCaptureStartTask? {
         let settings = SettingsStore.shared
         settings.setDictationPromptSelection(selection, for: .secondary)
-        self.beginDictationRecording(for: .secondary, mode: mode)
+        return self.beginDictationRecording(for: .secondary, mode: mode)
     }
 
     private func appBench(_ message: String) {

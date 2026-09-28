@@ -426,7 +426,7 @@ final class TypingService {
             }
             result = self.preparationVerdict(appInFront: wait.inFront, broughtBack: true, fieldConfirmed: !hasField || fieldConfirmed)
         }
-        DeliveryLog.bench(
+        DeliveryLog.info(
             "prepare_target app=\(target.bundleIdentifier ?? "pid\(target.pid)") terminal=\(isTerminal) " +
                 "result=\(result.rawValue) elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000).rounded()))"
         )
@@ -509,7 +509,7 @@ final class TypingService {
     nonisolated static func logFrontmostCheck(stage: String, target pid: pid_t, waitedMs: Int, inFront: Bool, via: String? = nil) {
         let targetApp = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? "pid\(pid)"
         let frontApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "none"
-        DeliveryLog.bench(
+        DeliveryLog.info(
             "frontmost_check stage=\(stage) app=\(targetApp) waitedMs=\(waitedMs) " +
                 "result=\(inFront ? "in_front" : "not_in_front") frontmost=\(frontApp)" +
                 (via.map { " via=\($0)" } ?? "")
@@ -539,7 +539,7 @@ final class TypingService {
             guard ProcessInfo.processInfo.systemUptime < deadline else { break }
             let result = AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
             if result == .success, Self.isCurrentlyFocusedElement(element, expectedPID: target.pid) {
-                DeliveryLog.bench("restore_exact_target result=restored attempt=\(attempt)")
+                DeliveryLog.info("restore_exact_target result=restored attempt=\(attempt)")
                 return true
             }
             if attempt < 2 {
@@ -548,11 +548,11 @@ final class TypingService {
         }
 
         guard ProcessInfo.processInfo.systemUptime < deadline else {
-            DeliveryLog.bench("restore_exact_target result=deadline")
+            DeliveryLog.info("restore_exact_target result=deadline")
             return false
         }
         let isFocused = Self.isCurrentlyFocusedElement(element, expectedPID: target.pid)
-        DeliveryLog.bench("restore_exact_target result=\(isFocused ? "restored" : "unconfirmed")")
+        DeliveryLog.info("restore_exact_target result=\(isFocused ? "restored" : "unconfirmed")")
         return isFocused
     }
 
@@ -579,7 +579,7 @@ final class TypingService {
         DeliveryLog.warning("Text delivery failed reason=\(failure.rawValue) chars=\(transcript.count)")
         guard failure.isUserVisible, !transcript.isEmpty else { return }
         pasteSession.keepTranscript(transcript, since: revision) { outcome in
-            DeliveryLog.bench("delivery_failure_transcript_kept clipboard=\(outcome.rawValue) inHistory=\(inHistory)")
+            DeliveryLog.info("delivery_failure_transcript_kept clipboard=\(outcome.rawValue) inHistory=\(inHistory)")
             let report = DeliveryFailureReport(failure: failure, transcript: transcript, clipboard: outcome, inHistory: inHistory)
             Task { @MainActor in
                 TypingService.deliveryFailureHandler(report)
@@ -630,6 +630,7 @@ final class TypingService {
         transcriptInHistory: Bool = false,
         sendKey: SendKeyRequest? = nil,
         onSendKey: ((SendKeyOutcome) -> Void)? = nil,
+        stopTrace: StopPathTrace? = nil,
         completion: ((TextDeliveryResult) -> Void)? = nil
     ) {
         let verifiesLanding = verifiesLanding && sendKey == nil
@@ -650,8 +651,9 @@ final class TypingService {
         self.log("[TypingService] Text preview: \"\(String(text.prefix(100)))\"")
 
         guard text.isEmpty == false else {
-            self.bench("request_return reason=empty_text")
+            self.decision("request_return reason=empty_text")
             self.log("[TypingService] ERROR: Empty text provided, aborting")
+            stopTrace?.finish(outcome: TextDeliveryFailure.emptyText.rawValue)
             completion?(.recoverableFailure(.emptyText))
             if sendKey != nil { onSendKey?(.textNotDelivered) }
             return
@@ -659,9 +661,10 @@ final class TypingService {
 
         // Check accessibility permissions first
         guard AXIsProcessTrusted() else {
-            self.bench("request_return reason=accessibility_not_trusted")
+            self.decision("request_return reason=accessibility_not_trusted")
             self.log("[TypingService] ERROR: Accessibility permissions required for text injection")
             Self.reportDeliveryFailure(.accessibilityNotTrusted, transcript: text, inHistory: transcriptInHistory, pasteSession: self.pasteSession)
+            stopTrace?.finish(outcome: TextDeliveryFailure.accessibilityNotTrusted.rawValue)
             completion?(.recoverableFailure(.accessibilityNotTrusted))
             if sendKey != nil { onSendKey?(.textNotDelivered) }
             return
@@ -673,7 +676,7 @@ final class TypingService {
         let queuedBehind = self.pendingInsertions - 1
         self.pendingCountLock.unlock()
         if queuedBehind > 0 {
-            self.bench("request_queued behind=\(queuedBehind)")
+            self.decision("request_queued behind=\(queuedBehind)")
             self.log("[TypingService] Insertion queued behind \(queuedBehind) in-flight operation(s)")
         }
 
@@ -720,15 +723,30 @@ final class TypingService {
 
             let insertStartedAt = ProcessInfo.processInfo.systemUptime
             self.bench("insert_call")
-            let delivery = self.deliver(
-                text,
-                preferredTargetPID: preferredTargetPID,
-                verifiesLanding: verifiesLanding,
-                transcriptInHistory: transcriptInHistory,
-                sendKey: sendKey
-            )
+            // Bound for this delivery so the paste session marks the moment Cmd+V is posted.
+            let delivery = StopPathTrace.$current.withValue(stopTrace) {
+                self.deliver(
+                    text,
+                    preferredTargetPID: preferredTargetPID,
+                    verifiesLanding: verifiesLanding,
+                    transcriptInHistory: transcriptInHistory,
+                    sendKey: sendKey
+                )
+            }
             result = delivery.result
             sendKeyOutcome = delivery.sendKey ?? .textNotDelivered
+            switch result {
+            case .dispatched:
+                // Typed or AX paths post no Cmd+V: the text was handed over when deliver returned.
+                stopTrace?.mark(.pastePosted)
+                if delivery.sendKey == .sent {
+                    stopTrace?.mark(.sendKeyPosted)
+                }
+                stopTrace?.note("sendKey", delivery.sendKey?.rawValue ?? "none")
+                stopTrace?.finish(outcome: "delivered")
+            case let .recoverableFailure(failure):
+                stopTrace?.finish(outcome: failure.rawValue)
+            }
             self.bench(
                 "insert_return result=\(Self.describe(result)) elapsedMs=\(Self.elapsedMs(since: insertStartedAt)) totalMs=\(Self.elapsedMs(since: requestedAt))"
             )
@@ -751,9 +769,9 @@ final class TypingService {
     /// still in flight, and goes only while the target is in front.
     func pressSendKey(_ request: SendKeyRequest, completion: ((SendKeyOutcome) -> Void)? = nil) {
         let requestedAt = ProcessInfo.processInfo.systemUptime
-        self.bench("send_key_request pid=\(request.target.pid) key=\(request.key.rawValue)")
+        self.decision("send_key_request pid=\(request.target.pid) key=\(request.key.rawValue)")
         guard AXIsProcessTrusted() else {
-            self.bench("send_key_return reason=accessibility_not_trusted")
+            self.decision("send_key_return reason=accessibility_not_trusted")
             completion?(.eventsUnavailable)
             return
         }
@@ -768,7 +786,7 @@ final class TypingService {
             } else {
                 Self.pressSendKeyInApp(step, target: request.target, focusAtPaste: .same)
             }
-            self.bench("send_key_return outcome=\(outcome.rawValue) terminal=\(isTerminal) elapsedMs=\(Self.elapsedMs(since: requestedAt))")
+            self.decision("send_key_return outcome=\(outcome.rawValue) terminal=\(isTerminal) elapsedMs=\(Self.elapsedMs(since: requestedAt))")
             if let completion {
                 Task { @MainActor in completion(outcome) }
             }
@@ -821,8 +839,15 @@ final class TypingService {
         return released
     }
 
-    private func bench(_ message: String) {
-        DebugLogger.shared.benchmark("TYPING_BENCH", message: message, source: "TypingBenchmark")
+    private func bench(_ message: @autoclosure () -> String) {
+        DebugLogger.shared.benchmark("TYPING_BENCH", message: message(), source: "TypingBenchmark")
+    }
+
+    /// A per-delivery decision (which path, why a target or send key was refused). Kept in
+    /// Release, unlike timing lines: it is how a lost or misplaced paste gets diagnosed in the
+    /// installed app. Never carries transcript text.
+    private func decision(_ message: String) {
+        DeliveryLog.info(message)
     }
 
     private static func elapsedMs(since start: TimeInterval) -> Int {
@@ -880,7 +905,7 @@ final class TypingService {
             if deliveryPID == sendKey.target.pid {
                 sendStep = SendKeyStep(request: sendKey)
             } else {
-                self.bench("send_key_skipped reason=target_mismatch deliveryPID=\(deliveryPID.map { String($0) } ?? "nil") sendPID=\(sendKey.target.pid)")
+                self.decision("send_key_skipped reason=target_mismatch deliveryPID=\(deliveryPID.map { String($0) } ?? "nil") sendPID=\(sendKey.target.pid)")
                 sendKeyOutcome = .targetMismatch
             }
         }
@@ -891,12 +916,12 @@ final class TypingService {
         if route.refusesNonEditableFocus {
             let assessStartedAt = ProcessInfo.processInfo.systemUptime
             let assessment = DeliveryTargetAssessment.assessFocusedElement(messagingTimeout: Self.axMessagingTimeoutSeconds)
-            self.bench("focus_assess \(assessment.logDescription) elapsedMs=\(Self.elapsedMs(since: assessStartedAt))")
+            self.decision("focus_assess \(assessment.logDescription) elapsedMs=\(Self.elapsedMs(since: assessStartedAt))")
             if assessment.isCertainlyNotEditable {
                 return (.recoverableFailure(.noEditableTarget), sendKey.map { _ in .textNotDelivered })
             }
         } else {
-            self.bench("focus_assess skipped reason=terminal_target")
+            self.decision("focus_assess skipped reason=terminal_target")
         }
 
         // The read-back baseline costs AX reads, so it is taken only when the opt-in check
@@ -927,10 +952,10 @@ final class TypingService {
         )
         switch outcome {
         case let .failed(failure):
-            self.bench("insert_path path=none failure=\(failure.rawValue)")
+            self.decision("insert_path path=none failure=\(failure.rawValue)")
             return (.recoverableFailure(failure), sendKey.map { _ in .textNotDelivered })
         case let .dispatched(path):
-            self.bench("insert_path path=\(path.rawValue)")
+            self.decision("insert_path path=\(path.rawValue)")
             if path.usesClipboard, let verificationBaseline {
                 Self.verifyPasteLanded(
                     text,
@@ -960,7 +985,7 @@ final class TypingService {
         }
         guard step.modifiersReleased() else { return .modifiersHeld }
         guard !step.userActedSince(step.inputCutoff) else {
-            DeliveryLog.bench("send_key_refused reason=user_acted pid=\(target.pid)")
+            DeliveryLog.info("send_key_refused reason=user_acted pid=\(target.pid)")
             return .userActed
         }
         let focus = self.focusedElementForSendKey()
@@ -972,7 +997,7 @@ final class TypingService {
             targetFocus: TargetFocus.worst([focusAtPaste, focusNow])
         )
         if let verdict {
-            DeliveryLog.bench(
+            DeliveryLog.info(
                 "send_key_refused reason=\(verdict.rawValue) pid=\(target.pid) focus=\(focus.assessment.logDescription) " +
                     "atPaste=\(focusAtPaste.rawValue) now=\(focusNow.rawValue)"
             )
@@ -1375,7 +1400,7 @@ final class TypingService {
                 expectedText: expectedText,
                 timeoutMicros: 5_000_000
             )
-            DeliveryLog.bench("paste_consumption_wait result=\(verification.rawValue)")
+            DeliveryLog.info("paste_consumption_wait result=\(verification.rawValue)")
         }
     }
 
@@ -1456,7 +1481,7 @@ final class TypingService {
             }
         )
         if let failure {
-            self.bench("clipboard_pid_failed reason=\(failure.rawValue)")
+            self.decision("clipboard_pid_failed reason=\(failure.rawValue)")
         }
         return failure
     }
@@ -1496,7 +1521,7 @@ final class TypingService {
                 makeConsumptionWait: makeConsumptionWait, atDispatch: atDispatch
             )
             guard let first, Self.isClipboardRace(first) else { return first }
-            DeliveryLog.bench("terminal_paste_retry reason=\(first.rawValue)")
+            DeliveryLog.info("terminal_paste_retry reason=\(first.rawValue)")
             usleep(useconds_t(self.retryDelay * 1_000_000))
             return self.attempt(
                 text, to: pid, activateFirst: activateFirst, beforeDispatch: beforeDispatch,
@@ -1558,7 +1583,7 @@ final class TypingService {
             }
             guard send.modifiersReleased() else { return .modifiersHeld }
             guard !send.userActedSince(send.inputCutoff) else {
-                DeliveryLog.bench("send_key_refused reason=user_acted pid=\(pid)")
+                DeliveryLog.info("send_key_refused reason=user_acted pid=\(pid)")
                 return .userActed
             }
             // The paste's gate, looked at again right before the key: never press Return blind.
@@ -1568,7 +1593,7 @@ final class TypingService {
             }
             let focusNow = send.targetFocus()
             if let refusal = TargetFocus.worst([focusAtPaste, focusNow]).outcome {
-                DeliveryLog.bench(
+                DeliveryLog.info(
                     "send_key_refused reason=\(refusal.rawValue) pid=\(pid) atPaste=\(focusAtPaste.rawValue) now=\(focusNow.rawValue)"
                 )
                 return refusal
@@ -1615,7 +1640,7 @@ final class TypingService {
             )
             if leftFront { return .targetRestoreFailed }
             if let failure {
-                DeliveryLog.bench("terminal_paste_failed reason=\(failure.rawValue)")
+                DeliveryLog.info("terminal_paste_failed reason=\(failure.rawValue)")
             }
             return failure
         }
@@ -1754,7 +1779,7 @@ final class TypingService {
             }
         )
         if let failure {
-            self.bench("clipboard_global_failed reason=\(failure.rawValue)")
+            self.decision("clipboard_global_failed reason=\(failure.rawValue)")
         }
         return failure
     }
@@ -1799,7 +1824,7 @@ final class TypingService {
             }
         )
         if let failure {
-            self.bench("menu_paste_failed reason=\(failure.rawValue)")
+            self.decision("menu_paste_failed reason=\(failure.rawValue)")
         }
         return failure
     }

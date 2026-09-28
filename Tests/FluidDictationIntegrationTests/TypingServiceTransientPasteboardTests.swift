@@ -1394,6 +1394,24 @@ final class TerminalPasteTests: XCTestCase {
         XCTAssertEqual(self.pasteboard.string(forType: .string), "before")
     }
 
+    func testThePostedPasteIsMarkedOnTheDictationsStopTrace() {
+        let session = ClipboardPasteSession(pasteboard: SystemPasteboardManager(pasteboard: self.pasteboard), label: "TerminalPasteTests")
+        let posted = CallCounter()
+        let broughtForward = CallCounter()
+
+        let delivered = StopPathTrace(trigger: .toggle) { _ in }
+        let inFront = self.makePaster(session: session, posted: posted, broughtForward: broughtForward) { _ in true }
+        XCTAssertNil(StopPathTrace.$current.withValue(delivered) { self.paste(with: inFront) })
+        session.waitUntilIdle()
+        XCTAssertNotNil(delivered.elapsedMilliseconds(from: .trigger, to: .pastePosted), "Cmd+V was posted")
+
+        let refused = StopPathTrace(trigger: .toggle) { _ in }
+        let neverInFront = self.makePaster(session: session, posted: posted, broughtForward: broughtForward) { _ in false }
+        XCTAssertEqual(StopPathTrace.$current.withValue(refused) { self.paste(with: neverInFront) }, .targetRestoreFailed)
+        session.waitUntilIdle()
+        XCTAssertNil(refused.elapsedMilliseconds(from: .trigger, to: .pastePosted), "nothing was posted")
+    }
+
     func testAClipboardRaceIsRetriedOnceAndThePasteGoesThrough() {
         let flaky = FlakySnapshotPasteboard(self.pasteboard, failures: 1)
         let session = ClipboardPasteSession(pasteboard: flaky, label: "TerminalPasteTests")

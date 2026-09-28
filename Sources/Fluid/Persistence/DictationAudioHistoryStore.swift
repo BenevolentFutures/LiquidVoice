@@ -12,7 +12,7 @@ struct DictationAudioSnapshot: Sendable {
     }
 }
 
-struct DictationAudioMetadata: Codable, Equatable, Sendable {
+nonisolated struct DictationAudioMetadata: Codable, Equatable, Sendable {
     let fileName: String
     let durationMilliseconds: Int
     let byteCount: Int

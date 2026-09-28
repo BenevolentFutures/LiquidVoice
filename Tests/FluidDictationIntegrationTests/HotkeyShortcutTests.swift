@@ -260,6 +260,80 @@ final class HotkeyShortcutTests: XCTestCase {
         XCTAssertTrue(stops.isEmpty)
     }
 
+    /// Regression guard for the hotkey start ordering: the release lands after the callback has
+    /// dispatched its start but before ASRService marks itself starting (the callback and the
+    /// start task both suspend first). It must still be latched and honored once, when the start
+    /// finishes. A latch that settles the start on a fixed number of main-actor turns fails here.
+    @MainActor
+    func testHoldReleaseIsHonoredWhateverTheStartAwaitsBeforeASRSeesIt() async {
+        let asr = FakeCaptureStartState()
+        var stops: [HoldReleaseStopLatch.Request] = []
+        let latch = asr.makeLatch { stops.append($0) }
+        let release = HoldReleaseStopLatch.Request(type: .transcription, label: "Transcription", requireTargetMode: true)
+        var outcomeBeforeASRSawTheStart: HoldReleaseStopLatch.Outcome?
+
+        let tracking = latch.trackStart {
+            await Task.yield() // the callback awaits before dispatching
+            return Task { @MainActor in
+                for _ in 0..<5 { await Task.yield() } // ASR has not seen the start yet
+                outcomeBeforeASRSawTheStart = latch.release(release)
+                asr.isStarting = true
+                for _ in 0..<5 { await Task.yield() } // a slow direct Core Audio start
+                asr.isStarting = false
+                asr.isRunning = true
+                latch.captureStartSettled()
+            }
+        }
+        await tracking.value
+
+        XCTAssertEqual(outcomeBeforeASRSawTheStart, .latched)
+        XCTAssertEqual(stops, [release], "stopped exactly once, when the start finished")
+        XCTAssertTrue(latch.pending.isEmpty)
+        XCTAssertFalse(latch.isStartInFlight)
+    }
+
+    @MainActor
+    func testAStartingActionThatStartsNothingClearsItsLatchedRelease() async {
+        let asr = FakeCaptureStartState()
+        var stops: [HoldReleaseStopLatch.Request] = []
+        let latch = asr.makeLatch { stops.append($0) }
+        let tracking = latch.trackStart { nil } // e.g. the screen is locked
+        XCTAssertEqual(latch.release(.init(type: .transcription, label: "Transcription", requireTargetMode: true)), .latched)
+        await tracking.value
+        XCTAssertTrue(stops.isEmpty)
+        XCTAssertTrue(latch.pending.isEmpty)
+    }
+
+    @MainActor
+    func testANewStartingPressSupersedesAModeAgnosticLatchedStop() {
+        let asr = FakeCaptureStartState()
+        var stops: [HoldReleaseStopLatch.Request] = []
+        let latch = asr.makeLatch { stops.append($0) }
+
+        // A tracking reset during a slow dictation start latches a stop bound to no mode.
+        latch.startRequested()
+        asr.isStarting = true
+        latch.startRequestSettled()
+        let reset = HoldReleaseStopLatch.Request(type: .transcription, label: "Shortcut tracking reset", requireTargetMode: false)
+        XCTAssertEqual(latch.release(reset), .latched)
+
+        // A mode-bound release latched alongside keeps its own mode check.
+        let promptRelease = HoldReleaseStopLatch.Request(type: .promptMode, label: "Prompt mode", requireTargetMode: true)
+        XCTAssertEqual(latch.release(promptRelease), .latched)
+
+        // A new starting press (say, command mode) supersedes the reset's stop: it must not end
+        // the recording that press now owns.
+        latch.startRequested()
+        XCTAssertNil(latch.pending[.transcription])
+        XCTAssertEqual(latch.pending[.promptMode], promptRelease)
+
+        asr.activeTargets = [.commandMode]
+        asr.isStarting = false
+        asr.isRunning = true
+        latch.startRequestSettled()
+        XCTAssertTrue(stops.isEmpty, "neither the superseded reset nor the prompt-mode release stops command mode")
+    }
+
     @MainActor
     func testHoldReleaseLatchEdgeCases() {
         let asr = FakeCaptureStartState()
@@ -394,6 +468,66 @@ final class HotkeyShortcutTests: XCTestCase {
 
         XCTAssertEqual(outcome, .hidden)
         XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
+    }
+
+    /// Hiding sets alpha 0 at once (no WindowServer fence on the stop path) and parks the panel
+    /// offscreen right after the stop pipeline hands its text off, so it cannot take clicks meant
+    /// for the app beneath. ignoresMouseEvents is never set: once set, the pill's transparent
+    /// margin would take clicks for good.
+    @MainActor
+    func testBottomOverlayHidesByAlphaThenParksAfterTheHandoff() async throws {
+        let audioPublisher = Just(CGFloat.zero).eraseToAnyPublisher()
+        let controller = BottomOverlayWindowController.shared
+
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: audioPublisher, mode: .dictation)
+        let shown = try XCTUnwrap(controller.windowStateForTests)
+        XCTAssertEqual(shown.alpha, 1)
+        XCTAssertFalse(shown.isParkedOffscreen)
+
+        // A stop pipeline is running: the hide must not park yet.
+        StopPipelineWindowWork.hold()
+        let outcome = await controller.hideAndWait()
+        XCTAssertEqual(outcome, .hidden)
+        let hidden = try XCTUnwrap(controller.windowStateForTests)
+        XCTAssertEqual(hidden.alpha, 0)
+        XCTAssertFalse(hidden.isParkedOffscreen, "no window-management fence before the handoff")
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented, "controls are inert while hidden")
+
+        // The text was handed off: parked offscreen, where no click can reach it.
+        StopPipelineWindowWork.release()
+        let parked = try XCTUnwrap(controller.windowStateForTests)
+        XCTAssertTrue(parked.isParkedOffscreen)
+        XCTAssertFalse(parked.ignoresMouse, "ignoresMouseEvents is never touched")
+
+        controller.show(audioPublisher: audioPublisher, mode: .dictation)
+        XCTAssertEqual(controller.windowStateForTests?.alpha, 1)
+        XCTAssertEqual(controller.windowStateForTests?.isParkedOffscreen, false)
+        XCTAssertEqual(controller.windowStateForTests?.ignoresMouse, false)
+
+        // With no stop running, a hide parks on the next main-queue pass.
+        _ = await controller.hideAndWait()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(controller.windowStateForTests?.isParkedOffscreen, true)
+    }
+
+    /// A rapid restart between the hide and the handoff keeps the panel where the new
+    /// presentation put it.
+    @MainActor
+    func testARestartBeforeTheHandoffIsNotParked() async throws {
+        let audioPublisher = Just(CGFloat.zero).eraseToAnyPublisher()
+        let controller = BottomOverlayWindowController.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: audioPublisher, mode: .dictation)
+        StopPipelineWindowWork.hold()
+        _ = await controller.hideAndWait()
+        controller.show(audioPublisher: audioPublisher, mode: .dictation)
+        StopPipelineWindowWork.release()
+        XCTAssertEqual(controller.windowStateForTests?.isParkedOffscreen, false)
+        XCTAssertEqual(controller.windowStateForTests?.alpha, 1)
+        _ = await controller.hideAndWait()
     }
 
     @MainActor
@@ -2279,7 +2413,7 @@ private final class FakeCaptureStartState {
             isStarting: { [unowned self] in self.isStarting },
             isRunning: { [unowned self] in self.isRunning },
             isTargetActive: { [unowned self] type in self.activeTargets?.contains(type) ?? true },
-            stop: stop
+            stop: { request, _ in stop(request) }
         )
     }
 }

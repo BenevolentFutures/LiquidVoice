@@ -28,6 +28,7 @@ final class DeliveryFailureOverlayController {
     /// What the card currently shows. Read by tests and the debug triggers.
     private(set) var presentedFailure: TextDeliveryFailure?
     private(set) var presentedTranscript: String?
+    private(set) var presentedTimeout: TranscriptionTimeoutNotice?
 
     private init() {}
 
@@ -39,13 +40,7 @@ final class DeliveryFailureOverlayController {
         let failure = report.failure
         let transcript = report.transcript
         guard let title = failure.userFacingTitle else { return }
-        self.generation &+= 1
-        self.dismissTask?.cancel()
-        self.isClosing = false
-        self.presentedFailure = failure
-        self.presentedTranscript = transcript
-
-        let rootView = DeliveryFailureCardView(
+        self.present(DeliveryFailureCardView(
             title: title,
             transcript: transcript,
             detail: Self.detailText(clipboard: report.clipboard, inHistory: report.inHistory),
@@ -60,7 +55,64 @@ final class DeliveryFailureOverlayController {
             },
             onDismiss: { [weak self] in self?.hide() },
             onHoverChanged: { [weak self] hovering in self?.hoverChanged(hovering) }
-        )
+        ))
+        self.presentedFailure = failure
+        self.presentedTranscript = transcript
+        DebugLogger.shared.info("Delivery failure card shown failure=\(failure.rawValue) chars=\(transcript.count)", source: "DeliveryFailureCard")
+    }
+
+    /// A dictation whose transcription timed out (its audio is kept), or a recording refused
+    /// while the model recovers. Same card; Reprocess takes Copy's place.
+    func showTranscriptionTimeout(_ notice: TranscriptionTimeoutNotice) {
+        let title: String
+        let message: String
+        let detail: String
+        let offersReprocess: Bool
+        switch notice {
+        case .timedOut:
+            title = "Transcription timed out"
+            message = "The speech model didn't finish in time. Your recording is kept."
+            detail = "Reprocess it once the model is back."
+            offersReprocess = true
+        case let .recordingRefused(hasKeptAudio):
+            title = "Speech recognition is recovering"
+            message = "The speech model is still busy with an earlier recording, so this one didn't start."
+            detail = hasKeptAudio ? "The timed-out recording is kept for Reprocess." : "Try again in a moment."
+            offersReprocess = hasKeptAudio
+        case .reprocessUnavailable:
+            title = "Speech recognition is recovering"
+            message = "The model can't transcribe the kept recording yet."
+            detail = "It stays kept. Reprocess again in a moment."
+            offersReprocess = true
+        }
+        self.present(DeliveryFailureCardView(
+            title: title,
+            transcript: "",
+            message: message,
+            detail: detail,
+            offersAccessibilitySettings: false,
+            primaryAction: offersReprocess ? .reprocess : .none,
+            iconName: "hourglass",
+            onCopy: { [weak self] in
+                // Reprocess: the same path as the overlay's Reprocess chip and hotkey.
+                NotchContentState.shared.onReprocessLastRequested?()
+                self?.hide()
+            },
+            onOpenSettings: {},
+            onDismiss: { [weak self] in self?.hide() },
+            onHoverChanged: { [weak self] hovering in self?.hoverChanged(hovering) }
+        ))
+        self.presentedTimeout = notice
+        DebugLogger.shared.info("Transcription timeout card shown notice=\(notice)", source: "DeliveryFailureCard")
+    }
+
+    private func present(_ rootView: DeliveryFailureCardView) {
+        self.generation &+= 1
+        self.dismissTask?.cancel()
+        self.isClosing = false
+        self.presentedFailure = nil
+        self.presentedTranscript = nil
+        self.presentedTimeout = nil
         // A fresh hosting view per card: the view's own state (Copied, hover) must never carry
         // over from the previous card.
         if self.panel == nil {
@@ -74,7 +126,6 @@ final class DeliveryFailureOverlayController {
         self.hostingView = hostingView
         self.positionPanel()
         panel.orderFrontRegardless()
-        DebugLogger.shared.info("Delivery failure card shown failure=\(failure.rawValue) chars=\(transcript.count)", source: "DeliveryFailureCard")
         self.scheduleDismiss(after: Self.displayDuration)
     }
 
@@ -98,6 +149,7 @@ final class DeliveryFailureOverlayController {
         self.generation &+= 1
         self.presentedFailure = nil
         self.presentedTranscript = nil
+        self.presentedTimeout = nil
         self.panel?.orderOut(nil)
     }
 
@@ -184,10 +236,22 @@ final class DeliveryFailureOverlayController {
 
 /// The card itself: medium-overlay metrics, pure black, icon-only chips.
 struct DeliveryFailureCardView: View {
+    /// The bottom-left chip: Copy for an undelivered transcript, Reprocess for a timed-out one.
+    enum PrimaryAction {
+        case copy
+        case reprocess
+        case none
+    }
+
     let title: String
     let transcript: String
+    /// Shown instead of the quoted transcript when set (a card with no transcript).
+    var message: String? = nil
     let detail: String
     let offersAccessibilitySettings: Bool
+    var primaryAction: PrimaryAction = .copy
+    var iconName: String? = nil
+    /// The primary chip's action (Copy or Reprocess).
     let onCopy: () -> Void
     let onOpenSettings: () -> Void
     let onDismiss: () -> Void
@@ -214,12 +278,19 @@ struct DeliveryFailureCardView: View {
                     self.chipSpacer
                 }
                 self.chipSpacer
-                self.chip(
-                    "copy",
-                    systemName: self.didCopy ? "checkmark" : "doc.on.doc",
-                    help: self.didCopy ? "Copied" : "Copy Transcript",
-                    action: self.copy
-                )
+                switch self.primaryAction {
+                case .copy:
+                    self.chip(
+                        "copy",
+                        systemName: self.didCopy ? "checkmark" : "doc.on.doc",
+                        help: self.didCopy ? "Copied" : "Copy Transcript",
+                        action: self.copy
+                    )
+                case .reprocess:
+                    self.chip("reprocess", systemName: "arrow.clockwise", help: "Reprocess", action: self.onCopy)
+                case .none:
+                    self.chipSpacer
+                }
             }
 
             self.pill
@@ -240,7 +311,7 @@ struct DeliveryFailureCardView: View {
     private var pill: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
-                Image(systemName: self.offersAccessibilitySettings ? "lock.fill" : "text.cursor")
+                Image(systemName: self.iconName ?? (self.offersAccessibilitySettings ? "lock.fill" : "text.cursor"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Color.orange.opacity(0.9))
                     .frame(width: 14, height: 14)
@@ -253,9 +324,9 @@ struct DeliveryFailureCardView: View {
             }
 
             // Two lines are always reserved, so a short and a long transcript give the same card.
-            Text(self.transcriptPreview)
+            Text(self.message ?? self.transcriptPreview)
                 .font(.system(size: Self.transcriptFontSize, weight: .medium))
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(.white.opacity(self.message == nil ? 0.9 : 0.75))
                 .lineLimit(2)
                 .truncationMode(.tail)
                 .frame(

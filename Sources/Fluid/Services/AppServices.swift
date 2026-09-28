@@ -98,11 +98,31 @@ final class AppServices: ObservableObject {
             .store(in: &self.cancellables)
     }
 
-    /// Forward ASRService changes to trigger UI updates
+    /// ASR changes arrived while the stop pipeline held UI refreshes (see
+    /// `ASRService.holdsStopUIRefresh`); one refresh is owed when the hold ends.
+    private var hasDeferredASRChange = false
+
+    /// Forward ASRService changes to trigger UI updates. Every view under FluidApp rebuilds on
+    /// these, so while a dictation's stop pipeline runs they are coalesced into one refresh
+    /// after the text is handed off (from altic-dev/FluidVoice#950).
     private func setupASRForwarding() {
         guard let asr = _asr else { return }
         asr.objectWillChange
-            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .sink { [weak self, weak asr] _ in
+                guard let self else { return }
+                if asr?.holdsStopUIRefresh == true {
+                    self.hasDeferredASRChange = true
+                    return
+                }
+                self.objectWillChange.send()
+            }
+            .store(in: &self.cancellables)
+        asr.stopUIRefreshReleased
+            .sink { [weak self] in
+                guard let self, self.hasDeferredASRChange else { return }
+                self.hasDeferredASRChange = false
+                self.objectWillChange.send()
+            }
             .store(in: &self.cancellables)
     }
 

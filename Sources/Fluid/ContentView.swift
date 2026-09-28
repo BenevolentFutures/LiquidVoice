@@ -2257,7 +2257,7 @@ struct ContentView: View {
         // If this was a rewrite recording, process the rewrite instead of typing
         if wasRewriteMode {
             traceOutcome = "rewrite"
-            DebugLogger.shared.info("Processing rewrite with instruction: \(transcribedText)", source: "ContentView")
+            DebugLogger.shared.info("Processing rewrite (instruction chars: \(transcribedText.count))", source: "ContentView")
             AnalyticsService.shared.recordModelUsage(
                 role: .transcription,
                 mode: .edit,
@@ -2271,7 +2271,7 @@ struct ContentView: View {
         // If this was a command recording, process the command
         if wasCommandMode {
             traceOutcome = "command"
-            DebugLogger.shared.info("Processing command: \(transcribedText)", source: "ContentView")
+            DebugLogger.shared.info("Processing command (chars: \(transcribedText.count))", source: "ContentView")
             AnalyticsService.shared.recordModelUsage(
                 role: .transcription,
                 mode: .command,
@@ -2432,6 +2432,11 @@ struct ContentView: View {
         DebugLogger.shared.info("Transcription finalized (chars: \(finalText.count))", source: "ContentView")
         let finalTextReadyAt = ProcessInfo.processInfo.systemUptime
         trace.mark(.textReady, at: finalTextReadyAt)
+        // A normal dictation produced text: it replaces a kept timed-out recording as the one
+        // Reprocess means (command, edit and sandbox recordings returned or are excluded above).
+        if route == .normal, trace.trigger != .benchmark {
+            self.asr.discardKeptDictationForNewerDictation()
+        }
         trace.note("chars", String(finalText.count))
         trace.note("ai", String(postProcessingModel != nil))
         traceOutcome = aiFallbackReason == nil ? "not_typed" : "ai_fallback_not_typed"
@@ -2757,17 +2762,20 @@ struct ContentView: View {
     }
 
     private func reprocessLastDictation() {
-        // The last dictation timed out in the model: its audio was kept, so transcribe it now
-        // (unless a newer dictation has been saved since).
-        if let keptAt = self.asr.keptUntranscribedDictationStoppedAt,
-           keptAt > (TranscriptionHistoryStore.shared.entries.first?.timestamp ?? .distantPast)
-        {
+        // The last dictation timed out in the model: its audio was kept, so transcribe it now. A
+        // newer successful dictation discards it, so it is the last one whenever it exists, with
+        // or without history saving.
+        if self.asr.keptUntranscribedDictationStoppedAt != nil {
             Task { @MainActor in
                 await self.reprocessKeptDictationAudio()
             }
             return
         }
+        self.reprocessLatestDictationText()
+    }
 
+    /// Reprocess from text: a pending AI failure's text, else the latest history entry.
+    private func reprocessLatestDictationText() {
         if let pendingText = self.pendingAIReprocessText?.trimmingCharacters(in: .whitespacesAndNewlines),
            !pendingText.isEmpty
         {
@@ -2804,13 +2812,18 @@ struct ContentView: View {
             return
         }
         do {
-            guard let text = try await self.asr.transcribeKeptUntranscribedDictation(),
-                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            else {
-                DebugLogger.shared.info("Actions: kept dictation transcribed to nothing", source: "ContentView")
-                return
+            switch try await self.asr.transcribeKeptUntranscribedDictation() {
+            case .unavailable:
+                // The kept file could not be read (and is gone now): reprocess as usual instead.
+                DebugLogger.shared.info("Actions: kept dictation unavailable; reprocessing the latest dictation", source: "ContentView")
+                self.reprocessLatestDictationText()
+            case let .text(text):
+                guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    DebugLogger.shared.info("Actions: kept dictation transcribed to nothing", source: "ContentView")
+                    return
+                }
+                await self.reprocessDictationText(text)
             }
-            await self.reprocessDictationText(text)
         } catch {
             DebugLogger.shared.error("Actions: kept dictation could not be transcribed: \(error.localizedDescription)", source: "ContentView")
             ASRService.transcriptionTimeoutHandler(.reprocessUnavailable)
@@ -3147,7 +3160,7 @@ struct ContentView: View {
     ) async {
         self.rewriteModeService.setPromptAppBundleID(appInfo.bundleId)
         let hasOriginalText = !self.rewriteModeService.originalText.isEmpty
-        DebugLogger.shared.info("Processing \(hasOriginalText ? "rewrite" : "write/improve") - instruction: '\(instruction)', originalText length: \(self.rewriteModeService.originalText.count)", source: "ContentView")
+        DebugLogger.shared.info("Processing \(hasOriginalText ? "rewrite" : "write/improve") - instruction chars: \(instruction.count), originalText length: \(self.rewriteModeService.originalText.count)", source: "ContentView")
 
         // Show processing animation
         self.menuBarManager.setProcessing(true)
@@ -3262,7 +3275,7 @@ struct ContentView: View {
     // MARK: - Command Mode Voice Processing
 
     private func processCommandWithVoice(_ command: String) async {
-        DebugLogger.shared.info("Processing voice command: '\(command)'", source: "ContentView")
+        DebugLogger.shared.info("Processing voice command (chars: \(command.count))", source: "ContentView")
 
         // Show processing animation
         self.menuBarManager.setProcessing(true)

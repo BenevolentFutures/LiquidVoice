@@ -275,6 +275,7 @@ final class ASRService: ObservableObject {
     private var lastBoostHitTerm: String?
     private var hasPendingParakeetVocabularyReload: Bool = false
     private var vocabularyChangeObserver: NSObjectProtocol?
+    private var keptDictationDiscardedObserver: NSObjectProtocol?
     private var settingsBackupRestoreObserver: NSObjectProtocol?
     private var clamshellStateChangeObserver: NSObjectProtocol?
     private var inputDeviceAvailabilityChangeObserver: NSObjectProtocol?
@@ -1352,9 +1353,26 @@ final class ASRService: ObservableObject {
     /// A streaming chunk never came back from the model; until it does, starts are refused so
     /// no recording is lost behind it.
     private var isRecoveringStalledStreamingChunk = false
-    /// The audio of a dictation whose transcription timed out behind a stalled preview chunk,
-    /// kept (in memory) so Reprocess can transcribe it once the model is back.
-    private var keptUntranscribedDictation: (audio: DictationAudioSnapshot, stoppedAt: Date)?
+    /// A dictation whose transcription timed out behind a stalled preview chunk, kept so Reprocess
+    /// can transcribe it once the model is back. Also written to disk
+    /// (DictationAudioHistoryStore's kept file), so a restart does not lose it; `audio` is nil
+    /// until it is read back. It lives until it is transcribed or a newer dictation succeeds.
+    private struct KeptDictation {
+        let stoppedAt: Date
+        var audio: DictationAudioSnapshot?
+    }
+
+    private var keptUntranscribedDictation: KeptDictation?
+    /// Bumped whenever the kept recording is cleared, so a launch-time load that raced a clear
+    /// does not bring it back.
+    private var keptDictationGeneration: UInt64 = 0
+
+    /// What transcribing the kept recording produced.
+    enum KeptDictationTranscription: Equatable {
+        /// Nothing is kept, or the kept file could not be read (it is discarded then).
+        case unavailable
+        case text(String)
+    }
 
     /// How long a stop waits for a preview chunk still on the model: 30 s, or half the recording's
     /// length for long recordings (a chunk re-transcribes everything recorded so far).
@@ -1380,21 +1398,52 @@ final class ASRService: ObservableObject {
     }
 
     /// Transcribes the kept audio of a timed-out dictation, and forgets it once that worked.
-    /// Nil when there is none. Throws while the model is still recovering.
-    func transcribeKeptUntranscribedDictation() async throws -> String? {
-        guard let kept = self.keptUntranscribedDictation else { return nil }
+    /// Throws while the model is still recovering (the recording stays kept).
+    func transcribeKeptUntranscribedDictation() async throws -> KeptDictationTranscription {
+        guard let kept = self.keptUntranscribedDictation else { return .unavailable }
         guard !self.isRecoveringStalledStreamingChunk else {
             throw NSError(domain: "ASRService", code: -7, userInfo: [NSLocalizedDescriptionKey: "Speech recognition is still recovering."])
         }
-        let result = try await self.transcribeSamplesForAPI(kept.audio.samples)
+        var audio = kept.audio
+        if audio == nil {
+            audio = await Task.detached(priority: .userInitiated) {
+                DictationAudioHistoryStore.shared.loadKeptDictation()
+            }.value
+        }
+        guard let audio, !audio.samples.isEmpty else {
+            self.clearKeptDictation(reason: "kept audio unreadable")
+            return .unavailable
+        }
+        let result = try await self.transcribeSamplesForAPI(audio.samples)
         if self.keptUntranscribedDictation?.stoppedAt == kept.stoppedAt {
-            self.keptUntranscribedDictation = nil
+            self.clearKeptDictation(reason: "transcribed")
         }
         DebugLogger.shared.info(
-            "Kept dictation transcribed audioMs=\(kept.audio.durationMilliseconds) chars=\(result.text.count)",
+            "Kept dictation transcribed audioMs=\(audio.durationMilliseconds) chars=\(result.text.count)",
             source: "ASRService"
         )
-        return result.text
+        return .text(result.text)
+    }
+
+    /// A normal dictation just produced text: it is now the "last dictation" Reprocess means,
+    /// with or without history saving, so an older timed-out recording is dropped. Command and
+    /// edit recordings, and the onboarding sandbox, never replace it.
+    func discardKeptDictationForNewerDictation() {
+        self.clearKeptDictation(reason: "a newer dictation succeeded")
+    }
+
+    /// Forgets the kept recording and deletes its file. The file is deleted even with no copy in
+    /// memory (a launch-time load may not have run yet).
+    private func clearKeptDictation(reason: String) {
+        DictationAudioHistoryStore.shared.deleteKeptDictation()
+        self.forgetKeptDictation(reason: reason)
+    }
+
+    private func forgetKeptDictation(reason: String) {
+        self.keptDictationGeneration &+= 1
+        guard self.keptUntranscribedDictation != nil else { return }
+        self.keptUntranscribedDictation = nil
+        DebugLogger.shared.info("Kept dictation cleared (\(reason))", source: "ASRService")
     }
     private var lastProcessedSampleCount: Int = 0
     private var isProcessingChunk: Bool = false
@@ -1517,6 +1566,16 @@ final class ASRService: ObservableObject {
         // - micStatus = .notDetermined
         // - micPermissionGranted = false
         // - modelsExistOnDisk = false
+        self.keptDictationDiscardedObserver = NotificationCenter.default.addObserver(
+            forName: DictationAudioHistoryStore.keptDictationDiscardedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                // The file is already gone (history cleared, or all saved audio deleted).
+                self?.forgetKeptDictation(reason: "discarded with history or saved audio")
+            }
+        }
         self.vocabularyChangeObserver = NotificationCenter.default.addObserver(
             forName: .parakeetVocabularyDidChange,
             object: nil,
@@ -1670,7 +1729,8 @@ final class ASRService: ObservableObject {
         guard let hit = hits.first else { return }
         if hit != self.lastBoostHitTerm {
             self.lastBoostHitTerm = hit
-            DebugLogger.shared.info("BOOST_HIT: '\(hit)'", source: "ASRService")
+            // The term is a word the user said: Debug builds only.
+            DebugLogger.shared.debug("BOOST_HIT: '\(hit)'", source: "ASRService")
         }
         self.refreshWordBoostStatus()
     }
@@ -1678,6 +1738,21 @@ final class ASRService: ObservableObject {
     /// Call this AFTER the app has finished launching to complete ASR initialization.
     /// This must be called from onAppear or later, never during init.
     func initialize() async {
+        // A timed-out recording kept by an earlier run is still waiting for Reprocess. Plain file
+        // I/O, so it runs before the audio startup gate, ahead of any dictation; a clear that
+        // wins the race anyway is honored (keptDictationGeneration).
+        let keptGeneration = self.keptDictationGeneration
+        if self.keptUntranscribedDictation == nil,
+           let stoppedAt = await Task.detached(priority: .utility, operation: {
+               DictationAudioHistoryStore.shared.keptDictationStoppedAt()
+           }).value,
+           self.keptDictationGeneration == keptGeneration,
+           self.keptUntranscribedDictation == nil
+        {
+            self.keptUntranscribedDictation = KeptDictation(stoppedAt: stoppedAt, audio: nil)
+            DebugLogger.shared.info("Kept dictation from an earlier run is waiting for Reprocess", source: "ASRService")
+        }
+
         await AudioStartupGate.shared.scheduleOpenAfterInitialUISettled()
         await AudioStartupGate.shared.waitUntilOpen()
         guard self.isTerminating == false else { return }
@@ -2793,7 +2868,9 @@ final class ASRService: ObservableObject {
                 // The buffer is lock-guarded, and the stalled chunk works on its own copy.
                 let kept = DictationAudioSnapshot(samples: self.audioBuffer.getAll(), sampleRate: 16_000, channels: 1)
                 self.audioBuffer.clear()
-                self.keptUntranscribedDictation = (kept, Date())
+                let stoppedAt = Date()
+                self.keptUntranscribedDictation = KeptDictation(stoppedAt: stoppedAt, audio: kept)
+                DictationAudioHistoryStore.shared.saveKeptDictation(kept, stoppedAt: stoppedAt)
                 self.beginStalledStreamingRecovery(keptAudioMs: kept.durationMilliseconds)
                 self.timingLog("stop_end result=error reason=streaming_chunk_stalled")
                 return ""
@@ -5178,6 +5255,9 @@ final class ASRService: ObservableObject {
                 "Stalled streaming chunk returned; recording is available again keptAudio=\(self.keptUntranscribedDictation != nil)",
                 source: "ASRService"
             )
+            if self.keptUntranscribedDictation != nil {
+                Self.transcriptionTimeoutHandler(.recovered)
+            }
         }
     }
 
@@ -5546,6 +5626,8 @@ nonisolated enum TranscriptionTimeoutNotice: Equatable, Sendable {
     case recordingRefused(hasKeptAudio: Bool)
     /// Reprocess could not transcribe the kept audio yet (the model is not back); it stays kept.
     case reprocessUnavailable
+    /// The model is back while a timed-out recording is kept.
+    case recovered
 }
 
 @MainActor

@@ -346,6 +346,8 @@ final class TranscriptionHistoryStore: ObservableObject {
     /// Clear all history
     func clearAllHistory() {
         DictationAudioHistoryStore.shared.deleteAllAudioFiles()
+        // Clearing history means no dictation audio is left, a timed-out recording included.
+        DictationAudioHistoryStore.shared.discardKeptDictation()
         self.entries.removeAll()
         self.selectedEntryID = nil
         self.saveEntries()
@@ -403,10 +405,15 @@ final class TranscriptionHistoryStore: ObservableObject {
         self.pruneAudioToBudget()
     }
 
+    /// - Parameter includingKeptRecording: the user's "Delete all saved audio" also discards a kept
+    ///   timed-out recording; an automatic prune to a zero budget does not.
     @discardableResult
-    func deleteAllSavedAudio() -> Int {
+    func deleteAllSavedAudio(includingKeptRecording: Bool = true) -> Int {
         let removedCount = self.entries.filter { $0.audio != nil }.count
         DictationAudioHistoryStore.shared.deleteAllAudioFiles()
+        if includingKeptRecording {
+            DictationAudioHistoryStore.shared.discardKeptDictation()
+        }
         self.entries = self.entries.map { $0.replacingAudio(nil) }
         self.saveEntries()
         DebugLogger.shared.info("Deleted saved dictation audio (\(removedCount) entries)", source: "TranscriptionHistoryStore")
@@ -417,7 +424,7 @@ final class TranscriptionHistoryStore: ObservableObject {
     func pruneAudioToBudget() -> Int {
         let budgetBytes = SettingsStore.shared.audioHistoryBudgetBytes
         guard budgetBytes > 0 else {
-            return self.deleteAllSavedAudio()
+            return self.deleteAllSavedAudio(includingKeptRecording: false)
         }
 
         var currentBytes = DictationAudioHistoryStore.shared.audioUsageBytes()

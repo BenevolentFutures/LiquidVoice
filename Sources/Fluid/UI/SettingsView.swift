@@ -684,7 +684,7 @@ struct SettingsView: View {
 
                                     self.optionToggleRow(
                                         title: "Save Audio With History",
-                                        description: "Store actual microphone audio locally with dictation history. Disabled by default.",
+                                        description: "Store actual microphone audio locally with dictation history. Disabled by default. One exception even when off: a recording whose transcription timed out is kept until you reprocess it or your next dictation replaces it.",
                                         isOn: Binding(
                                             get: { SettingsStore.shared.saveAudioWithTranscriptionHistory },
                                             set: {

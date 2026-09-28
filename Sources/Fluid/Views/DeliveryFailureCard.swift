@@ -71,8 +71,13 @@ final class DeliveryFailureOverlayController {
         switch notice {
         case .timedOut:
             title = "Transcription timed out"
-            message = "The speech model didn't finish in time. Your recording is kept."
-            detail = "Reprocess it once the model is back."
+            message = "The speech model didn't finish in time. Your recording is kept, even across a restart."
+            detail = "Reprocess it once the model is back. Your next dictation replaces it."
+            offersReprocess = true
+        case .recovered:
+            title = "Speech recognition is back"
+            message = "Your timed-out recording is ready to transcribe."
+            detail = "Reprocess it now. Your next dictation replaces it."
             offersReprocess = true
         case let .recordingRefused(hasKeptAudio):
             title = "Speech recognition is recovering"

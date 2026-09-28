@@ -27,8 +27,8 @@ The app is now `com.stage11.liquidvoice`, no longer FluidVoice's `com.FluidApp.a
 2. The log (new folder: `~/Library/Logs/LiquidVoice/`) shows, within a second of launch, with your own counts:
    ```
    IDENTITY_MIGRATION start from=com.FluidApp.app folder=FluidVoice to=com.stage11.liquidvoice folder=LiquidVoice
-   IDENTITY_MIGRATION step=defaults outcome=copied keys=119 replaced=0 from=com.FluidApp.app
-   IDENTITY_MIGRATION step=folder outcome=copied files=2 bytes=<n> from=FluidVoice to=LiquidVoice (FluidVoice left in place)
+   IDENTITY_MIGRATION step=defaults outcome=copied keys=119 replaced=0 attempt=1 from=com.FluidApp.app
+   IDENTITY_MIGRATION step=folder outcome=copied files=2 bytes=<n> skipped=0 from=FluidVoice to=LiquidVoice (FluidVoice left in place)
    IDENTITY_MIGRATION step=login_item outcome=not_needed (launch at startup was off)
    IDENTITY_MIGRATION finished result=ok defaults=copied(119) folder=copied(2) loginItem=not_needed elapsedMs=<n>
    ```

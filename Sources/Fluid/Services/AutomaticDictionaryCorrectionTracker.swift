@@ -404,7 +404,7 @@ final class AutomaticDictionaryCorrectionTracker {
         var pendingCorrection: PendingCorrection?
     }
 
-    private static let maximumFieldLength = 100_000
+    private nonisolated static let maximumFieldLength = 100_000
     private static let verificationAttempts = 20
     private static let verificationDelayNanoseconds: UInt64 = 50_000_000
     private static let observationDurationNanoseconds: UInt64 = 30_000_000_000

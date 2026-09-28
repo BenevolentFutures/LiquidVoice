@@ -2886,3 +2886,36 @@ final class TranscriptionTimeoutTests: XCTestCase {
         XCTAssertEqual(TestHostQuietModeTests.onScreenWindowCount(), 0)
     }
 }
+
+final class KeptDictationStorageTests: XCTestCase {
+    func testTheKeptRecordingReadsBackAsWritten() throws {
+        let samples: [Float] = (0..<1600).map { Float(sin(Double($0) / 7)) * 0.5 }
+        let original = DictationAudioSnapshot(samples: samples, sampleRate: 16_000, channels: 1)
+        let stoppedAt = Date(timeIntervalSince1970: 1_790_000_000.123)
+        let store = DictationAudioHistoryStore.shared
+        store.saveKeptDictation(original, stoppedAt: stoppedAt)
+        defer { store.deleteKeptDictation() }
+
+        XCTAssertEqual(store.keptDictationStoppedAt()?.timeIntervalSince1970 ?? 0, stoppedAt.timeIntervalSince1970, accuracy: 0.001)
+        let loaded = try XCTUnwrap(store.loadKeptDictation())
+        XCTAssertEqual(loaded.sampleRate, 16_000)
+        XCTAssertEqual(loaded.channels, 1)
+        XCTAssertEqual(loaded.samples.count, samples.count)
+        for (read, written) in zip(loaded.samples, samples) {
+            XCTAssertEqual(read, written, accuracy: 1.0 / 16_000, "16-bit round trip")
+        }
+
+        store.deleteKeptDictation()
+        XCTAssertNil(store.keptDictationStoppedAt())
+        XCTAssertNil(store.loadKeptDictation())
+    }
+
+    func testANewerKeptRecordingReplacesTheOlderOne() {
+        let store = DictationAudioHistoryStore.shared
+        let audio = DictationAudioSnapshot(samples: [0.1, 0.2], sampleRate: 16_000, channels: 1)
+        store.saveKeptDictation(audio, stoppedAt: Date(timeIntervalSince1970: 1_000))
+        store.saveKeptDictation(audio, stoppedAt: Date(timeIntervalSince1970: 2_000))
+        defer { store.deleteKeptDictation() }
+        XCTAssertEqual(store.keptDictationStoppedAt(), Date(timeIntervalSince1970: 2_000))
+    }
+}

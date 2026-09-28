@@ -2757,11 +2757,10 @@ struct ContentView: View {
     }
 
     private func reprocessLastDictation() {
-        // The last dictation timed out in the model: its audio was kept, so transcribe it now
-        // (unless a newer dictation has been saved since).
-        if let keptAt = self.asr.keptUntranscribedDictationStoppedAt,
-           keptAt > (TranscriptionHistoryStore.shared.entries.first?.timestamp ?? .distantPast)
-        {
+        // The last dictation timed out in the model: its audio was kept, so transcribe it now. A
+        // newer successful dictation discards it, so it is the last one whenever it exists, with
+        // or without history saving.
+        if self.asr.keptUntranscribedDictationStoppedAt != nil {
             Task { @MainActor in
                 await self.reprocessKeptDictationAudio()
             }

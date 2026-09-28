@@ -63,6 +63,21 @@ final class SpokenSendParserTests: XCTestCase {
         XCTAssertEqual(self.parse("Rock and roll, send it"), SpokenSendParseResult(text: "Rock and roll.", shouldSend: true))
     }
 
+    func testATerminalGetsNoSentenceEndingBeforeTheReturn() {
+        func terminal(_ text: String) -> SpokenSendParseResult {
+            SpokenSendParser.parse(text, phrase: "send it", enabled: true, forTerminal: true)
+        }
+        XCTAssertEqual(terminal("slash compact send it"), SpokenSendParseResult(text: "slash compact", shouldSend: true))
+        XCTAssertEqual(terminal("Git status. Send it."), SpokenSendParseResult(text: "Git status", shouldSend: true))
+        XCTAssertEqual(terminal("Fix the typo in the README, send it"), SpokenSendParseResult(text: "Fix the typo in the README", shouldSend: true))
+        XCTAssertEqual(terminal("Is it ready? Send it."), SpokenSendParseResult(text: "Is it ready?", shouldSend: true))
+        XCTAssertEqual(terminal("Send it."), SpokenSendParseResult(text: "", shouldSend: true))
+        XCTAssertEqual(
+            SpokenSendParser.parseArmed("Git status. Sent it.", phrase: "send it", enabled: true, wasArmed: true, forTerminal: true),
+            SpokenSendParseResult(text: "Git status", shouldSend: true)
+        )
+    }
+
     // MARK: Ported from upstream
 
     func testDisabledFeatureLeavesTextUntouched() {
@@ -390,6 +405,14 @@ final class SpokenSendPolicyTests: XCTestCase {
         XCTAssertTrue(SpokenSendPolicy.Verdict.allowedC11.allowsSend)
     }
 
+    func testC11BuildsAreC11AndLookAlikesAreNot() {
+        XCTAssertEqual(SpokenSendPolicy.verdict(bundleIdentifier: "com.stage11.c11.debug", appName: "c11 DEV", allowsC11: true), .allowedC11)
+        XCTAssertEqual(SpokenSendPolicy.verdict(bundleIdentifier: "com.stage11.c11x", appName: "Other", allowsC11: true), .allowed)
+        XCTAssertTrue(SpokenSendPolicy.isTerminal(bundleIdentifier: "com.stage11.c11", appName: "c11"))
+        XCTAssertTrue(SpokenSendPolicy.isTerminal(bundleIdentifier: "com.apple.Terminal", appName: "Terminal"))
+        XCTAssertFalse(SpokenSendPolicy.isTerminal(bundleIdentifier: "com.tinyspeck.slackmacgap", appName: "Slack"))
+    }
+
     func testTheC11ToggleTurnsItOff() {
         let verdict = SpokenSendPolicy.verdict(bundleIdentifier: "com.stage11.c11", appName: "c11", allowsC11: false)
         XCTAssertEqual(verdict, .c11Disabled)
@@ -480,7 +503,7 @@ final class SpokenSendPolicyTests: XCTestCase {
 
     func testOnlyASentKeyCountsAsSent() {
         XCTAssertTrue(SendKeyOutcome.sent.wasSent)
-        for outcome in [SendKeyOutcome.textNotDelivered, .targetNotInFront, .focusNotEditable, .secureField, .modifiersHeld, .targetMismatch, .eventsUnavailable] {
+        for outcome in [SendKeyOutcome.textNotDelivered, .targetNotInFront, .focusNotEditable, .secureField, .modifiersHeld, .userActed, .targetMismatch, .eventsUnavailable] {
             XCTAssertFalse(outcome.wasSent, outcome.rawValue)
         }
     }
@@ -525,7 +548,7 @@ final class SpokenSendControllerTests: XCTestCase {
     private var controller: SpokenSendController!
     private var clock: TimeInterval = 1000
     private var isDictating = true
-    private var recordingApp: (bundleIdentifier: String?, name: String?)? = ("com.stage11.c11", "c11")
+    private var recordingApp: (bundleIdentifier: String?, name: String?)? = ("com.tinyspeck.slackmacgap", "Slack")
     private var stops = 0
     private var config = SpokenSendController.Configuration(enabled: true, phrase: "send it", stopsAfterPause: true, key: .enter, allowsC11: true)
 
@@ -553,6 +576,10 @@ final class SpokenSendControllerTests: XCTestCase {
         self.controller.beginRecording()
         self.controller = nil
         try await super.tearDown()
+    }
+
+    private func finish(_ text: String, isNormalRoute: Bool) -> SpokenSendDecision {
+        self.controller.finishDictation(text, stop: self.controller.beginStop(), isNormalRoute: isNormalRoute)
     }
 
     /// Lets the countdown's sleep run out, with the clock moved past the required silence.
@@ -597,7 +624,7 @@ final class SpokenSendControllerTests: XCTestCase {
         // Saying it again later in the same dictation does not undo the cancel.
         self.controller.handlePartial("Fix the typo, send it, send it")
         XCTAssertEqual(self.controller.indicator, .canceled)
-        let decision = self.controller.finishDictation("Fix the typo, send it.", isNormalRoute: true)
+        let decision = self.finish("Fix the typo, send it.", isNormalRoute: true)
         XCTAssertEqual(decision, SpokenSendDecision(text: "Fix the typo.", phraseDetected: true, shouldSend: false))
     }
 
@@ -612,7 +639,7 @@ final class SpokenSendControllerTests: XCTestCase {
         self.controller.handlePartial("I'll send it tomorrow")
         XCTAssertEqual(self.controller.indicator, .hidden)
         XCTAssertEqual(
-            self.controller.finishDictation("I'll send it tomorrow.", isNormalRoute: true),
+            self.finish("I'll send it tomorrow.", isNormalRoute: true),
             SpokenSendDecision(text: "I'll send it tomorrow.", phraseDetected: false, shouldSend: false)
         )
     }
@@ -632,7 +659,7 @@ final class SpokenSendControllerTests: XCTestCase {
         XCTAssertEqual(self.stops, 0)
         // An armed send accepts a noisy final decode.
         XCTAssertEqual(
-            self.controller.finishDictation("Ship it, sent it.", isNormalRoute: true),
+            self.finish("Ship it, sent it.", isNormalRoute: true),
             SpokenSendDecision(text: "Ship it.", phraseDetected: true, shouldSend: true)
         )
     }
@@ -645,21 +672,62 @@ final class SpokenSendControllerTests: XCTestCase {
         XCTAssertFalse(self.controller.sendsInRecordingApp)
     }
 
+    func testARecordingStartedDuringTranscriptionCannotChangeTheDecision() {
+        self.config.stopsAfterPause = false
+        self.controller.handlePartial("Ship it, send it")
+        self.controller.cancelSend()
+        let stop = self.controller.beginStop()
+        // The next recording starts while this one is still transcribing, and arms its own send.
+        self.controller.beginRecording()
+        self.controller.handlePartial("Next one, send it")
+        XCTAssertEqual(self.controller.indicator, .armed)
+
+        let decision = self.controller.finishDictation("Ship it, send it.", stop: stop, isNormalRoute: true)
+        XCTAssertEqual(decision, SpokenSendDecision(text: "Ship it.", phraseDetected: true, shouldSend: false), "the cancel still holds")
+        XCTAssertEqual(self.controller.indicator, .armed, "the new recording's chip is left alone")
+    }
+
+    func testACancelClickedWhileTranscribingStillCounts() {
+        self.config.stopsAfterPause = false
+        self.controller.handlePartial("Ship it, send it")
+        let stop = self.controller.beginStop()
+        self.controller.cancelSend()
+        let decision = self.controller.finishDictation("Ship it, send it.", stop: stop, isNormalRoute: true)
+        XCTAssertFalse(decision.shouldSend)
+    }
+
+    func testStoppingEndsTheCountdown() async {
+        self.controller.handlePartial("Ship it, send it")
+        XCTAssertEqual(self.controller.indicator, .countingDown)
+        _ = self.controller.beginStop()
+        XCTAssertEqual(self.controller.indicator, .armed)
+        await self.letCountdownRunOut()
+        XCTAssertEqual(self.stops, 0, "a stop already under way needs no second one")
+    }
+
+    func testDictatingIntoC11AddsNoPeriod() {
+        self.recordingApp = ("com.stage11.c11", "c11")
+        XCTAssertEqual(
+            self.finish("Fix the typo in the README, send it.", isNormalRoute: true),
+            SpokenSendDecision(text: "Fix the typo in the README", phraseDetected: true, shouldSend: true)
+        )
+    }
+
     func testThePhraseOnlyDictationSendsTheDraft() {
-        let decision = self.controller.finishDictation("Send it.", isNormalRoute: true)
+        let decision = self.finish("Send it.", isNormalRoute: true)
         XCTAssertTrue(decision.isPhraseOnly)
         XCTAssertTrue(decision.shouldSend)
     }
 
     func testDisabledOrSandboxedDictationsAreLeftAlone() {
         XCTAssertEqual(
-            self.controller.finishDictation("Onboarding, send it.", isNormalRoute: false),
+            self.finish("Onboarding, send it.", isNormalRoute: false),
             .unchanged("Onboarding, send it.")
         )
         self.config.enabled = false
         self.controller.handlePartial("Anything, send it")
         XCTAssertEqual(self.controller.indicator, .hidden)
-        XCTAssertEqual(self.controller.finishDictation("Anything, send it.", isNormalRoute: true), .unchanged("Anything, send it."))
+        XCTAssertEqual(self.finish("Anything, send it.", isNormalRoute: true), .unchanged("Anything, send it."))
     }
 
     func testTheKeyGoesOnlyWhereThePolicyAllowsIt() {

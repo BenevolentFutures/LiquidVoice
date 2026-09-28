@@ -6,8 +6,10 @@ import Foundation
 //   @95fe1b15 complete spoken send after quiet countdown (no fresh-partial requirement)
 //   @60480451 hold the armed phrase across noisy partials (arming state, near-miss final parse)
 // Liquid Voice additions: a phrase followed by a question mark is part of a question, not a
-// command ("Can you send it?"), and a dangling "and" / "and then" before the phrase is dropped
-// with it ("Fix the typo and send it" types "Fix the typo.").
+// command ("Can you send it?"); a dangling "and" / "and then" before the phrase is dropped
+// with it ("Fix the typo and send it" types "Fix the typo."); and for a terminal (c11) no
+// sentence ending is added and a trailing period is dropped, since the text is a prompt or a
+// command that is about to be submitted ("slash compact send it" types "/compact").
 
 nonisolated struct SpokenSendParseResult: Equatable, Sendable {
     let text: String
@@ -95,8 +97,14 @@ nonisolated enum SpokenSendParser {
 
     /// Like `parse`, but when the send was already armed from streaming partials it also accepts
     /// a final transcript whose trailing words are a near miss of the phrase, such as "sent it".
-    static func parseArmed(_ text: String, phrase: String, enabled: Bool, wasArmed: Bool) -> SpokenSendParseResult {
-        let strict = self.parse(text, phrase: phrase, enabled: enabled)
+    static func parseArmed(
+        _ text: String,
+        phrase: String,
+        enabled: Bool,
+        wasArmed: Bool,
+        forTerminal: Bool = false
+    ) -> SpokenSendParseResult {
+        let strict = self.parse(text, phrase: phrase, enabled: enabled, forTerminal: forTerminal)
         guard enabled, wasArmed, !strict.shouldSend, strict.text == text, !self.endsAsQuestion(text) else { return strict }
 
         let phraseWords = self.words(phrase)
@@ -121,7 +129,7 @@ nonisolated enum SpokenSendParser {
             else { continue }
 
             let prefix = String(text[..<firstTailWord.range.lowerBound])
-            return SpokenSendParseResult(text: self.polishCommandPrefix(prefix), shouldSend: true)
+            return SpokenSendParseResult(text: self.polishCommandPrefix(prefix, forTerminal: forTerminal), shouldSend: true)
         }
         return strict
     }
@@ -140,7 +148,8 @@ nonisolated enum SpokenSendParser {
     /// Detects the send phrase at the very end of `text` and strips it, with its punctuation.
     /// The phrase anywhere else ("I'll send it tomorrow"), or ending a question ("Can you send
     /// it?"), is ordinary text. "literal send it" types the phrase without sending.
-    static func parse(_ text: String, phrase: String, enabled: Bool) -> SpokenSendParseResult {
+    /// `forTerminal`: the text goes to a terminal, so no sentence ending is added.
+    static func parse(_ text: String, phrase: String, enabled: Bool, forTerminal: Bool = false) -> SpokenSendParseResult {
         guard enabled else {
             return SpokenSendParseResult(text: text, shouldSend: false)
         }
@@ -203,7 +212,7 @@ nonisolated enum SpokenSendParser {
             commandPrefix.replaceSubrange(literalRange, with: text[firstPhraseRange])
         }
 
-        let cleaned = Self.polishCommandPrefix(commandPrefix)
+        let cleaned = Self.polishCommandPrefix(commandPrefix, forTerminal: forTerminal)
         return SpokenSendParseResult(text: cleaned, shouldSend: true)
     }
 
@@ -266,8 +275,9 @@ nonisolated enum SpokenSendParser {
     private static let trailingSeparators: Set<Character> = [",", ";", ":", "-", "–", "—"]
 
     /// Tidies the text before the phrase: no dangling separator or "and" / "and then", and a
-    /// sentence ending where the phrase was.
-    private static func polishCommandPrefix(_ text: String) -> String {
+    /// sentence ending where the phrase was. For a terminal, the ending is taken off instead: a
+    /// command or a slash command must not be submitted with a period ("git status.").
+    private static func polishCommandPrefix(_ text: String, forTerminal: Bool) -> String {
         var polished = self.trimTrailingSeparators(text)
         // "Fix the typo and send it": the "and" joined the text to the command. Only "and" (and
         // "and then") are dropped; "then" or "so" alone can end a real sentence ("See you then").
@@ -283,6 +293,13 @@ nonisolated enum SpokenSendParser {
             polished = self.trimTrailingSeparators(String(polished[..<prefixWords[prefixWords.count - 2].range.lowerBound]))
         }
 
+        if forTerminal {
+            while polished.last == "." {
+                polished.removeLast()
+                polished = self.trimTrailingSeparators(polished)
+            }
+            return polished
+        }
         guard let last = polished.last else {
             return polished
         }

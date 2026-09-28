@@ -28,6 +28,10 @@ final class TypingService {
     /// on a private pasteboard so they never touch the user's clipboard.
     private let pasteSession: ClipboardPasteSession
 
+    /// Set by `deliver` while a Spoken Send key follows the delivery in progress. Touched only
+    /// on the serial typing worker.
+    private var sendKeyFollowsCurrentDelivery = false
+
     init(pasteSession: ClipboardPasteSession = .shared) {
         self.pasteSession = pasteSession
     }
@@ -752,7 +756,7 @@ final class TypingService {
                 TerminalPaster(session: self.pasteSession) { _ in false }
                     .pressSendKeyAlone(step, to: request.target.pid)
             } else {
-                Self.pressSendKeyInApp(step, target: request.target)
+                Self.pressSendKeyInApp(step, target: request.target, since: ProcessInfo.processInfo.systemUptime)
             }
             self.bench("send_key_return outcome=\(outcome.rawValue) terminal=\(isTerminal) elapsedMs=\(Self.elapsedMs(since: requestedAt))")
             if let completion {
@@ -891,6 +895,10 @@ final class TypingService {
         var verificationBaseline: PasteVerifier.Snapshot?
         // A terminal paste presses the send key itself, behind its own frontmost gate.
         var terminalSendKeyOutcome: SendKeyOutcome?
+        // Elsewhere the key empties the field, so a paste's clipboard hold must not wait to see
+        // the text there (see pasteConsumptionWait).
+        self.sendKeyFollowsCurrentDelivery = sendStep != nil
+        defer { self.sendKeyFollowsCurrentDelivery = false }
         let outcome = self.insertTextInstantly(
             text,
             preferredTargetPID: preferredTargetPID,
@@ -904,6 +912,7 @@ final class TypingService {
                 }
             }
         )
+        let dispatchedAt = ProcessInfo.processInfo.systemUptime
         switch outcome {
         case let .failed(failure):
             self.bench("insert_path path=none failure=\(failure.rawValue)")
@@ -925,18 +934,22 @@ final class TypingService {
                 // The terminal paste pressed the key after its V key-up, or refused to.
                 return (.dispatched, terminalSendKeyOutcome ?? .eventsUnavailable)
             }
-            return (.dispatched, Self.pressSendKeyInApp(sendStep, target: sendKey.target))
+            return (.dispatched, Self.pressSendKeyInApp(sendStep, target: sendKey.target, since: dispatchedAt))
         }
     }
 
     /// The send key in an ordinary app, after its text was dispatched: only while focus is still
     /// in the target app, not on a password field, and not on something that certainly takes no
     /// text (Return would press a focused button). Blocks; runs on the typing worker.
-    private nonisolated static func pressSendKeyInApp(_ step: SendKeyStep, target: DictationTarget) -> SendKeyOutcome {
+    private nonisolated static func pressSendKeyInApp(_ step: SendKeyStep, target: DictationTarget, since: TimeInterval) -> SendKeyOutcome {
         if step.delay > 0 {
             usleep(useconds_t(step.delay * 1_000_000))
         }
         guard step.modifiersReleased() else { return .modifiersHeld }
+        guard !step.userActedSince(since) else {
+            DeliveryLog.bench("send_key_refused reason=user_acted pid=\(target.pid)")
+            return .userActed
+        }
         let focus = self.focusedElementForSendKey()
         let verdict = self.sendKeyVerdict(targetPID: target.pid, focusedPID: self.currentFocusedPID(), focus: focus)
         if let verdict {
@@ -1311,7 +1324,9 @@ final class TypingService {
     /// the paste session while it owns the pasteboard, so the field baseline is read after any
     /// earlier queued paste has landed.
     private func pasteConsumptionWait(isTerminalTarget: Bool, expectedText: String) -> () -> Void {
-        if isTerminalTarget {
+        // With a send key following, the app has read the paste by the time it takes the key
+        // (events reach it in order), and the key empties the field the wait would watch.
+        if isTerminalTarget || self.sendKeyFollowsCurrentDelivery {
             return { usleep(1_000_000) }
         }
         let focusedTextSnapshot = self.captureFocusedTextSnapshot()
@@ -1468,26 +1483,33 @@ final class TypingService {
             ) {
                 return (failure, .textNotDelivered)
             }
-            return (nil, self.pressSendKey(send, to: pid))
+            return (nil, self.pressSendKey(send, to: pid, since: ProcessInfo.processInfo.systemUptime))
         }
 
         /// The send key with nothing pasted first (the dictation was only the phrase): brought
         /// forward like a paste, then the same gate.
         func pressSendKeyAlone(_ send: SendKeyStep, to pid: pid_t) -> SendKeyOutcome {
+            let requestedAt = ProcessInfo.processInfo.systemUptime
             if !self.isInFront(pid) {
                 self.bringToFront(pid)
             }
             let wait = self.waitUntilInFront(pid)
             TypingService.logFrontmostCheck(stage: "before_send_key_alone", target: pid, waitedMs: wait.waitedMs, inFront: wait.inFront)
             guard wait.inFront else { return .targetNotInFront }
-            return self.pressSendKey(send, to: pid)
+            return self.pressSendKey(send, to: pid, since: requestedAt)
         }
 
-        private func pressSendKey(_ send: SendKeyStep, to pid: pid_t) -> SendKeyOutcome {
+        /// `since`: when the text went out. A key press or click after it drops the key: the
+        /// frontmost gate sees the app, not the c11 pane, and the user may have moved to another.
+        private func pressSendKey(_ send: SendKeyStep, to pid: pid_t, since: TimeInterval) -> SendKeyOutcome {
             if send.delay > 0 {
                 usleep(useconds_t(send.delay * 1_000_000))
             }
             guard send.modifiersReleased() else { return .modifiersHeld }
+            guard !send.userActedSince(since) else {
+                DeliveryLog.bench("send_key_refused reason=user_acted pid=\(pid)")
+                return .userActed
+            }
             // The paste's gate, looked at again right before the key: never press Return blind.
             guard self.isInFront(pid) else {
                 TypingService.logFrontmostCheck(stage: "before_send_key", target: pid, waitedMs: 0, inFront: false)

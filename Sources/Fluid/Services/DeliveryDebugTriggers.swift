@@ -25,7 +25,9 @@ enum DeliveryDebugTriggers {
     /// Spoken Send without the microphone: takes the focused field as the target when it
     /// fires, then types `object` (a String; empty sends what is already there) and presses the
     /// send key, under the same policy as a dictation (c11 allowed, other terminals refused).
-    /// Put a `sleep` before posting it to have time to click into the target.
+    /// Put a `sleep` before posting it to have time to click into the target. It presses Return
+    /// in c11 even in a shell pane, where that runs the text as a command, and any local process
+    /// can post it once the triggers are enabled: enable them only while checking.
     static let deliverTextAndSend = Notification.Name("com.FluidApp.debug.deliverTextAndSend")
 
     private static var observers: [NSObjectProtocol] = []

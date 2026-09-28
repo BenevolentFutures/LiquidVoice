@@ -3484,6 +3484,10 @@ struct BottomOverlayView: View {
                 }
             }
             .animation(self.reduceMotion ? nil : .easeOut(duration: 0.14), value: indicator)
+            // A chip that vanishes under the pointer never gets its hover-out.
+            .onChange(of: indicator) { _, _ in
+                self.isHoveringSpokenSendChip = false
+            }
     }
 
     private static func spokenSendHelp(indicator: SpokenSendController.Indicator, sendsInApp: Bool) -> String {

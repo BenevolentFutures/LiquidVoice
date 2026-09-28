@@ -26,8 +26,13 @@ nonisolated enum SpokenSendPolicy {
         }
     }
 
-    /// Checked before the block list, by exact bundle ID.
-    static let allowedBundleIdentifiers: Set<String> = ["com.stage11.c11"]
+    /// Checked before the block list: c11 and its own builds ("com.stage11.c11.<variant>").
+    static let c11BundleIdentifier = "com.stage11.c11"
+
+    static func isC11(bundleIdentifier: String?) -> Bool {
+        guard let bundleIdentifier else { return false }
+        return bundleIdentifier == self.c11BundleIdentifier || bundleIdentifier.hasPrefix(self.c11BundleIdentifier + ".")
+    }
 
     /// Upstream's block list, matched against "<app name> <bundle ID>" in lowercase.
     static let blockedIdentityTerms = ["terminal", "iterm", "warp", "ghostty", "kitty", "alacritty", "wezterm", "tabby"]
@@ -36,7 +41,7 @@ nonisolated enum SpokenSendPolicy {
     static let blockedBundleIdentifiers: Set<String> = ["co.zeit.hyper", "com.raphaelamorim.rio"]
 
     static func verdict(bundleIdentifier: String?, appName: String?, allowsC11: Bool) -> Verdict {
-        if let bundleIdentifier, self.allowedBundleIdentifiers.contains(bundleIdentifier) {
+        if self.isC11(bundleIdentifier: bundleIdentifier) {
             return allowsC11 ? .allowedC11 : .c11Disabled
         }
         if let bundleIdentifier, self.blockedBundleIdentifiers.contains(bundleIdentifier) {
@@ -47,6 +52,12 @@ nonisolated enum SpokenSendPolicy {
             return .blockedTerminal
         }
         return .allowed
+    }
+
+    /// c11 or a blocked terminal: the text before the phrase is a prompt or a command, so the
+    /// parser adds no sentence ending ("/compact", not "/compact.").
+    static func isTerminal(bundleIdentifier: String?, appName: String?) -> Bool {
+        self.verdict(bundleIdentifier: bundleIdentifier, appName: appName, allowsC11: true) != .allowed
     }
 
     /// The key actually pressed. c11 always gets a plain Return: it is what submits a Claude
@@ -76,6 +87,9 @@ nonisolated enum SendKeyOutcome: String, Equatable, Sendable {
     case secureField = "secure_field"
     /// A modifier key was still held: the key would have become a shortcut.
     case modifiersHeld = "modifiers_held"
+    /// The user pressed a key or clicked after the text went out (another c11 pane, say): the
+    /// key could land where they moved to, so it is dropped.
+    case userActed = "user_acted"
     /// The delivery went to another process than the send key's target.
     case targetMismatch = "target_mismatch"
     case eventsUnavailable = "events_unavailable"
@@ -129,6 +143,14 @@ nonisolated struct SendKeyStep {
     var delay: TimeInterval = SendKeyStep.defaultDelay
     /// Waits briefly for the physical modifier keys to be released; false when still held.
     var modifiersReleased: () -> Bool = { TypingService.waitForPhysicalModifierRelease(timeout: SendKeyStep.modifierReleaseTimeout) }
+    /// Whether the user pressed a key or clicked since the given system uptime (the paste).
+    /// Modifier presses and mouse moves do not count.
+    var userActedSince: (TimeInterval) -> Bool = { since in
+        PasteVerifier.userActedAfterPaste(
+            secondsSinceLastInput: PasteVerifier.secondsSinceLastUserInput(),
+            secondsSincePaste: ProcessInfo.processInfo.systemUptime - since
+        )
+    }
     /// Posts key down and key up to the PID; false when the events could not be made.
     var post: (pid_t, SettingsStore.SpokenSendKey) -> Bool = { SendKeyEvents.post($1, to: $0) }
 

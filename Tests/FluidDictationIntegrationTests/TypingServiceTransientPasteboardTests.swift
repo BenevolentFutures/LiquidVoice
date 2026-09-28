@@ -1479,10 +1479,17 @@ final class TerminalPasteThenSendTests: XCTestCase {
         return paster
     }
 
-    private func makeStep(log: TerminalEventLog, delay: TimeInterval = 0, modifiersReleased: Bool = true) -> SendKeyStep {
+    private func makeStep(
+        log: TerminalEventLog,
+        delay: TimeInterval = 0,
+        modifiersReleased: Bool = true,
+        userActed: Bool = false
+    ) -> SendKeyStep {
         var step = SendKeyStep(key: .enter)
         step.delay = delay
         step.modifiersReleased = { modifiersReleased }
+        // Never the real keyboard: a key Atin presses while tests run must not change a result.
+        step.userActedSince = { _ in userActed }
         step.post = { pid, key in
             log.append("key \(pid) \(key.rawValue)")
             return true
@@ -1613,6 +1620,20 @@ final class TerminalPasteThenSendTests: XCTestCase {
         XCTAssertNil(result.failure)
         XCTAssertEqual(result.sendKey, .modifiersHeld)
         XCTAssertEqual(log.events, ["paste 4242"])
+    }
+
+    func testAKeyPressOrClickAfterThePasteDropsTheReturn() {
+        let session = self.session()
+        let log = TerminalEventLog()
+        let paster = self.makePaster(session, log: log) { _ in true }
+
+        // Cmd+2 to another c11 tab, or a click into another pane: c11 is still in front.
+        let result = self.pasteThenSend(paster, self.makeStep(log: log, userActed: true))
+        session.waitUntilIdle()
+
+        XCTAssertNil(result.failure)
+        XCTAssertEqual(result.sendKey, .userActed)
+        XCTAssertEqual(log.events, ["paste 4242"], "no Return into the pane the user moved to")
     }
 
     func testThePhraseOnlyReturnIsBehindTheSameGate() {

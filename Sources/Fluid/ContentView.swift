@@ -2079,6 +2079,8 @@ struct ContentView: View {
         let stopTargetCapture: Task<DictationTarget?, Never>? = route == .normal && !wasRewriteMode && !wasCommandMode && !promptTest.isActive
             ? self.beginDictationStopTargetCapture()
             : nil
+        // Spoken Send's state as dictation stops, for the same reason.
+        let spokenSendStop = SpokenSendController.shared.beginStop()
         DebugLogger.shared.info(
             "Routing decision snapshot | activeMode=\(modeAtStop.rawValue) | rewrite=\(wasRewriteMode) | command=\(wasCommandMode) | overlay=\(NotchContentState.shared.mode.rawValue)",
             source: "ContentView"
@@ -2210,6 +2212,7 @@ struct ContentView: View {
                 bundleID: appInfo.bundleId,
                 windowTitle: appInfo.windowTitle
             ),
+            stop: spokenSendStop,
             isNormalRoute: route == .normal
         )
         if spokenSend.isPhraseOnly {

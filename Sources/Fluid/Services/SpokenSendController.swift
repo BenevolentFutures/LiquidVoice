@@ -269,23 +269,61 @@ final class SpokenSendController: ObservableObject {
 
     // MARK: - At stop
 
-    /// Strips a send phrase that ends `text` and says whether a key follows. Ends the
-    /// recording's countdown. `isNormalRoute` is false for the onboarding sandbox, which never sends.
-    func finishDictation(_ text: String, isNormalRoute: Bool) -> SpokenSendDecision {
-        let config = self.configuration()
-        let wasArmed = self.arming.wasArmed
+    /// This dictation's Spoken Send state as it stops, so a recording that starts while it still
+    /// transcribes (which resets the controller) cannot change its outcome.
+    struct StopSnapshot: Equatable {
+        let session: UInt64
+        let wasArmed: Bool
+        let isCanceled: Bool
+        let autoStopped: Bool
+        /// The recording app is a terminal (c11 included): no sentence ending is added.
+        let inTerminal: Bool
+    }
+
+    /// Called as dictation stops, before anything awaits. Ends the countdown; a stop that is
+    /// already under way needs no second one.
+    func beginStop() -> StopSnapshot {
         self.cancelCountdown()
-        self.setIndicator(.hidden)
+        if self.indicator == .countingDown {
+            self.setIndicator(.armed)
+        }
+        let app = self.hooks?.recordingApp()
+        return StopSnapshot(
+            session: self.session,
+            wasArmed: self.arming.wasArmed,
+            isCanceled: self.isCanceled,
+            autoStopped: self.autoStopTriggered,
+            inTerminal: app.map { SpokenSendPolicy.isTerminal(bundleIdentifier: $0.bundleIdentifier, appName: $0.name) } ?? false
+        )
+    }
+
+    /// Strips a send phrase that ends `text` and says whether a key follows. `isNormalRoute` is
+    /// false for the onboarding sandbox, which never sends.
+    func finishDictation(_ text: String, stop: StopSnapshot, isNormalRoute: Bool) -> SpokenSendDecision {
+        let config = self.configuration()
+        // Still this dictation's state: a cancel clicked while it transcribed counts too.
+        let isCurrent = stop.session == self.session
+        let wasArmed = isCurrent ? self.arming.wasArmed : stop.wasArmed
+        let isCanceled = isCurrent ? self.isCanceled : stop.isCanceled
+        if isCurrent {
+            self.setIndicator(.hidden)
+        }
         guard config.enabled, isNormalRoute else { return .unchanged(text) }
-        let parse = SpokenSendParser.parseArmed(text, phrase: config.phrase, enabled: true, wasArmed: wasArmed)
+        let parse = SpokenSendParser.parseArmed(
+            text,
+            phrase: config.phrase,
+            enabled: true,
+            wasArmed: wasArmed,
+            forTerminal: stop.inTerminal
+        )
         let decision = SpokenSendDecision(
             text: parse.text,
             phraseDetected: parse.shouldSend,
-            shouldSend: parse.shouldSend && !self.isCanceled
+            shouldSend: parse.shouldSend && !isCanceled
         )
         DebugLogger.shared.info(
-            "SPOKEN_SEND decision session=\(self.session) phrase=\(decision.phraseDetected) send=\(decision.shouldSend) " +
-                "canceled=\(self.isCanceled) armed=\(wasArmed) autoStopped=\(self.autoStopTriggered) phraseOnly=\(decision.isPhraseOnly)",
+            "SPOKEN_SEND decision session=\(stop.session) current=\(isCurrent) phrase=\(decision.phraseDetected) send=\(decision.shouldSend) " +
+                "canceled=\(isCanceled) armed=\(wasArmed) autoStopped=\(stop.autoStopped) terminal=\(stop.inTerminal) phraseOnly=\(decision.isPhraseOnly)",
             source: "SpokenSend"
         )
         return decision

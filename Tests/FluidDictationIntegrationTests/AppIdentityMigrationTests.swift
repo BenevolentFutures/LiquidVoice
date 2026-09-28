@@ -64,20 +64,29 @@ final class AppIdentityMigrationTests: XCTestCase {
         XCTAssertTrue(source.synchronize())
     }
 
+    private var backupFolder: URL {
+        self.root.appendingPathComponent("Backups", isDirectory: true)
+    }
+
     private func makeMigration(
         destination: (any AppIdentityMigrationDefaults)? = nil,
         readLegacyDefaults: (() -> [String: Any]?)? = nil,
         legacyDefaultsFileExists: @escaping () -> Bool = { true },
+        backupFolder: URL? = nil,
         loginItemOutcome: AppIdentityMigration.LoginItemOutcome = .registered
     ) -> AppIdentityMigration {
         let sourceSuite = self.sourceSuite!
+        let destinationSuite = self.destinationSuite!
         return AppIdentityMigration(
             legacyDomain: sourceSuite,
+            destinationDomain: destinationSuite,
             destination: destination ?? self.destination,
             legacyFolder: self.legacyFolder,
             destinationFolder: self.destinationFolder,
-            // The production reader (CFPreferencesCopyMultiple), pointed at the test suite.
+            displacedDefaultsBackupFolder: backupFolder ?? self.backupFolder,
+            // The production reader (CFPreferencesCopyMultiple), pointed at the test suites.
             readLegacyDefaults: readLegacyDefaults ?? { AppIdentityMigration.readPreferencesDomain(sourceSuite) },
+            readDestinationDefaults: { AppIdentityMigration.readPreferencesDomain(destinationSuite) },
             legacyDefaultsFileExists: legacyDefaultsFileExists,
             registerLoginItem: { [weak self] in
                 self?.loginItemRegistrations += 1
@@ -122,7 +131,7 @@ final class AppIdentityMigrationTests: XCTestCase {
 
         let report = self.makeMigration().runIfNeeded()
 
-        XCTAssertEqual(report.defaults, .copied(keys: source.count, replaced: 0))
+        XCTAssertEqual(report.defaults, .copied(keys: source.count, replaced: 0, displacedBackup: nil))
         XCTAssertTrue(report.copiedData)
         for (key, value) in source {
             let copied = try XCTUnwrap(self.destination.object(forKey: key), "missing \(key)")
@@ -148,7 +157,7 @@ final class AppIdentityMigrationTests: XCTestCase {
 
     func testTheMarkerPreventsASecondRun() throws {
         try self.seedSource(["SelectedSpeechModel": "first", "UserTypingWPM": 40])
-        XCTAssertEqual(self.makeMigration().runIfNeeded().defaults, .copied(keys: 2, replaced: 0))
+        XCTAssertEqual(self.makeMigration().runIfNeeded().defaults, .copied(keys: 2, replaced: 0, displacedBackup: nil))
 
         // The old app changes after the migration; the new app's data must not be replaced.
         try self.seedSource(["SelectedSpeechModel": "second", "LateKey": true])
@@ -183,9 +192,49 @@ final class AppIdentityMigrationTests: XCTestCase {
 
         // Next launch, with writes that stick, finishes the job.
         let retried = self.makeMigration().runIfNeeded()
-        XCTAssertEqual(retried.defaults, .copied(keys: source.count, replaced: source.count - 1))
+        // The keys that landed the first time are identical, so nothing needs saving first.
+        XCTAssertEqual(retried.defaults, .copied(keys: source.count, replaced: source.count - 1, displacedBackup: nil))
         XCTAssertNotNil(self.destination.object(forKey: AppIdentityMigration.defaultsMarkerKey))
         XCTAssertNotNil(self.destination.data(forKey: "TranscriptionHistoryEntries"))
+    }
+
+    func testValuesTheAppWroteAfterAFailedAttemptAreSavedBeforeTheyAreReplaced() throws {
+        try self.seedSource(["TranscriptionHistoryEntries": Data("old history".utf8), "UserTypingWPM": 40])
+        // The app ran on after a failed attempt: a new history, and a key only it has.
+        self.destination.set(Data("new history".utf8), forKey: "TranscriptionHistoryEntries")
+        self.destination.set(true, forKey: "OnlyInTheNewApp")
+        XCTAssertTrue(self.destination.synchronize())
+
+        let report = self.makeMigration().runIfNeeded()
+
+        guard case let .copied(keys, replaced, backup?) = report.defaults else {
+            return XCTFail("expected a copy with a backup, got \(report.defaults)")
+        }
+        XCTAssertEqual(keys, 2)
+        XCTAssertEqual(replaced, 1)
+        XCTAssertEqual(backup.deletingLastPathComponent().standardizedFileURL, self.backupFolder.standardizedFileURL)
+        let saved = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: Data(contentsOf: backup), format: nil) as? [String: Any]
+        )
+        XCTAssertEqual(saved["TranscriptionHistoryEntries"] as? Data, Data("new history".utf8))
+        XCTAssertEqual(saved["OnlyInTheNewApp"] as? Bool, true)
+        XCTAssertEqual(self.destination.data(forKey: "TranscriptionHistoryEntries"), Data("old history".utf8))
+        XCTAssertTrue(self.destination.bool(forKey: "OnlyInTheNewApp"))
+        XCTAssertTrue(self.logLines.contains { $0.0 == .warning && $0.1.contains("displaced=1") })
+    }
+
+    func testNothingIsReplacedWhenTheBackupCannotBeWritten() throws {
+        try self.seedSource(["UserTypingWPM": 40])
+        self.destination.set(55, forKey: "UserTypingWPM")
+        XCTAssertTrue(self.destination.synchronize())
+        let blocker = self.root.appendingPathComponent("not-a-folder")
+        try Data().write(to: blocker)
+
+        let report = self.makeMigration(backupFolder: blocker.appendingPathComponent("Backups")).runIfNeeded()
+
+        guard case .failed = report.defaults else { return XCTFail("expected a failure, got \(report.defaults)") }
+        XCTAssertEqual(self.destination.integer(forKey: "UserTypingWPM"), 55)
+        XCTAssertNil(self.destination.object(forKey: AppIdentityMigration.defaultsMarkerKey))
     }
 
     func testAnUnreadableSourceIsNeverMarkedDone() {
@@ -273,17 +322,34 @@ final class AppIdentityMigrationTests: XCTestCase {
         XCTAssertTrue(self.logLines.contains { $0.1.contains("step=folder outcome=copied files=3") })
     }
 
-    func testAnExistingFolderIsNeverOverwritten() throws {
+    func testAnExistingFolderGetsOnlyTheFilesItLacksAndIsNeverOverwritten() throws {
         try self.seedSource(["OnboardingCompleted": true])
         try self.writeFile("parakeet_custom_vocabulary.json", "old", under: self.legacyFolder)
+        try self.writeFile("KeptDictation/kept-1.wav", "RIFF-kept", under: self.legacyFolder)
         try self.writeFile("parakeet_custom_vocabulary.json", "new app's own", under: self.destinationFolder)
 
         let report = self.makeMigration().runIfNeeded()
 
-        XCTAssertEqual(report.folder, .destinationExisted)
+        XCTAssertEqual(report.folder, .merged(added: 1, kept: 1))
+        XCTAssertTrue(report.copiedData)
         XCTAssertEqual(self.contents(of: "parakeet_custom_vocabulary.json", under: self.destinationFolder), "new app's own")
+        XCTAssertEqual(self.contents(of: "KeptDictation/kept-1.wav", under: self.destinationFolder), "RIFF-kept")
         XCTAssertEqual(self.contents(of: "parakeet_custom_vocabulary.json", under: self.legacyFolder), "old")
-        XCTAssertTrue(self.logLines.contains { $0.0 == .warning && $0.1.contains("outcome=destination_existed") })
+        XCTAssertEqual(self.contents(of: "KeptDictation/kept-1.wav", under: self.legacyFolder), "RIFF-kept")
+        XCTAssertNotNil(self.destination.object(forKey: AppIdentityMigration.folderMarkerKey))
+        XCTAssertTrue(self.logLines.contains { $0.0 == .warning && $0.1.contains("outcome=merged added=1 kept=1") })
+    }
+
+    func testAStagingFolderLeftByAnInterruptedCopyIsRemoved() throws {
+        try self.seedSource(["OnboardingCompleted": true])
+        try self.writeFile("parakeet_custom_vocabulary.json", "vocabulary", under: self.legacyFolder)
+        let orphan = self.root.appendingPathComponent(".LiquidVoice.migrating-crashed", isDirectory: true)
+        try self.writeFile("partial.json", "half", under: orphan)
+
+        let report = self.makeMigration().runIfNeeded()
+
+        XCTAssertEqual(report.folder, .copied(files: 1, bytes: 10))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
     }
 
     func testAFailedFolderCopyLeavesNoHalfFolderAndIsRetried() throws {
@@ -306,12 +372,44 @@ final class AppIdentityMigrationTests: XCTestCase {
         XCTAssertEqual(retried.folder, .copied(files: 1, bytes: 10))
     }
 
+    func testAFailedFolderCopyIsStillCompletedAfterTheAppCreatedItsOwnFolder() throws {
+        try self.seedSource(["OnboardingCompleted": true])
+        try self.writeFile("parakeet_custom_vocabulary.json", "vocabulary", under: self.legacyFolder)
+        try self.writeFile("DictationAudioHistory/a.wav", "RIFF-a", under: self.legacyFolder)
+        var migration = self.makeMigration()
+        migration.fileManager = FailingCopyFileManager()
+        guard case .failed = migration.runIfNeeded().folder else { return XCTFail("expected the first copy to fail") }
+
+        // The app kept running and wrote its own vocabulary file.
+        try self.writeFile("parakeet_custom_vocabulary.json", "written by the new app", under: self.destinationFolder)
+        let retried = self.makeMigration().runIfNeeded()
+
+        XCTAssertEqual(retried.folder, .merged(added: 1, kept: 1))
+        XCTAssertEqual(self.contents(of: "DictationAudioHistory/a.wav", under: self.destinationFolder), "RIFF-a")
+        XCTAssertEqual(self.contents(of: "parakeet_custom_vocabulary.json", under: self.destinationFolder), "written by the new app")
+    }
+
     // MARK: The new identity
 
     func testDebugBuildsNeverMigrateTheInstalledAppsData() {
         XCTAssertNil(AppIdentityMigration.forInstalledApp())
-        XCTAssertNil(AppIdentityMigration.forInstalledApp(bundleIdentifier: "com.stage11.liquidvoice", isTestHost: false))
+        XCTAssertNil(AppIdentityMigration.forInstalledApp(
+            bundleIdentifier: "com.stage11.liquidvoice",
+            bundleURL: URL(fileURLWithPath: "/Applications/Liquid Voice.app"),
+            isTestHost: false
+        ))
         XCTAssertNil(AppIdentityMigration.launchReport)
+    }
+
+    func testOnlyAnAppInApplicationsCountsAsInstalled() {
+        XCTAssertTrue(AppIdentityMigration.isInstalledLocation(URL(fileURLWithPath: "/Applications/Liquid Voice.app")))
+        XCTAssertTrue(AppIdentityMigration.isInstalledLocation(
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications/Liquid Voice.app")
+        ))
+        XCTAssertFalse(AppIdentityMigration.isInstalledLocation(
+            URL(fileURLWithPath: "/Users/someone/Projects/LiquidVoice/DerivedData/Build/Products/Release/Liquid Voice.app")
+        ))
+        XCTAssertFalse(AppIdentityMigration.isInstalledLocation(URL(fileURLWithPath: "/ApplicationsElsewhere/Liquid Voice.app")))
     }
 
     func testTheNewIdentifiersAreUsedEverywhereTheOldOnesWere() {

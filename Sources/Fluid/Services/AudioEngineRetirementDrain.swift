@@ -28,7 +28,7 @@ final nonisolated class AudioEngineRetirementDrain: @unchecked Sendable {
     private let stateLock = NSLock()
     private var scheduledReleaseCount = 0
 
-    init(label: String = "app.fluidvoice.audio-engine-retirement") {
+    init(label: String = "com.stage11.liquidvoice.audio-engine-retirement") {
         self.queue = DispatchQueue(label: label, qos: .utility)
     }
 

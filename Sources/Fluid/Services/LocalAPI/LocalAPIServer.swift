@@ -6,7 +6,7 @@ final class LocalAPIServer {
     static let shared = LocalAPIServer()
 
     private let router = LocalAPIRouter()
-    private let queue = DispatchQueue(label: "fluidvoice.local-api", qos: .utility)
+    private let queue = DispatchQueue(label: "com.stage11.liquidvoice.local-api", qos: .utility)
     private var listener: NWListener?
     private var activeConnections: [ObjectIdentifier: LocalAPIConnectionHandler] = [:]
     private(set) var port: UInt16 = LocalAPI.defaultPort

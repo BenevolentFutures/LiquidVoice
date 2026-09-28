@@ -1858,7 +1858,10 @@ final class ASRService: ObservableObject {
         DebugLogger.shared.debug("Models exist on disk: \(self.modelsExistOnDisk)", source: "ASRService")
     }
 
-    func requestMicAccess() {
+    /// Asks macOS for the microphone (its dialog appears only while the user has not answered).
+    /// `announceIfDenied`: a refused answer shows the "Microphone access is off" card, for a
+    /// hotkey press that asked, so it never ends in silence.
+    func requestMicAccess(announceIfDenied: Bool = false) {
         // The XCTest host never raises a system permission prompt.
         guard self.isRequestingMicrophoneAccess == false, !TestHostQuietMode.isActive else { return }
         self.isRequestingMicrophoneAccess = true
@@ -1879,6 +1882,8 @@ final class ASRService: ObservableObject {
                     self.micStatus = granted ? .authorized : .denied
                     if granted {
                         await self.prewarmConfiguredAudioCaptureIfPossible(reason: "permission_granted")
+                    } else if announceIfDenied {
+                        Self.microphoneAccessNeededHandler()
                     }
                 }
             }
@@ -2066,14 +2071,17 @@ final class ASRService: ObservableObject {
     }
 
     /// A start without microphone access never fails silently. `micStatus` is read once at
-    /// startup and after a request, so: never asked (or not read yet) asks now, which is the
-    /// system dialog, or just records the answer when there already is one; denied re-reads
-    /// the permission, which may have been turned on in System Settings since, and otherwise
-    /// shows a card that opens the Microphone settings. Returns whether recording may start.
+    /// startup (about 1.5 s after launch) and after a request, so:
+    /// - never asked, or not read yet: ask now. Undetermined shows the macOS dialog; an answer
+    ///   given earlier just comes back, silently when it is Allow (the next press records) and
+    ///   with the card when it is Don't Allow.
+    /// - denied: re-read the permission, which may have been turned on in System Settings
+    ///   since, and otherwise show the card, which opens the Microphone settings.
+    /// Returns whether recording may start now.
     private func recheckMicrophoneAccessBeforeStart() -> Bool {
         if self.micStatus == .notDetermined {
             DebugLogger.shared.info("Microphone permission not determined at start; requesting it", source: "ASRService")
-            self.requestMicAccess()
+            self.requestMicAccess(announceIfDenied: true)
             return false
         }
         let current = Self.microphoneAuthorizationStatus()

@@ -810,17 +810,25 @@ final class GlobalHotkeyManager: NSObject {
                     }
                     return Unmanaged.passUnretained(event)
                 }
+                let receivedAt = ProcessInfo.processInfo.systemUptime
+                let result: Unmanaged<CGEvent>?
                 if Thread.isMainThread {
-                    return MainActor.assumeIsolated {
+                    result = MainActor.assumeIsolated {
                         manager.handleKeyEvent(proxy: proxy, type: type, event: event)
                     }
-                }
-                // Real keys hop to main, where all hotkey state lives.
-                return DispatchQueue.main.sync {
-                    MainActor.assumeIsolated {
-                        manager.handleKeyEvent(proxy: proxy, type: type, event: event)
+                } else {
+                    // Real keys hop to main, where all hotkey state lives.
+                    result = DispatchQueue.main.sync {
+                        MainActor.assumeIsolated {
+                            manager.handleKeyEvent(proxy: proxy, type: type, event: event)
+                        }
                     }
                 }
+                // A key-down a hotkey took is ours, not the user moving elsewhere (Spoken Send).
+                if GlobalHotkeyManager.isConsumedKeyDown(type: type, passedThrough: result != nil) {
+                    ConsumedHotkeyKeyDowns.record(at: receivedAt)
+                }
+                return result
             },
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         )
@@ -900,6 +908,11 @@ final class GlobalHotkeyManager: NSObject {
     }
 
     nonisolated static let ownProcessID = Int64(ProcessInfo.processInfo.processIdentifier)
+
+    /// A key-down the tap swallowed: a hotkey press, recorded for Spoken Send's input check.
+    nonisolated static func isConsumedKeyDown(type: CGEventType, passedThrough: Bool) -> Bool {
+        type == .keyDown && !passedThrough
+    }
 
     /// True for a key or modifier event this process posted itself (TypingService's
     /// synthesized paste and typed text). Tap-disabled notices never count, so the

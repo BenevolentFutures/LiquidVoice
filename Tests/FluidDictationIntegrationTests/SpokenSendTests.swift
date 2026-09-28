@@ -75,7 +75,6 @@ final class SpokenSendParserTests: XCTestCase {
             "We should send it",
             "I want to send it.",
             "I'm going to send it",
-            "Let's send it.",
             "Never send it",
             "We shouldn't send it.",
             "Did you send it",
@@ -85,10 +84,38 @@ final class SpokenSendParserTests: XCTestCase {
         // A break before the phrase makes it a command again.
         XCTAssertEqual(self.parse("Fix it, send it."), SpokenSendParseResult(text: "Fix it.", shouldSend: true))
         XCTAssertEqual(self.parse("I said no. Send it."), SpokenSendParseResult(text: "I said no.", shouldSend: true))
-        XCTAssertEqual(self.parse("Please send it"), SpokenSendParseResult(text: "Please.", shouldSend: true))
-        XCTAssertEqual(self.parse("Just send it."), SpokenSendParseResult(text: "Just.", shouldSend: true))
         // The sentence's own phrase, then the command.
         XCTAssertEqual(self.parse("I'll send it, send it."), SpokenSendParseResult(text: "I'll send it.", shouldSend: true))
+    }
+
+    /// Transcribers often drop the comma before the phrase. An object pronoun, "thank you" and
+    /// "let's" still leave it a command.
+    func testWithoutACommaObjectPronounsThankYouAndLetsStillSend() {
+        XCTAssertEqual(self.parse("Sounds good to me send it"), SpokenSendParseResult(text: "Sounds good to me.", shouldSend: true))
+        XCTAssertEqual(self.parse("Thank you send it"), SpokenSendParseResult(text: "Thank you.", shouldSend: true))
+        XCTAssertEqual(self.parse("Do it for me send it"), SpokenSendParseResult(text: "Do it for me.", shouldSend: true))
+        XCTAssertEqual(self.parse("Up to you send it"), SpokenSendParseResult(text: "Up to you.", shouldSend: true))
+        XCTAssertEqual(self.parse("Keep it between us send it"), SpokenSendParseResult(text: "Keep it between us.", shouldSend: true))
+        XCTAssertEqual(self.parse("OK let's send it"), SpokenSendParseResult(text: "", shouldSend: true))
+        XCTAssertEqual(self.parse("Fix it, let's send it."), SpokenSendParseResult(text: "Fix it.", shouldSend: true))
+        // A subject pronoun still makes it part of the sentence.
+        for text in ["Thank you, I'll send it", "If you send it", "Can you send it", "They send it"] {
+            XCTAssertFalse(self.parse(text).shouldSend, text)
+        }
+    }
+
+    func testNothingButALeadInSendsTheDraftAndTypesNothing() {
+        for text in [
+            "Okay send it", "OK, send it.", "Just send it.", "Please send it", "Yes send it.", "Yeah, send it",
+            "Alright, send it", "All right, send it.", "Go ahead and send it", "Yes, please send it.", "Okay, just send it.",
+        ] {
+            XCTAssertEqual(self.parse(text), SpokenSendParseResult(text: "", shouldSend: true), text)
+            XCTAssertEqual(SpokenSendParser.parse(text, phrase: "send it", enabled: true, forTerminal: true).text, "", text)
+        }
+        // Anything more is the message.
+        XCTAssertEqual(self.parse("No, send it."), SpokenSendParseResult(text: "No.", shouldSend: true))
+        XCTAssertEqual(self.parse("Okay, fix the typo, send it."), SpokenSendParseResult(text: "Okay, fix the typo.", shouldSend: true))
+        XCTAssertEqual(self.parse("Fix it, go ahead and send it."), SpokenSendParseResult(text: "Fix it.", shouldSend: true))
     }
 
     func testTheArmedNearMissAndArmingHonorTheSameRule() {
@@ -109,7 +136,17 @@ final class SpokenSendParserTests: XCTestCase {
     func testLiteralEscapesThePhraseDespitePunctuation() {
         XCTAssertEqual(self.parse("Type literal, send it."), SpokenSendParseResult(text: "Type send it", shouldSend: false))
         XCTAssertEqual(self.parse("Type literal: send it"), SpokenSendParseResult(text: "Type send it", shouldSend: false))
+        XCTAssertEqual(self.parse("Type literal; send it"), SpokenSendParseResult(text: "Type send it", shouldSend: false))
         XCTAssertEqual(self.parse("Type literal, send it, send it."), SpokenSendParseResult(text: "Type send it.", shouldSend: true))
+    }
+
+    func testLiteralNeverReachesAcrossASentence() {
+        XCTAssertEqual(self.parse("Take it literal. Send it."), SpokenSendParseResult(text: "Take it literal.", shouldSend: true))
+        XCTAssertEqual(self.parse("Take it literal! Send it"), SpokenSendParseResult(text: "Take it literal!", shouldSend: true))
+        XCTAssertTrue(
+            SpokenSendParser.parseArmed("Take it literal. Sent it.", phrase: "send it", enabled: true, wasArmed: true).shouldSend,
+            "the near miss follows the same rule"
+        )
     }
 
     func testATerminalKeepsShellPunctuation() {
@@ -578,6 +615,35 @@ final class SpokenSendPolicyTests: XCTestCase {
         XCTAssertEqual(verdict(targetFocus: .unreadable), .focusUnreadable, "no key when the field cannot be shown to be the one")
         XCTAssertEqual(verdict(focus: (.editable(role: "AXTextField"), true)), .secureField)
         XCTAssertEqual(verdict(focus: (.notEditable(role: "AXButton"), false)), .focusNotEditable, "Return must never press a focused button")
+    }
+
+    func testInputSinceStopIgnoresOurOwnHotkeys() {
+        let stop: TimeInterval = 100
+        func acted(keyDown: TimeInterval = 0, click: TimeInterval = 0, hotkeys: [TimeInterval] = []) -> Bool {
+            InputSinceStop.userActed(stoppedAt: stop, lastKeyDownAt: keyDown, lastClickAt: click, hotkeyKeyDowns: hotkeys)
+        }
+        XCTAssertFalse(acted(keyDown: 99.98), "the stop key itself comes before the stop")
+        XCTAssertTrue(acted(keyDown: 101), "a key after the stop (Cmd+2)")
+        XCTAssertTrue(acted(click: 101), "a click after the stop")
+        // The countdown stopped A; the hotkey that starts B lands before A's Return.
+        XCTAssertFalse(acted(keyDown: 101.49, hotkeys: [101.5]), "our hotkey's key-down, seen by the tap a moment later")
+        XCTAssertFalse(acted(keyDown: 101.3, hotkeys: [101.5]))
+        XCTAssertTrue(acted(keyDown: 101.2, hotkeys: [101.5]), "too long before the hotkey to be it")
+        XCTAssertTrue(acted(keyDown: 103, hotkeys: [101.5]), "a later key is the user's")
+        XCTAssertTrue(acted(keyDown: 101.49, click: 101.6, hotkeys: [101.5]), "a click still counts")
+    }
+
+    func testConsumedHotkeyKeyDownsAreRecorded() {
+        ConsumedHotkeyKeyDowns.removeAll()
+        defer { ConsumedHotkeyKeyDowns.removeAll() }
+        for time in 1...10 {
+            ConsumedHotkeyKeyDowns.record(at: TimeInterval(time))
+        }
+        XCTAssertEqual(ConsumedHotkeyKeyDowns.recent(), (3...10).map(TimeInterval.init), "the last eight")
+        XCTAssertTrue(GlobalHotkeyManager.isConsumedKeyDown(type: .keyDown, passedThrough: false))
+        XCTAssertFalse(GlobalHotkeyManager.isConsumedKeyDown(type: .keyDown, passedThrough: true), "a key the tap let through is the user's")
+        XCTAssertFalse(GlobalHotkeyManager.isConsumedKeyDown(type: .keyUp, passedThrough: false))
+        XCTAssertFalse(GlobalHotkeyManager.isConsumedKeyDown(type: .flagsChanged, passedThrough: false))
     }
 
     func testTheFocusLooksCombineToTheWorst() {

@@ -296,11 +296,12 @@ final class FluidAudioProvider: TranscriptionProvider {
         } else {
             profiles = []
         }
-        await manager.setPronunciationCustomizationEnabled(!profiles.isEmpty)
         do {
-            let result = try await manager.transcribe(samples, source: AudioSource.microphone)
-            let features = await manager.consumePronunciationEncoderFeatures()
-            await manager.setPronunciationCustomizationEnabled(false)
+            let (result, features) = try await Self.runFinalOffMainActor(
+                samples,
+                manager: manager,
+                customizesPronunciation: !profiles.isEmpty
+            )
             guard let features, !profiles.isEmpty else {
                 return ASRTranscriptionResult(text: result.text, confidence: result.confidence)
             }
@@ -317,6 +318,24 @@ final class FluidAudioProvider: TranscriptionProvider {
             await manager.setPronunciationCustomizationEnabled(false)
             throw error
         }
+    }
+
+    /// The final pass's model round trips (four awaits on the AsrManager actor), run off the
+    /// main actor. From this main-actor provider every one of them hopped back to main, so a
+    /// busy main thread at stop (UI work) delayed inference and its result. Ported in spirit
+    /// from altic-dev/FluidVoice@761f2c8c; there the call site was detached, but this provider is
+    /// main-actor isolated, so the round trips themselves move.
+    @concurrent
+    private nonisolated static func runFinalOffMainActor(
+        _ samples: [Float],
+        manager: AsrManager,
+        customizesPronunciation: Bool
+    ) async throws -> (ASRResult, EncoderFeatureSequence?) {
+        await manager.setPronunciationCustomizationEnabled(customizesPronunciation)
+        let result = try await manager.transcribe(samples, source: AudioSource.microphone)
+        let features = await manager.consumePronunciationEncoderFeatures()
+        await manager.setPronunciationCustomizationEnabled(false)
+        return (result, features)
     }
 
     private func makeEnrollment(

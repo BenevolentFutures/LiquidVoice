@@ -87,6 +87,15 @@ enum AudioCaptureStartOutcome: Equatable {
 /// Models are cached locally to avoid repeated downloads.
 @MainActor
 final class ASRService: ObservableObject {
+    /// Below this the "Transcribing" status only adds a main-thread overlay render that delays
+    /// the result it announces (ported from altic-dev/FluidVoice@526c2aa2).
+    static let finalTranscriptionStatusDelayNanoseconds: UInt64 = 250_000_000
+
+    /// Whether a final pass can start right away (model loaded), so its status may be deferred.
+    var isFinalTranscriptionReady: Bool {
+        self.isAsrReady && self.transcriptionProvider.isReady
+    }
+
     nonisolated static func shouldAssessShortAudioSilence(
         isEnabled: Bool,
         useDictionaryTrainingPath: Bool,
@@ -2579,10 +2588,14 @@ final class ASRService: ObservableObject {
     ///   final transcription pass. Use this for immediate stop cues that
     ///   shouldn't wait on finalization. Only invoked when capture was actually
     ///   running (i.e. not when `stop()` early-returns because `isRunning` is false).
+    /// - Parameter onFinalTranscriptionStarted: called only if the final pass is still running
+    ///   `finalTranscriptionStatusDelay` after it began. A fast pass (short audio takes ~40-110 ms)
+    ///   then finishes without a "Transcribing" overlay render queuing ahead of its result.
     /// - Parameter trace: the dictation's stop-path trace, marked at capture stop and around
     ///   the final transcription.
     func stop(
         onCaptureStopped: (@MainActor () -> Void)? = nil,
+        onFinalTranscriptionStarted: (@MainActor () -> Void)? = nil,
         forDictionaryTraining: Bool = false,
         trace: StopPathTrace? = nil
     ) async -> String {
@@ -2654,8 +2667,10 @@ final class ASRService: ObservableObject {
 
         // Capture has fully ended — invoke the callback so callers can play a
         // stop cue or release capture-dependent UI without waiting on the
-        // (potentially slow) final transcription pass.
-        await MainActor.run { onCaptureStopped?() }
+        // (potentially slow) final transcription pass. stop() is main-actor isolated, so call
+        // it directly rather than re-enqueueing it behind unrelated main-actor work
+        // (from altic-dev/FluidVoice#950).
+        onCaptureStopped?()
         trace?.mark(.captureStopped)
 
         let directCaptureSnapshot = self.directAudioLifecycleController.snapshot
@@ -2779,8 +2794,20 @@ final class ASRService: ObservableObject {
                 finalSource = "dictionaryTraining"
             } else {
                 trace?.mark(.asrBegin)
+                let delayedStatus = onFinalTranscriptionStarted.map { showStatus in
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: Self.finalTranscriptionStatusDelayNanoseconds)
+                        guard !Task.isCancelled else { return }
+                        showStatus()
+                    }
+                }
+                defer { delayedStatus?.cancel() }
                 result = try await self.transcriptionExecutor.run { [provider] in
                     let result = try await provider.transcribeFinal(pcm)
+                    // Cancel as soon as inference ends, not after the result's hop back here:
+                    // the status would otherwise fire while the result waits for the main
+                    // actor (ported from altic-dev/FluidVoice@22270dcc).
+                    delayedStatus?.cancel()
                     trace?.mark(.asrEnd)
                     return result
                 }

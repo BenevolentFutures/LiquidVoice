@@ -398,6 +398,19 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         }
     }
 
+    /// Keeps the recording overlay owned by the stop pipeline without showing processing yet:
+    /// the "Transcribing" status follows only if the final pass is slow (`setProcessing(true)`).
+    /// From altic-dev/FluidVoice#950.
+    func reserveProcessingOverlay() {
+        self.overlayBench("reserve_processing overlayVisible=\(self.overlayVisible) active=\(self.isProcessingActive)")
+        self.isProcessingActive = true
+        self.pendingProcessingShowOperation?.cancel()
+        self.pendingProcessingShowOperation = nil
+        self.pendingHideOperation?.cancel()
+        self.pendingHideOperation = nil
+        self.overlayVisible = true
+    }
+
     /// Ends processing and waits for the recording overlay's exit transition.
     /// Output paths normally call this asynchronously after insertion dispatch
     /// so the exit animation cannot delay text delivery.

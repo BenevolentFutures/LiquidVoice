@@ -2127,21 +2127,18 @@ struct ContentView: View {
 
         self.clearActiveRecordingMode()
 
+        var deferredTranscribingStatus: (@MainActor () -> Void)?
         if shouldHideOverlayOnStop {
             didRequestOverlayHideOnStop = true
             DebugLogger.shared.debug("Hiding dictation overlay at stop path", source: "ContentView")
             self.hideOverlayAsync(reason: "stop_path")
         } else {
-            // Show "Transcribing" state before calling stop() when the overlay needs
-            // to remain available for prompt, command, rewrite, or AI feedback.
-            DebugLogger.shared.debug("Showing transcription processing state", source: "ContentView")
-            self.appBench("processing_ui_request status=Transcribing")
-            self.menuBarManager.setProcessing(true)
-            NotchOverlayManager.shared.updateTranscriptionText("Transcribing")
-            self.appBench("processing_ui_requested status=Transcribing")
-
-            // Give SwiftUI a chance to render the processing state before heavier work.
-            await Task.yield()
+            // The overlay stays for prompt, command, rewrite, or AI feedback. For AI dictation
+            // with the model loaded, a fast final pass (the usual case) finishes before a
+            // "Transcribing" render could queue ahead of its result, so that status waits.
+            let defersStatus = route == .normal && !wasRewriteMode && !wasCommandMode &&
+                !promptTest.isActive && self.asr.isFinalTranscriptionReady
+            deferredTranscribingStatus = await self.prepareOverlayForKeptStop(defersStatus: defersStatus)
         }
 
         // Stop the ASR service and wait for transcription to complete
@@ -2157,6 +2154,7 @@ struct ContentView: View {
                 guard trace.trigger != .benchmark else { return }
                 TranscriptionSoundPlayer.shared.playStopSound()
             },
+            onFinalTranscriptionStarted: deferredTranscribingStatus,
             trace: trace
         )
         trace.mark(.asrReturn)
@@ -2282,8 +2280,10 @@ struct ContentView: View {
             let postProcessingInputChars = normalizedTranscribedText.count
             let postProcessingStart = Date()
 
-            // Update overlay text to show we're now refining (processing already true)
+            // Update overlay text to show we're now refining. Processing may only have been
+            // reserved (a fast final pass never showed "Transcribing"), so make it visible.
             self.appBench("processing_ui_request status=Refining")
+            self.menuBarManager.setProcessing(true)
             NotchOverlayManager.shared.updateTranscriptionText("Refining")
             self.appBench("processing_ui_requested status=Refining")
 
@@ -2510,6 +2510,27 @@ struct ContentView: View {
         if !didTypeExternally, !shouldShowAIProcessingFailure, !didRequestOverlayHideOnStop {
             self.hideOverlayAfterOutput()
         }
+    }
+
+    /// For a stop that keeps the overlay on screen (AI, prompt test, command, rewrite): owns the
+    /// overlay now. Returns the "Transcribing" status to show if the final pass turns out slow,
+    /// or nil when the status was shown right away (`defersStatus` false).
+    private func prepareOverlayForKeptStop(defersStatus: Bool) async -> (@MainActor () -> Void)? {
+        let showTranscribingStatus: @MainActor () -> Void = {
+            DebugLogger.shared.debug("Showing transcription processing state", source: "ContentView")
+            self.appBench("processing_ui_request status=Transcribing")
+            self.menuBarManager.setProcessing(true)
+            NotchOverlayManager.shared.updateTranscriptionText("Transcribing")
+            self.appBench("processing_ui_requested status=Transcribing")
+        }
+        guard defersStatus else {
+            showTranscribingStatus()
+            // Give SwiftUI a chance to render the processing state before heavier work.
+            await Task.yield()
+            return nil
+        }
+        self.menuBarManager.reserveProcessingOverlay()
+        return showTranscribingStatus
     }
 
     private func hideOverlayAfterOutput() {

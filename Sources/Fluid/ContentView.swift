@@ -2201,12 +2201,26 @@ struct ContentView: View {
         var aiFallbackReason: String?
         var postProcessingModel: String?
         let appInfo = self.recordingAppInfo ?? self.getCurrentAppInfo()
-        let normalizedTranscribedText = ASRService.applySpokenPunctuationFormatting(
-            transcribedText,
-            appName: appInfo.name,
-            bundleID: appInfo.bundleId,
-            windowTitle: appInfo.windowTitle
+        // Spoken Send: a send phrase ending the dictation is stripped here, before AI cleanup;
+        // it decides at delivery below whether a key follows the text.
+        let spokenSend = SpokenSendController.shared.finishDictation(
+            ASRService.applySpokenPunctuationFormatting(
+                transcribedText,
+                appName: appInfo.name,
+                bundleID: appInfo.bundleId,
+                windowTitle: appInfo.windowTitle
+            ),
+            isNormalRoute: route == .normal
         )
+        if spokenSend.isPhraseOnly {
+            await self.finishPhraseOnlyDictation(
+                spokenSend,
+                stopTarget: await stopTargetCapture?.value,
+                didRequestOverlayHideOnStop: didRequestOverlayHideOnStop
+            )
+            return
+        }
+        let normalizedTranscribedText = spokenSend.text
 
         let shouldUseAI = activeDictationSlot.map {
             DictationAIPostProcessingGate.isConfigured(for: $0, appBundleID: appInfo.bundleId)
@@ -2343,7 +2357,7 @@ struct ContentView: View {
 
         let shouldShowAIProcessingFailure = shouldPersistOutputs && aiFallbackReason != nil
         if shouldShowAIProcessingFailure {
-            self.pendingAIReprocessText = transcribedText
+            self.pendingAIReprocessText = spokenSend.phraseDetected ? normalizedTranscribedText : transcribedText
             NotchContentState.shared.showAIProcessingFailure()
             self.menuBarManager.finishProcessingKeepingOverlayVisible()
         } else {
@@ -2365,7 +2379,8 @@ struct ContentView: View {
             TranscriptionHistoryStore.shared.addEntry(
                 id: historyEntryID,
                 timestamp: historyTimestamp,
-                rawText: transcribedText,
+                // Without the send phrase, so reprocessing never types it.
+                rawText: spokenSend.phraseDetected ? normalizedTranscribedText : transcribedText,
                 processedText: finalText,
                 appName: appInfo.name,
                 windowTitle: appInfo.windowTitle,
@@ -2420,7 +2435,12 @@ struct ContentView: View {
                 "text_ready_to_type_request elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - finalTextReadyAt) * 1000).rounded()))"
             )
             let isInHistory = shouldPersistOutputs && SettingsStore.shared.saveTranscriptionHistory
-            if isTargetReady {
+            if isTargetReady,
+               let sendKey = SpokenSendController.shared.sendKeyRequest(for: spokenSend, target: stopTarget, aiFailed: aiFallbackReason != nil)
+            {
+                // Spoken Send: the text, then the key, in the same target (see SpokenSendController).
+                SpokenSendController.shared.deliver(finalOutputPlan, sendKey: sendKey, textReadyAt: finalTextReadyAt, transcriptInHistory: isInHistory)
+            } else if isTargetReady {
                 self.asr.typeOutputPlanToActiveField(
                     finalOutputPlan,
                     preferredTargetPID: typingTargetPID,
@@ -2451,6 +2471,58 @@ struct ContentView: View {
     private func advanceOverlayLifecycle() {
         self.overlayLifecycleID &+= 1
         NotchContentState.shared.clearAIProcessingFailure()
+        // A countdown from the previous recording can never stop this one.
+        SpokenSendController.shared.beginRecording()
+    }
+
+    // MARK: - Spoken Send
+
+    /// Lets Spoken Send watch the live transcript of a dictation and stop it after the quiet
+    /// countdown, through the same guarded path as the stop hotkey.
+    private func attachSpokenSend() {
+        SpokenSendController.shared.attach(
+            partials: self.asr.$partialTranscription.eraseToAnyPublisher(),
+            audioLevels: self.asr.audioLevelPublisher,
+            hooks: SpokenSendController.Hooks(
+                isDictating: {
+                    (self.activeRecordingMode == .dictate || self.activeRecordingMode == .promptMode)
+                        && self.currentDictationOutputRouteForHotkeyStop() == .normal
+                        && self.asr.isRunning
+                },
+                recordingApp: {
+                    self.recordingAppInfo.map { (bundleIdentifier: $0.bundleId, name: $0.name) }
+                },
+                stopAndProcess: {
+                    if let hotkeyManager = self.hotkeyManager {
+                        hotkeyManager.requestStopAndProcess()
+                    } else {
+                        Task { await self.stopAndProcessTranscription(route: .normal) }
+                    }
+                }
+            )
+        )
+    }
+
+    /// Spoken Send when nothing is left to type once the phrase is stripped: presses the key on
+    /// what the target already holds ("send it" alone submits the draft), or does nothing when
+    /// the send was canceled or is not allowed there.
+    private func finishPhraseOnlyDictation(
+        _ spokenSend: SpokenSendDecision,
+        stopTarget: DictationTarget?,
+        didRequestOverlayHideOnStop: Bool
+    ) async {
+        if let sendKey = SpokenSendController.shared.sendKeyRequest(for: spokenSend, target: stopTarget, aiFailed: false) {
+            let preparation = await TypingService.prepareTargetForDelivery(sendKey.target)
+            self.appBench("stop_target_prepare pid=\(sendKey.target.pid) result=\(preparation.rawValue) phraseOnly=true")
+            if preparation.isReady {
+                SpokenSendController.shared.sendExistingDraft(sendKey)
+            } else {
+                DebugLogger.shared.info("SPOKEN_SEND outcome=target_not_in_front phraseOnly=true", source: "SpokenSend")
+            }
+        }
+        if !didRequestOverlayHideOnStop {
+            await self.menuBarManager.finishProcessingAndHideOverlay()
+        }
     }
 
     private func hideOverlayAsync(reason: String) {
@@ -3214,6 +3286,7 @@ struct ContentView: View {
         NotchContentState.shared.onCancelRequested = {
             _ = self.handleCancelShortcut()
         }
+        self.attachSpokenSend()
         NotchContentState.shared.onDictationPromptSelectionRequested = { selection in
             let slot = self.activeDictationShortcutSlot ?? .primary
             SettingsStore.shared.setDictationPromptSelection(selection, for: slot)

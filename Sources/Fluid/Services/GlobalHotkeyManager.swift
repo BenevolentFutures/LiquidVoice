@@ -2550,6 +2550,13 @@ final class GlobalHotkeyManager: NSObject {
         }
     }
 
+    /// Stops the recording and processes it exactly as the stop hotkey does, through the same
+    /// in-progress guard, so a stop requested by Spoken Send's quiet countdown and one from the
+    /// hotkey can never both run.
+    func requestStopAndProcess() {
+        self.stopRecordingIfNeeded()
+    }
+
     private func stopRecordingIfNeeded() {
         Task { @MainActor [weak self] in
             guard let self = self else { return }

@@ -208,7 +208,6 @@ create_dmg_only.sh
 scratch/
 
 .swiftpm/
-scripts/
 
 # Benchmark / eval reports (local-only)
 benchmark_reports/

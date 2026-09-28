@@ -577,7 +577,7 @@ final class AutomaticDictionaryCorrectionTracker {
     }
 
     private nonisolated static let accessibilityProbeQueue = DispatchQueue(
-        label: "com.fluidvoice.dictionary-correction.ax-probe",
+        label: "com.stage11.liquidvoice.dictionary-correction.ax-probe",
         qos: .userInitiated
     )
 

@@ -6,6 +6,7 @@ reads those lines and prints a table. Nothing is sent anywhere.
 
     scripts/stop_path_latency.py                      # the installed app's log
     scripts/stop_path_latency.py --dev                # Debug builds and test runs
+    scripts/stop_path_latency.py ~/Library/Logs/Fluid/Fluid.log  # builds before the identity change
     scripts/stop_path_latency.py --trigger benchmark  # only the fixture benchmark runs
     scripts/stop_path_latency.py --legacy             # logs from builds before STOP_SUMMARY
 
@@ -180,14 +181,14 @@ def table(rows):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("logs", nargs="*", help="log files (default: the installed app's log and its rotation)")
-    parser.add_argument("--dev", action="store_true", help="read the Debug build log (~/Library/Logs/Fluid-Dev)")
+    parser.add_argument("--dev", action="store_true", help="read the Debug build log (~/Library/Logs/LiquidVoice-Dev)")
     parser.add_argument("--legacy", action="store_true", help="rebuild stages from pre-trace APP_BENCH lines")
     parser.add_argument("--trigger", help="only this trigger (hold_release, toggle, automatic, ui, benchmark)")
     parser.add_argument("--last", type=int, help="only the last N dictations")
     parser.add_argument("--json", action="store_true", help="print JSON instead of a table")
     args = parser.parse_args()
 
-    folder = os.path.expanduser("~/Library/Logs/Fluid-Dev" if args.dev else "~/Library/Logs/Fluid")
+    folder = os.path.expanduser("~/Library/Logs/LiquidVoice-Dev" if args.dev else "~/Library/Logs/LiquidVoice")
     paths = args.logs or [os.path.join(folder, "Fluid.log.1"), os.path.join(folder, "Fluid.log")]
     lines = list(read_lines(paths))
     rows = parse_legacy(lines) if args.legacy else parse_summaries(lines, args.trigger)

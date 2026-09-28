@@ -44,7 +44,7 @@ final class TypingServiceTransientPasteboardTests: XCTestCase {
         let item = try XCTUnwrap(pasteboard.pasteboardItems?.first)
         XCTAssertEqual(
             item.string(forType: NSPasteboard.PasteboardType("org.nspasteboard.source")),
-            Bundle.main.bundleIdentifier ?? "com.FluidApp.app"
+            AppStorageLocation.bundleIdentifier
         )
         XCTAssertEqual(item.string(forType: SystemPasteboardManager.sessionType), "session")
     }

@@ -1,6 +1,6 @@
 import Foundation
 
-/// The app log (`~/Library/Logs/Fluid/Fluid.log`, or `Fluid-Dev` for Debug builds).
+/// The app log (`~/Library/Logs/LiquidVoice/Fluid.log`, or `LiquidVoice-Dev` for Debug builds).
 ///
 /// Callable from any thread: formatting and the file write happen on a private serial queue,
 /// and nothing here touches the main thread. (It used to mirror every line into a published

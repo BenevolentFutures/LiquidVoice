@@ -134,55 +134,187 @@ normalize_ctranscribe_framework() {
     fi
 }
 
-# Installs the built app, keeping the one it replaces so one command brings it back.
-# LIQUIDVOICE_INSTALL_PATH and LIQUIDVOICE_BACKUP_ROOT only exist to try this step on scratch
-# folders; the defaults are /Applications/Liquid Voice.app and ~/Backups.
+# The bundle identifier of an app bundle, or nothing.
+bundle_id() {
+    /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist" 2>/dev/null || true
+}
+
+# Quits Liquid Voice and waits up to 10 s for it to go.
+quit_liquid_voice() {
+    osascript -e 'quit app "Liquid Voice"' >/dev/null 2>&1 || true
+    local waited=0
+    while pgrep -x "Liquid Voice" >/dev/null 2>&1; do
+        if [ "${waited}" -ge 20 ]; then
+            return 1
+        fi
+        sleep 0.5
+        waited=$((waited + 1))
+    done
+}
+
+# Writes <backup dir>/rollback.sh, which puts the backed-up app back.
+write_rollback_script() {
+    local backup_dir="$1"
+    local installed="$2"
+    cat > "${backup_dir}/rollback.sh" <<ROLLBACK
+#!/bin/bash
+# Puts back the Liquid Voice that ./build.sh install replaced. Its own settings and data were
+# never changed, so it picks up where it was (without dictations made in the newer app).
+set -euo pipefail
+installed="${installed}"
+backup="${backup_dir}/Liquid Voice.app"
+osascript -e 'quit app "Liquid Voice"' >/dev/null 2>&1 || true
+waited=0
+while pgrep -x "Liquid Voice" >/dev/null 2>&1; do
+    if [ "\${waited}" -ge 20 ]; then
+        echo "Liquid Voice is still running. Quit it, then run this again. Nothing was changed." >&2
+        exit 1
+    fi
+    sleep 0.5
+    waited=\$((waited + 1))
+done
+rm -rf "\${installed}.rollback"
+ditto "\${backup}" "\${installed}.rollback"
+rm -rf "\${installed}"
+mv "\${installed}.rollback" "\${installed}"
+echo "Restored \$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "\${installed}/Contents/Info.plist") to \${installed}."
+open "\${installed}"
+ROLLBACK
+    chmod +x "${backup_dir}/rollback.sh"
+}
+
+# Before the first install of a new bundle identifier: the new app copies FluidVoice-era data
+# once, on its first launch. Preferences or a folder already under the new identity (a stray
+# Release run, an earlier install) mean that copy would be skipped or merged into them.
+preflight_existing_identity_data() {
+    local product_id="$1"
+    local installed_id="$2"
+    local data_domain="$3"
+    local data_folder="$4"
+    [ "${installed_id}" != "${product_id}" ] || return 0
+
+    local found=""
+    if defaults read "${data_domain}" >/dev/null 2>&1; then
+        found="${found}  - preferences: ${data_domain}"
+        if defaults read "${data_domain}" LiquidVoiceIdentityMigrationDefaults >/dev/null 2>&1; then
+            found="${found} (migration already marked done: it will NOT copy your data again)"
+        fi
+        found="${found}"$'\n'
+    fi
+    if [ -e "${data_folder}" ]; then
+        found="${found}  - folder: ${data_folder}"$'\n'
+    fi
+    [ -n "${found}" ] || return 0
+
+    local stamp
+    stamp="$(date +%Y%m%d-%H%M%S)"
+    cat >&2 <<WARN
+
+First install of ${product_id} (the installed app is ${installed_id:-none}), but data for it already exists:
+${found}
+On its first launch the new app copies your FluidVoice-era settings, history, dictionary and
+folder once. With data already there, that copy is skipped or merged into it. To start clean,
+move it aside first:
+  defaults export ${data_domain} ~/Backups/${data_domain}-${stamp}.plist && defaults delete ${data_domain}
+  mv "${data_folder}" ~/Backups/LiquidVoice-folder-${stamp}
+
+WARN
+    if [ "${LIQUIDVOICE_ALLOW_EXISTING_DATA:-}" = "1" ]; then
+        echo "Continuing anyway (LIQUIDVOICE_ALLOW_EXISTING_DATA=1)." >&2
+        return 0
+    fi
+    if [ ! -t 0 ]; then
+        echo "Not interactive, so stopping. Nothing was installed. Set LIQUIDVOICE_ALLOW_EXISTING_DATA=1 to continue anyway." >&2
+        exit 1
+    fi
+    local answer=""
+    read -r -p "Type 'install' to install anyway; anything else stops: " answer
+    if [ "${answer}" != "install" ]; then
+        echo "Stopped. Nothing was installed." >&2
+        exit 1
+    fi
+}
+
+# Installs the built app, keeping the one it replaces so one command brings it back. Nothing
+# destructive happens before the backup is verified and the rollback command is printed, and
+# the new app is copied next to the old one first, then swapped in with mv.
+# LIQUIDVOICE_INSTALL_PATH, LIQUIDVOICE_BACKUP_ROOT, LIQUIDVOICE_DATA_DOMAIN and
+# LIQUIDVOICE_DATA_FOLDER only exist to try this step on scratch folders.
 install_app() {
     local product="$1"
     local installed="${LIQUIDVOICE_INSTALL_PATH:-/Applications/Liquid Voice.app}"
     local backup_root="${LIQUIDVOICE_BACKUP_ROOT:-${HOME}/Backups}"
+    local data_domain="${LIQUIDVOICE_DATA_DOMAIN:-com.stage11.liquidvoice}"
+    local data_folder="${LIQUIDVOICE_DATA_FOLDER:-${HOME}/Library/Application Support/LiquidVoice}"
+    local staged="${installed}.new"
+    local previous="${installed}.previous"
     local backup_dir=""
+    local product_id installed_id=""
 
-    echo "Installing to ${installed} ..."
-    osascript -e 'quit app "Liquid Voice"' >/dev/null 2>&1 || true
+    product_id="$(bundle_id "${product}")"
+    [ -n "${product_id}" ] || { printf >&2 'Cannot read the bundle ID of %s. Nothing was installed.\n' "${product}"; exit 1; }
+    if [ -d "${installed}" ]; then
+        installed_id="$(bundle_id "${installed}")"
+    fi
+    preflight_existing_identity_data "${product_id}" "${installed_id}" "${data_domain}" "${data_folder}"
+
+    echo "Installing ${product_id} to ${installed} ..."
     # The running app must be gone before it is replaced (and before the new one migrates
     # its data), or it would keep writing its settings and hotkeys beside the new app.
-    local waited=0
-    while pgrep -x "Liquid Voice" >/dev/null 2>&1; do
-        if [ "${waited}" -ge 10 ]; then
-            printf >&2 'Liquid Voice is still running after 10 s. Quit it, then run install again. Nothing was installed.\n'
-            exit 1
-        fi
-        sleep 1
-        waited=$((waited + 1))
-    done
+    if ! quit_liquid_voice; then
+        printf >&2 'Liquid Voice is still running after 10 s. Quit it, then run install again. Nothing was installed.\n'
+        exit 1
+    fi
 
-    # Keep the app being replaced, so one command brings it back.
+    # Keep the app being replaced, verified, so one command brings it back.
     if [ -d "${installed}" ]; then
         backup_dir="${backup_root}/liquid-voice-$(date +%Y%m%d-%H%M%S)"
         mkdir -p "${backup_dir}"
         echo "Backing up the current app to ${backup_dir}/Liquid Voice.app ..."
         ditto "${installed}" "${backup_dir}/Liquid Voice.app"
-        local installed_id backup_id
-        installed_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${installed}/Contents/Info.plist" 2>/dev/null || true)"
-        backup_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${backup_dir}/Liquid Voice.app/Contents/Info.plist" 2>/dev/null || true)"
+        local backup_id
+        backup_id="$(bundle_id "${backup_dir}/Liquid Voice.app")"
         if [ -z "${backup_id}" ] || [ "${backup_id}" != "${installed_id}" ]; then
-            printf >&2 'The backup at %s looks incomplete; nothing was installed.\n' "${backup_dir}"
+            printf >&2 'The backup at %s has bundle ID "%s", not "%s". Nothing was installed.\n' \
+                "${backup_dir}" "${backup_id}" "${installed_id}"
             exit 1
         fi
+        if ! codesign --verify --deep --strict "${backup_dir}/Liquid Voice.app" >/dev/null 2>&1; then
+            if codesign --verify --deep --strict "${installed}" >/dev/null 2>&1; then
+                printf >&2 'The backup at %s fails codesign verification but the installed app passes. Nothing was installed.\n' "${backup_dir}"
+                exit 1
+            fi
+            echo "Note: the installed app itself fails strict codesign verification; the backup is an exact copy of it."
+        fi
+        write_rollback_script "${backup_dir}" "${installed}"
         echo "Backed up ${backup_id}."
+        echo "Rollback, if needed (restores the previous app; its own settings and data were never changed):"
+        echo "  bash \"${backup_dir}/rollback.sh\""
     fi
 
-    rm -rf "${installed}"
-    ditto "${product}" "${installed}"
+    # Copy next to the installed app, check it, then swap it in.
+    rm -rf "${staged}" "${previous}"
+    ditto "${product}" "${staged}"
+    if [ "$(bundle_id "${staged}")" != "${product_id}" ]; then
+        rm -rf "${staged}"
+        printf >&2 'The copy at %s is incomplete. The installed app was not touched.\n' "${staged}"
+        exit 1
+    fi
+    if [ -d "${installed}" ]; then
+        mv "${installed}" "${previous}"
+    fi
+    if ! mv "${staged}" "${installed}"; then
+        [ -d "${previous}" ] && mv "${previous}" "${installed}"
+        printf >&2 'Could not move the new app into place; the previous app was put back.\n'
+        exit 1
+    fi
+    rm -rf "${previous}"
+
     echo "Installed: ${installed}"
     codesign -dv "${installed}" 2>&1 | grep -E 'Identifier|TeamIdentifier' || true
     echo "Log: ~/Library/Logs/LiquidVoice/Fluid.log. After an identity change, follow docs/INSTALL-CHECKLIST.md."
-
     if [ -n "${backup_dir}" ]; then
-        echo "Rollback to the previous app (its own settings and data were left untouched):"
-        printf '  osascript -e %s; sleep 1; rm -rf "%s" && ditto "%s" "%s" && open "%s"\n' \
-            "'quit app \"Liquid Voice\"'" "${installed}" "${backup_dir}/Liquid Voice.app" "${installed}" "${installed}"
+        echo "Rollback: bash \"${backup_dir}/rollback.sh\""
     fi
 }
 

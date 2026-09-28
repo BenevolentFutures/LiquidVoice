@@ -192,3 +192,93 @@ Inspection hooks: `?hover=1` holds the pill's hover state (brackets drawn), `?ho
 4. **No "TRANSCRIBING" word** (contract rule). The hollow square, frozen timer and sweep carry it.
 5. **One bracket at a time (round 4).** Over a chip or the card, the pill's bracket hides. Both at once would collide in the 6 pt gutter.
 6. **The knockout halo (round 4)** was added so outside brackets survive any backdrop. Without it they vanish over the dark terminal in light mode.
+
+## Round 5 (2026-09-28): states from the newer code
+
+The locked design, extended with the overlay states that later PRs added: Spoken Send, timeouts, ASR recovery, mic permission and TextDelivery failure reasons. The pill stays 149 pt, and the rails, chips, trace row and mic row never move. Every default below is our recommendation; its alternative is one URL param (also one click in the "Signal options" strip).
+
+### Spoken Send (default: in the trace row, not a chip)
+
+**Trace row:** `[icon 20] [trace] [placard] [■ 6] [timer 5 ch]`.
+- **Placard:** SF Mono 10.5 semibold, uppercase, +0.06 em, right-aligned, width reserved for "NO SEND" (7 ch). Empty at rest.
+- **Trace length:** the trace takes what is left, so it shortens from 52 bars to **39 bars** (154 pt, 3.25 s of history).
+
+| Phase | Placard | Trace row | Timer |
+|---|---|---|---|
+| armed (the phrase was heard, while listening and transcribing) | `SEND`, orange | live / sweep as usual | running / frozen |
+| `countdown` (1.5 s of quiet after you stop) | `SEND`, orange | flat trace plus the **drain bar**: solid orange, 4 pt tall, the full trace width on the midline, shrinking from the right toward the left | `1.5` → `0.0`, orange mono, one decimal, in the reserved box. The square is hollow |
+| canceled (click anywhere on the pill, the Cancel chip, or Esc) | `NO SEND`, ink | drain bar in ink, stopped | frozen, ink |
+| no Return will follow (a terminal that never gets one) | `NO SEND`, dim, from the moment the phrase is heard | as usual | as usual |
+
+**Outcomes:**
+- A canceled send holds for 700 ms, then the text lands without the phrase: `delivered` ("Pasted into c11"), with the placard still reading NO SEND.
+- A completed countdown goes to **`sent`**: the stamp layout, "Sent to c11", meta `118 WORDS · RETURN`, dismissed after 1.2 s.
+- With No Return, there is no countdown and the text lands.
+
+**Drain bar motion:** 1.5 s, linear, stepped on the 4 pt bar pitch (`width = floor(remaining / 1.5 × (trace + 2) / 4) × 4`). No easing, no ring. Native: the same `Canvas`, one `fill(Path(rect))`, driven by the `TimelineView` date.
+
+**Menu bar during the countdown:** the same solid square as listening. The bars hold still.
+
+**Alternative, `?send=chip`:** today's design, a fifth chip in the trailing rail's reserved middle slot (top 60).
+- Glyph: a filled `paperplane.fill`, which becomes the hollow `paperplane` for No Return.
+- Ring: a 1.5 pt orange square that drains clockwise from top centre (`pathLength` 100, dash offset), ink once canceled.
+- The row has no placard, so the trace keeps 52 bars. The timer still counts down.
+- Limitation: this alternative was not polished (it is not the default). The ring renders but received no pixel-level review, and the plane glyph is a rough stand-in; the native build uses the SF Symbol.
+
+### Recovery card family
+
+One anatomy for every problem: the failed card, grown upward from the pill, with the orange 2 pt top rule.
+- **Headline:** Pro 13.5 semibold.
+- **Reason line:** Pro 13, `text-2`. One line reserved, at most two.
+- **Transcript:** failed only, 3 lines.
+- **Action row:** one primary as a solid orange button (at least 88 × 28, 12 pt side padding, a 13 pt glyph plus the label), then **Dismiss**, then mono meta on the right.
+
+The pill grows upward by 25 pt for a one-line card, and the history card clears it through `--grow`.
+
+| State | Headline | Reason | Primary | Meta | Trace row / mic row |
+|---|---|---|---|---|---|
+| `failed` | Couldn't paste into c11 | `nofocus` (default) "No text field focused" · `clipboard` "The text is on your clipboard" · `clipboardkept` "Your newer clipboard was left alone, the text is in History" (two lines, +17 pt) | **Copy** (doc.on.doc), which becomes "✓ Copied" in the same width | `118 WORDS` | flat, 0:41 / mic |
+| `timedout` | Transcription timed out | Your audio is kept | **Reprocess** (arrow.clockwise) | none (the frozen timer shows 0:41) | flat, 0:41 / mic |
+| `asrback` | Speech recognition is back | A kept dictation is waiting | **Reprocess** | none (the frozen timer shows 0:41) | flat, 0:41 / mic |
+| `micoff` | Microphone access is off | Allow Liquid Voice in Privacy & Security | **Open System Settings** (gearshape) | none | flat, hollow square, 0:00 dim / `NO MICROPHONE` |
+
+The Reprocess in a card and the Reprocess chip do the same thing, and the chip stays. Pixel heights: generic card 174 pt (+25), failed 231 pt (+82), failed with the two-line reason 248 pt (+99).
+
+### Wording (default: truthful)
+
+The paste is posted, not verified, so:
+- The outcome reads **"Pasted into c11"**, and the Spoken Send outcome reads **"Sent to c11"**.
+- The history marker reads **NOT PASTED**.
+- Under `?wording=delivered` these become "Delivered to c11" and NOT DELIVERED.
+
+### Tokens added
+
+| Token | Value |
+|---|---|
+| Placard | Mono 10.5 / 14 semibold, +0.06 em, uppercase, width `7 × (1ch + 0.06em)`, right-aligned, 8 pt after the trace, 6 pt before the square |
+| Placard colours | armed / countdown `accent`; canceled `text`; no Return `text-dim` |
+| Drain bar | 4 pt tall, full trace width, `accent` (`ink` once canceled), 1.5 s linear, 4 pt steps |
+| Countdown readout | Mono 15 semibold `accent`, `0.0` format, in the reserved 5 ch box |
+| Primary button | min 88 × 28, 0 radius, 12 pt padding, 13 pt glyph, 6 pt gap, `accent` / `on-accent` |
+| Reason line | Pro 13 / 17, `text-2`, clamp 2 |
+
+### Native mapping
+
+- **Placard:** `Text(label).font(.system(size: 10.5, weight: .semibold, design: .monospaced)).textCase(.uppercase).tracking(0.63).frame(width: sevenCh, alignment: .trailing)`, always present, empty at rest.
+- **Drain bar:** the trace `Canvas`, one extra rect.
+- **Countdown readout:** the timer `Text` with `String(format: "%.1f", remaining)`.
+- **Cards:** one `RecoveryCard(headline:reason:showsTranscript:primary:meta:)` view reusing the failed card's layout, placed in the pill's upper region. The pill grows upward and its bottom rows are anchored.
+- **Open System Settings:** `NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)`.
+
+### Prototype
+
+- **New states** in the stage list, in this order: idle, listening, transcribing, delivered (labelled "Pasted"), failed, history, countdown, sent, timedout, asrback, micoff. Digits reach the first nine.
+- **Demo:** **S** plays a Spoken Send dictation.
+- **Hooks:** `?armed=1`, `?t=<remaining>` (holds the countdown), `?canceled=1`, `?target=noreturn`, `?send=chip`, `?wording=delivered`, `?reason=…`.
+
+### App icon (`icon.html`)
+
+- **A (default):** an ink `#111214` tile with the five white square-ended bars (6 / 12 / 8 / 12 / 6 on a 16 grid, 2 wide on a 3 pitch) and one orange 6 × 6 square at the bars' bottom right.
+- **B:** a paper tile with ink bars and the same orange square.
+- **Drawing:** full-bleed, drawn on a 32-unit grid so the 16 pt @2x size is pixel-exact.
+- **Small-size rule:** at **32 pt and below** the mark simplifies to **three bars** (6 / 12 / 6 of the 16 grid, 3 units wide on a 5 pitch, x 5 / 10 / 15), with the orange 6 × 6 square kept at x 21. 64 pt and above keep the five bars. The five-bar mark smudged at 16 pt. The page shows 1024 → 16 pt, masked with a superellipse approximating the macOS squircle and also unmasked, plus the 22 × 16 menu bar mark in its three states.

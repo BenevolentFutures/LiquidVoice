@@ -41,3 +41,58 @@ Skip anything on the never-port list. Each commit that gets ported, or deliberat
 
 | Upstream SHA | Subject | Status | Our PR |
 |---|---|---|---|
+| `43668220` | Fix dock visibility and locked-screen shortcuts | ported | #2 |
+| `33e4eb5d` | fix(hotkey): isolate mouse event taps | ported, adapted: reprocess mouse shortcut is a one-shot in the mouse tap | #2 |
+| `1fd51e4e` | fix(hotkey): preserve mouse press lifecycle | ported, adapted to com.FluidApp.app.dev | #2 |
+| `b3258d25` | fix(hotkey): stop interrupted mouse holds | ported | #2 |
+| `13401621` | perf(hotkey): service keyboard tap on dedicated thread | ported, adapted: own keystrokes skipped by source PID, not upstream's marker | #2 |
+| `24bc8508` | Fix ignored microphones returning after reconnect | ported | #2 |
+| `9db0631a` | Fix media pause and resume during dictation (#957) | ported, ASRService hooks placed by hand | #2 |
+| `38730e98` | Retain media recovery ownership and skip unchanged key saves | partial: media recovery only; key-save part targets code we don't have | #2 |
+| `79b91141` | fix(audio): remove Independent Volume instead of writing system volume (#989) | ported | #2 |
+| `02a536ef` | test: isolate debug preferences | skipped: covered by dev isolation (#1) | #2 |
+| `0039d645` | Refine AI Providers, History and Stats (#955) | partial: media query timeout only; rest is AI providers/history/stats | #2 |
+| `4e00cf6b` | refactor(bench): keep stop logging within lint limits | folded into the 13401621 port | #2 |
+| `02bb636c` | feat(meeting): harden audio capture and processing | skipped: meetings; its Core Audio listener move off main is a candidate for a separate audio-hardening lane | #2 |
+| `126fedd1` | feat(meeting): strengthen detection and unify recording overlay | skipped: meetings | #2 |
+| `cf96d35c` | feat(meeting): Phase 3 - VPIO mic capture behind a default-off flag | skipped: meetings | #2 |
+| `2efaa124` | add analytics to measure latency | skipped: analytics | #2 |
+| `238ff3f4` | chore(hotkey): add local debug toggle trigger | skipped: debug trigger file | #2 |
+| `a1b7c30c` | feat(beta4): persist FI preparation and scope overlay choices by app | skipped: Fluid Intelligence beta; shortcut-settings features, not fixes | #2 |
+| `ef74d20d` | chore: satisfy strict lint and validate optional audio values | skipped: lint over meetings code | #2 |
+| `b0d64436` | Migrate to clipboard paste | partial: snapshot/restore and result reporting; not the default flip, forced migration, coordinator or analytics | #4 |
+| `c59118a7` | increase limits for snapshot backup | superseded by bbaedd94 | #4 |
+| `b1184755` | restore image clipboard | ported | #4 |
+| `03477453` | Fix restoring image snapshot | ported | #4 |
+| `56504289` | reduce snapshot restore time | skipped: replaced by our per-target restore timing and c0118882 | #4 |
+| `fb896ebe` | support different keyboard layouts | ported | #4 |
+| `4cb6683f` | prallelize snapshot and transcription | partial: image-file bytes; Spoken Send part goes to the spoken-send lane | #4 |
+| `ebbff23a` | fix(paste): tag synthetic Cmd+V as synthesized event | ported | #4 |
+| `c0118882` | fix(paste): release Command after the synthesized Cmd+V | ported | #4 |
+| `a2d6ef32` | fix(clipboard): conceal temporary dictation entries | ported | #4 |
+| `bbaedd94` | perf(clipboard): cap snapshot representations at 32 MB | ported | #4 |
+| `a3c896a7` | fix(clipboard): preserve filenames when oversized payloads are skipped | ported | #4 |
+| `7d6d0e7c` | fix(clipboard): preserve enabled transcription backup when delivery fails | ported; failed dictations always go to the clipboard | #4 |
+| `58b4db56` | fix(settings): show full clipboard insertion label | ported | #4 |
+| `51e62364` | feat(typing): refuse delivery when focus is certainly not a text field | ported; c11/Ghostty never refused | #4 |
+| `a1a65772` | fix(typing): paste when focus is a window or app | ported | #4 |
+| `fadaed91` | feat(typing): verify paste landed by reading focus back | ported; debug trigger rewritten as our own | #4 |
+| `caedd4ef` | fix(typing): wait 1.5 s before a not-landed verdict | ported | #4 |
+| `788d04b6` | fix(typing): ignore paste read-back after user input | ported | #4 |
+| `b1d14044` | feat(settings): make the paste check card opt-in | ported | #4 |
+| `98b5a278` | fix(typing): skip paste read-back when a send key follows | hook only (verifiesLanding); Spoken Send itself in its own lane | #4 |
+| `5a67d658` | fix(dictation): snapshot target and route at stop | partial: stop-time target; route/prompt freezing depends on Fluid Intelligence | #4 |
+| `adf0216e` | feat(dictation): make starting-field restoration optional | ported (settings search entry skipped: we have none) | #4 |
+| `d5cc5090` | feat(overlay): friendlier wording for undelivered transcripts | ported into our overlay design | #4 |
+| `ff92b4b8` | chore(overlay): shorter failure title and card preview trigger | ported into our overlay design | #4 |
+| `8a820022` | feat(overlay): redesign delivery failure card | ported into our overlay design | #4 |
+| `088efe13` | feat(overlay): show delivery failures on the transient notice panel | ported into our overlay design | #4 |
+| `9c25e758` | fix(overlay): show a card for every delivery failure | ported into our overlay design | #4 |
+| `fe05d7cb` | fix(overlay): stop swallowing clicks right after hide | skipped: our overlay parks off-screen; bug doesn't exist | #4 |
+| `42e33e68` | Reduce dictation latency and add pipeline evaluation (#950) | partial: PasteKeyCodeCache/Resolver (#4), readiness-gate test hook (#2); rest in the latency lane | #2, #4 |
+| `2e0345a9` | perf(typing): skip redundant AX reads on the stop path | partial: read-back baseline on clipboard paths; rest in the latency lane | #4 |
+| `a35dba9c` | fix(accessibility): bound AX round-trips to 2 seconds | skipped: every AX call already bounded at 0.3 s | #4 |
+| `daa0f2d3` | feat(debug): trace clipboard writes and restoration metadata | skipped: debug tracing | #4 |
+| `208566c2` | feat(debug): trace clipboard shortcut event sources | skipped: debug tracing | #4 |
+| `74a1ee8b` | feat(bench): log stop input timing and post-dispatch waits | skipped: benchmark tracing | #4 |
+| `26ad5a41` | Refine AI provider setup and model verification | skipped: rewrite selection clipboard, Fluid Intelligence-adjacent | #4 |

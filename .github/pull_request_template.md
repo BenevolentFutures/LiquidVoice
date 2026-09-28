@@ -1,33 +1,23 @@
-<!--
-PRs that do not follow this template will be blocked by the PR Policy check.
-If the missing information is not fixed after 48 hours, the PR may be closed.
--->
+## What and why
 
-## Description
-Brief description of what this PR does and why it is needed.
+What this changes, and the problem it fixes.
 
-## Type of Change
-- [ ] 🐞 Bug fix
-- [ ] ✨ New feature
-- [ ] 💥 Breaking change
-- [ ] 🧹 Chore
-- [ ] 📝 Documentation update
+## Related issue
 
-## Related Issue or Discussion
-Closes #(issue number), or links to an accepted Discussion/roadmap item.
+Closes #
 
 ## Testing
-- [ ] Tested on Intel Mac
-- [ ] Tested on Apple Silicon Mac
-- [ ] Tested on macOS version:
-- [ ] Ran linter locally: `swiftlint --strict --config .swiftlint.yml Sources`
-- [ ] Ran formatter locally: `swiftformat --config .swiftformat Sources`
-- [ ] Ran tests locally:
 
-## Screenshots / Video
-Attach screenshots or a video for UI, UX, settings, onboarding, overlay, menu bar, or visual behavior changes.
+- [ ] The test suite passes (the command is in CONTRIBUTING.md)
+- [ ] Tried in the running app. macOS version and Mac:
+- [ ] Tested delivery into a terminal (c11, Ghostty or Terminal), if this touches typing, paste or the clipboard
 
-- [ ] No UI/visual changes; screenshots/video are not applicable.
+## Screenshots or video
 
-## Notes
-Add reviewer context, rollout notes, or known tradeoffs here.
+For anything you can see: the overlay, settings, the menu bar.
+
+- [ ] No visible change
+
+## Upstream
+
+- [ ] Ports a FluidVoice commit. The commit message names the upstream SHA and its author (see UPSTREAM.md).

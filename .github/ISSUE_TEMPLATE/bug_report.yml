@@ -40,10 +40,26 @@ body:
   - type: input
     id: app-version
     attributes:
-      label: App Version
-      placeholder: "1.2.3"
+      label: Commit you built from
+      description: "`git rev-parse --short HEAD` in your clone."
+      placeholder: "abc1234"
     validations:
       required: true
+  - type: input
+    id: speech-model
+    attributes:
+      label: Speech model
+      placeholder: "Parakeet TDT v3"
+    validations:
+      required: false
+  - type: input
+    id: target-app
+    attributes:
+      label: App you were dictating into
+      description: Delivery bugs often depend on the target app.
+      placeholder: "c11, Ghostty, Safari, Notes..."
+    validations:
+      required: false
   - type: input
     id: macos-version
     attributes:
@@ -65,7 +81,7 @@ body:
     id: logs
     attributes:
       label: Logs or crash report
-      description: Paste relevant logs or crash output when available.
+      description: Paste the relevant lines from the app log (Settings › Debug Settings › Reveal Log File) or a crash report.
       render: text
     validations:
       required: false

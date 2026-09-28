@@ -1,55 +1,36 @@
-# Contributing to FluidVoice
+# contributing.
 
-Thanks for taking the time to improve FluidVoice. This repository keeps GitHub Issues focused on actionable work, and uses Discussions for questions, ideas, and early design conversations.
+thanks for helping. Liquid Voice is for straight voice to text on macOS. the most welcome changes make that more reliable: recognition, delivery, hotkeys, audio and the overlay.
 
-## Start with Discussions
+## issues.
 
-Start a GitHub Discussion first when you want to:
+- **bugs:** say what you did, what you expected, and what happened. include your macOS version, your Mac, the speech model, and the app you were dictating into. the app log helps: Settings › Debug Settings › Reveal Log File. the app's Feedback page drafts an issue for you.
+- **ideas:** say what problem it solves before how.
 
-- Ask a support question.
-- Propose a broad idea or feature.
-- Explore a design direction.
-- Report behavior that you are not sure is a FluidVoice bug.
-- Ask whether a change would be accepted before writing code.
+## build and test.
 
-Feature ideas should usually begin in the Ideas discussion category. Maintainers may turn an accepted or prioritized discussion into a tracked issue.
+`./build.sh` makes a signed Debug build; the README covers signing. the test suite, unsigned:
 
-## Issues
+```bash
+xcodebuild test -project Fluid.xcodeproj -scheme Fluid -destination 'platform=macOS' \
+  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+```
 
-Issues are for work that maintainers can triage and act on.
+if a build sits at `ClangStatCache` and never moves, add `SDK_STAT_CACHE_ENABLE=NO`.
 
-Use a bug issue only when you can provide:
+## pull requests.
 
-- A clear description of the bug.
-- Exact reproduction steps.
-- Expected behavior and actual behavior.
-- FluidVoice version, macOS version, and architecture.
-- Logs, crash reports, screenshots, or recordings when relevant.
+- target `liquid-voice`.
+- one fix or feature per PR. say how you tested it, and on which Mac.
+- the house rules, including how tests must behave, are in [CLAUDE.md](CLAUDE.md).
+- for anything you can see (the overlay, settings, the menu bar), attach a screenshot or a short video.
+- keep telemetry off, the upstream updater off, and Fluid Intelligence out.
+- don't change `DEVELOPMENT_TEAM` in the project; `build.sh` passes yours at build time. never commit an API key. `scripts/check-team-id.sh` works as a pre-commit hook that catches a team change.
 
-Feature issues show guidance to start with Discussions first, but this is advisory for now. Maintainers may still redirect broad or unclear feature ideas to Discussions during triage.
+## upstream.
 
-Incomplete bug reports may be labeled `needs reproduction`. If the missing reproduction details are not provided after 14 days, the issue may be closed.
+Liquid Voice ports fixes from [FluidVoice](https://github.com/altic-dev/FluidVoice) by hand; see [UPSTREAM.md](UPSTREAM.md). if your fix also applies to FluidVoice, please send it to them too. they built nearly all of this.
 
-## Pull Requests
+## license.
 
-Pull requests should be tied to an accepted issue, Discussion, or roadmap item. Before opening a PR:
-
-- Fill out every required section of the PR template.
-- Select a type of change.
-- Link the related issue or accepted Discussion.
-- Describe how you tested the change.
-- Attach screenshots or video for UI, UX, settings, onboarding, overlay, menu bar, or visual behavior changes.
-
-If a PR has no UI or visual behavior changes, check the "No UI/visual changes" box in the template. The PR Policy workflow still requires screenshots or video when changed files touch visual surfaces.
-
-PRs that do not follow the template will be blocked by the `PR Policy` check. If required information is still missing after 48 hours, the PR may be closed so maintainers can keep review queues focused.
-
-## Repository Settings
-
-Maintainers should enable GitHub Discussions with these categories:
-
-- Ideas
-- Help
-- General
-
-Maintainers should require the existing build/test check and the `PR Policy` check before merging to `main`.
+contributions are licensed under GPL-3.0, like the rest of the code.

@@ -84,6 +84,12 @@ struct SettingsBackupPayload: Codable, Equatable {
     let showMicrophoneChangeAlerts: Bool?
     let showPasteCheckAlerts: Bool?
     let returnDictationToStartingField: Bool?
+    // Optional so backups created before Spoken Send still decode.
+    let spokenSendEnabled: Bool?
+    let spokenSendImmediatelyEnabled: Bool?
+    let spokenSendPhrase: String?
+    let spokenSendKey: SettingsStore.SpokenSendKey?
+    let spokenSendAllowsC11: Bool?
     let weekendsDontBreakStreak: Bool
     let fillerWords: [String]
     let removeFillerWordsEnabled: Bool

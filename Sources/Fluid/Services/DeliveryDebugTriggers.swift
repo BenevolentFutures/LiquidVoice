@@ -22,6 +22,13 @@ enum DeliveryDebugTriggers {
     static let pasteLastTranscript = Notification.Name("com.FluidApp.debug.pasteLastTranscript")
     /// Shows the failure card; `object` may name a `TextDeliveryFailure` raw value.
     static let showDeliveryFailure = Notification.Name("com.FluidApp.debug.showDeliveryFailure")
+    /// Spoken Send without the microphone: takes the focused field as the target when it
+    /// fires, then types `object` (a String; empty sends what is already there) and presses the
+    /// send key, under the same policy as a dictation (c11 allowed, other terminals refused).
+    /// Put a `sleep` before posting it to have time to click into the target. It presses Return
+    /// in c11 even in a shell pane, where that runs the text as a command, and any local process
+    /// can post it once the triggers are enabled: enable them only while checking.
+    static let deliverTextAndSend = Notification.Name("com.FluidApp.debug.deliverTextAndSend")
 
     private static var observers: [NSObjectProtocol] = []
     private static let typingService = TypingService()
@@ -34,9 +41,9 @@ enum DeliveryDebugTriggers {
             let text = (note.object as? String) ?? "Liquid Voice debug delivery"
             MainActor.assumeIsolated {
                 DebugLogger.shared.info("DEBUG_DELIVERY deliverText chars=\(text.count)", source: "DeliveryDebugTriggers")
-                self.typingService.typeOutputPlanInstantly(.plain(text), preferredTargetPID: nil, textReadyAt: nil) { result in
+                self.typingService.typeOutputPlanInstantly(.plain(text), preferredTargetPID: nil, textReadyAt: nil, completion: { result in
                     DebugLogger.shared.info("DEBUG_DELIVERY deliverText result=\(result)", source: "DeliveryDebugTriggers")
-                }
+                })
             }
         })
         self.observers.append(center.addObserver(forName: self.pasteLastTranscript, object: nil, queue: .main) { _ in
@@ -57,7 +64,49 @@ enum DeliveryDebugTriggers {
                 ))
             }
         })
+        self.observers.append(center.addObserver(forName: self.deliverTextAndSend, object: nil, queue: .main) { note in
+            let text = (note.object as? String) ?? ""
+            Task { @MainActor in
+                await self.deliverTextAndSend(text)
+            }
+        })
         DebugLogger.shared.info("Delivery debug triggers enabled", source: "DeliveryDebugTriggers")
         #endif
+    }
+
+    private static func deliverTextAndSend(_ text: String) async {
+        // Like a dictation stopping now: input after this point drops the key.
+        let stoppedAt = ProcessInfo.processInfo.systemUptime
+        let target = await Task.detached(priority: .userInitiated) { TypingService.captureDictationTarget() }.value
+        let decision = SpokenSendDecision(text: text, phraseDetected: true, shouldSend: true)
+        guard let sendKey = SpokenSendController.shared.sendKeyRequest(
+            for: decision,
+            target: target,
+            aiFailed: false,
+            stoppedAt: stoppedAt
+        ) else {
+            DebugLogger.shared.info(
+                "DEBUG_DELIVERY deliverTextAndSend refused app=\(target?.bundleIdentifier ?? "none") chars=\(text.count)",
+                source: "DeliveryDebugTriggers"
+            )
+            return
+        }
+        let preparation = await TypingService.prepareTargetForDelivery(sendKey.target)
+        DebugLogger.shared.info(
+            "DEBUG_DELIVERY deliverTextAndSend app=\(sendKey.target.bundleIdentifier ?? "pid\(sendKey.target.pid)") " +
+                "chars=\(text.count) key=\(sendKey.key.rawValue) prepare=\(preparation.rawValue)",
+            source: "DeliveryDebugTriggers"
+        )
+        guard preparation.isReady else { return }
+        if text.isEmpty {
+            SpokenSendController.shared.sendExistingDraft(sendKey)
+        } else {
+            SpokenSendController.shared.deliver(
+                .plain(text),
+                sendKey: sendKey,
+                textReadyAt: ProcessInfo.processInfo.systemUptime,
+                transcriptInHistory: false
+            )
+        }
     }
 }

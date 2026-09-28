@@ -2584,7 +2584,9 @@ final class StopPathTraceTests: XCTestCase {
 ///       TEST_RUNNER_LIQUID_VOICE_STOP_BENCH=30
 ///
 /// Optional: TEST_RUNNER_LIQUID_VOICE_STOP_BENCH_AUDIO_SECONDS (fixture tiled to this length,
-/// default 8), TEST_RUNNER_LIQUID_VOICE_STOP_BENCH_HISTORY (history size, default 13600, the operator's
+/// default 8), TEST_RUNNER_LIQUID_VOICE_STOP_BENCH_JITTER (seconds of seeded random extra recording
+/// per run, so stops land at different points of the streaming preview cycle; default 0),
+/// TEST_RUNNER_LIQUID_VOICE_STOP_BENCH_HISTORY (history size, default 13600, the operator's
 /// real history) and TEST_RUNNER_LIQUID_VOICE_STOP_BENCH_OUT (JSON results path). Each run stops at
 /// the handoff to the typing service: it never types, pastes or touches the clipboard, and the
 /// Debug build's history is put back afterwards.
@@ -2649,9 +2651,14 @@ final class StopPathLatencyBenchmarkTests: XCTestCase {
             ("text_ready -> handoff", .textReady, .handoff),
             ("stop_enter -> handoff (total)", .stopEnter, .handoff),
         ]
+        // Optional stop-time jitter (seconds, uniform, same seeded sequence every run): without it
+        // every stop lands at the same point of the streaming preview cycle.
+        let jitter = environment["LIQUID_VOICE_STOP_BENCH_JITTER"].flatMap(Double.init) ?? 0
+        var generator = SeededGenerator(seed: 0x5EED)
         var samplesByStage: [String: [Double]] = [:]
         for _ in 0..<runs {
-            let finished = await runner(samples, recordingSeconds)
+            let holdSeconds = recordingSeconds + (jitter > 0 ? Double.random(in: 0..<jitter, using: &generator) : 0)
+            let finished = await runner(samples, holdSeconds)
             let trace = try XCTUnwrap(finished, "A recording was already active")
             XCTAssertEqual(TestHostQuietModeTests.onScreenWindowCount(), 0, "The benchmark put a window on screen")
             for stage in stages {
@@ -2672,7 +2679,7 @@ final class StopPathLatencyBenchmarkTests: XCTestCase {
         }
 
         var report: [[String: Any]] = []
-        var lines = ["STOP_BENCH runs=\(runs) audioMs=\(Int(recordingSeconds * 1000)) history=\(historySize)"]
+        var lines = ["STOP_BENCH runs=\(runs) audioMs=\(Int(recordingSeconds * 1000)) history=\(historySize) jitterMs=\(Int(jitter * 1000))"]
         for stage in stages {
             let values = samplesByStage[stage.name] ?? []
             let median = percentile(values, 0.5)
@@ -2688,6 +2695,19 @@ final class StopPathLatencyBenchmarkTests: XCTestCase {
         }
         XCTAssertEqual(samplesByStage["stop_enter -> handoff (total)"]?.count, runs, "Every run should reach the handoff")
         XCTAssertEqual(TranscriptionSoundPlayer.shared.createdPlayerCount, 0, "The benchmark created a sound player")
+    }
+
+    /// SplitMix64: a reproducible jitter sequence, the same for every build that is compared.
+    private struct SeededGenerator: RandomNumberGenerator {
+        var state: UInt64
+        init(seed: UInt64) { self.state = seed }
+        mutating func next() -> UInt64 {
+            self.state &+= 0x9E37_79B9_7F4A_7C15
+            var z = self.state
+            z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+            z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+            return z ^ (z >> 31)
+        }
     }
 
     /// Entries shaped like real dictations: about 150 characters, spread over 60 days with a

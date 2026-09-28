@@ -1,0 +1,5518 @@
+{
+  "dark-01-listening.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=listening",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 690,
+      "width": 460,
+      "height": 197
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-preview p": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ]
+    },
+    "text": {
+      "time": "0:39",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceListening 0:39"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "dark-02-listening-hover.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=listening&hover=1",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 690,
+      "width": 460,
+      "height": 197
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-preview p": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ]
+    },
+    "text": {
+      "time": "0:39",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceListening 0:39"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "dark-03-listening-hoverchip-cancel.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=listening&hoverChip=cancel",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 690,
+      "width": 460,
+      "height": 197
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-preview p": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ]
+    },
+    "text": {
+      "time": "0:39",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceListening 0:39"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "dark-04-listening-density-quiet.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=listening&density=quiet",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 690,
+      "width": 460,
+      "height": 197
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-preview p": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ]
+    },
+    "text": {
+      "time": "0:39",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceListening 0:39"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "dark-05-transcribing.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=transcribing",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 690,
+      "width": 460,
+      "height": 197
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-preview p": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ]
+    },
+    "text": {
+      "time": "0:41",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceWorking"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "dark-06-delivered-hold.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=delivered&hold=1",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 690,
+      "width": 460,
+      "height": 197
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-done": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-stamp": [
+        {
+          "x": 18,
+          "y": 24,
+          "width": 30,
+          "height": 30,
+          "pageX": 648,
+          "pageY": 738
+        }
+      ]
+    },
+    "text": {
+      "time": "0:41",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11118 words",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceReady"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "dark-07-failed.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=failed",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 629,
+      "width": 460,
+      "height": 258
+    },
+    "pill": {
+      "x": 630,
+      "y": 653,
+      "width": 340,
+      "height": 210
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 210,
+          "pageX": 630,
+          "pageY": 653
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 61,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 61,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 61,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 180,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 61,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 180,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 115,
+          "pageX": 648,
+          "pageY": 665
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 133,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 145,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 133,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 146,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 152,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 146,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 187,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-fail h3": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 18,
+          "pageX": 648,
+          "pageY": 665
+        }
+      ],
+      ".sg-fail p": [
+        {
+          "x": 18,
+          "y": 36,
+          "width": 304,
+          "height": 51,
+          "pageX": 648,
+          "pageY": 689
+        }
+      ],
+      ".sg-copy": [
+        {
+          "x": 18,
+          "y": 99,
+          "width": 88,
+          "height": 28,
+          "pageX": 648,
+          "pageY": 752
+        }
+      ],
+      ".sg-dismiss": [
+        {
+          "x": 122,
+          "y": 99,
+          "width": 48.1875,
+          "height": 28,
+          "pageX": 752,
+          "pageY": 752
+        }
+      ],
+      ".sg-fail-meta": [
+        {
+          "x": 259.4296875,
+          "y": 99,
+          "width": 62.5703125,
+          "height": 28,
+          "pageX": 889.4296875,
+          "pageY": 752
+        }
+      ]
+    },
+    "text": {
+      "time": "0:41",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceReady"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "dark-08-failed-copied.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=failed&copied=1",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 629,
+      "width": 460,
+      "height": 258
+    },
+    "pill": {
+      "x": 630,
+      "y": 653,
+      "width": 340,
+      "height": 210
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 210,
+          "pageX": 630,
+          "pageY": 653
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 61,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 61,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 61,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 180,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 61,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 180,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 115,
+          "pageX": 648,
+          "pageY": 665
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 133,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 145,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 133,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 146,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 152,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 146,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 187,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-fail h3": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 18,
+          "pageX": 648,
+          "pageY": 665
+        }
+      ],
+      ".sg-fail p": [
+        {
+          "x": 18,
+          "y": 36,
+          "width": 304,
+          "height": 51,
+          "pageX": 648,
+          "pageY": 689
+        }
+      ],
+      ".sg-copy": [
+        {
+          "x": 18,
+          "y": 99,
+          "width": 88,
+          "height": 28,
+          "pageX": 648,
+          "pageY": 752
+        }
+      ],
+      ".sg-dismiss": [
+        {
+          "x": 122,
+          "y": 99,
+          "width": 48.1875,
+          "height": 28,
+          "pageX": 752,
+          "pageY": 752
+        }
+      ],
+      ".sg-fail-meta": [
+        {
+          "x": 259.4296875,
+          "y": 99,
+          "width": 62.5703125,
+          "height": 28,
+          "pageX": 889.4296875,
+          "pageY": 752
+        }
+      ]
+    },
+    "text": {
+      "time": "0:41",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceReady"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "dark-09-history.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=history",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 204,
+      "width": 528,
+      "height": 683
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-preview p": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-hist": [
+        {
+          "x": -36,
+          "y": -486,
+          "width": 480,
+          "height": 480,
+          "pageX": 594,
+          "pageY": 228
+        }
+      ],
+      ".sg-hist header": [
+        {
+          "x": -35,
+          "y": -485,
+          "width": 478,
+          "height": 36,
+          "pageX": 595,
+          "pageY": 229
+        }
+      ],
+      ".sg-hist footer": [
+        {
+          "x": -35,
+          "y": -35,
+          "width": 478,
+          "height": 28,
+          "pageX": 595,
+          "pageY": 679
+        }
+      ],
+      ".sg-hrow": [
+        {
+          "x": -35,
+          "y": -421,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 293
+        },
+        {
+          "x": -35,
+          "y": -304,
+          "width": 478,
+          "height": 99,
+          "pageX": 595,
+          "pageY": 410
+        },
+        {
+          "x": -35,
+          "y": -205,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 509
+        },
+        {
+          "x": -35,
+          "y": -88,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 626
+        },
+        {
+          "x": -35,
+          "y": 29,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 743
+        },
+        {
+          "x": -35,
+          "y": 146,
+          "width": 478,
+          "height": 81,
+          "pageX": 595,
+          "pageY": 860
+        },
+        {
+          "x": -35,
+          "y": 227,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 941
+        },
+        {
+          "x": -35,
+          "y": 344,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 1058
+        },
+        {
+          "x": -35,
+          "y": 489,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 1203
+        },
+        {
+          "x": -35,
+          "y": 606,
+          "width": 478,
+          "height": 63,
+          "pageX": 595,
+          "pageY": 1320
+        },
+        {
+          "x": -35,
+          "y": 669,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 1383
+        },
+        {
+          "x": -35,
+          "y": 786,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 1500
+        }
+      ],
+      ".sg-hday": [
+        {
+          "x": -35,
+          "y": -449,
+          "width": 478,
+          "height": 28,
+          "pageX": 595,
+          "pageY": 265
+        },
+        {
+          "x": -35,
+          "y": 461,
+          "width": 478,
+          "height": 28,
+          "pageX": 595,
+          "pageY": 1175
+        }
+      ]
+    },
+    "text": {
+      "time": "0:39",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceListening 0:39"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "dark-10-history-hoverrow2.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=history&hoverRow=2",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 204,
+      "width": 528,
+      "height": 683
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-preview p": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-hist": [
+        {
+          "x": -36,
+          "y": -486,
+          "width": 480,
+          "height": 480,
+          "pageX": 594,
+          "pageY": 228
+        }
+      ],
+      ".sg-hist header": [
+        {
+          "x": -35,
+          "y": -485,
+          "width": 478,
+          "height": 36,
+          "pageX": 595,
+          "pageY": 229
+        }
+      ],
+      ".sg-hist footer": [
+        {
+          "x": -35,
+          "y": -35,
+          "width": 478,
+          "height": 28,
+          "pageX": 595,
+          "pageY": 679
+        }
+      ],
+      ".sg-hrow": [
+        {
+          "x": -35,
+          "y": -421,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 293
+        },
+        {
+          "x": -35,
+          "y": -304,
+          "width": 478,
+          "height": 99,
+          "pageX": 595,
+          "pageY": 410
+        },
+        {
+          "x": -35,
+          "y": -205,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 509
+        },
+        {
+          "x": -35,
+          "y": -88,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 626
+        },
+        {
+          "x": -35,
+          "y": 29,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 743
+        },
+        {
+          "x": -35,
+          "y": 146,
+          "width": 478,
+          "height": 81,
+          "pageX": 595,
+          "pageY": 860
+        },
+        {
+          "x": -35,
+          "y": 227,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 941
+        },
+        {
+          "x": -35,
+          "y": 344,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 1058
+        },
+        {
+          "x": -35,
+          "y": 489,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 1203
+        },
+        {
+          "x": -35,
+          "y": 606,
+          "width": 478,
+          "height": 63,
+          "pageX": 595,
+          "pageY": 1320
+        },
+        {
+          "x": -35,
+          "y": 669,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 1383
+        },
+        {
+          "x": -35,
+          "y": 786,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 1500
+        }
+      ],
+      ".sg-hday": [
+        {
+          "x": -35,
+          "y": -449,
+          "width": 478,
+          "height": 28,
+          "pageX": 595,
+          "pageY": 265
+        },
+        {
+          "x": -35,
+          "y": 461,
+          "width": 478,
+          "height": 28,
+          "pageX": 595,
+          "pageY": 1175
+        }
+      ]
+    },
+    "text": {
+      "time": "0:39",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceListening 0:39"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "dark-11-menu-listening.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=listening&menu=1",
+    "cropBoxCssPx": {
+      "x": 1313,
+      "y": 1.5,
+      "width": 279.484375,
+      "height": 192
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-preview p": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-menu": [
+        {
+          "x": 683,
+          "y": -686.5,
+          "width": 279.484375,
+          "height": 166,
+          "pageX": 1313,
+          "pageY": 27.5
+        }
+      ],
+      ".sg-mh": [
+        {
+          "x": 688,
+          "y": -681.5,
+          "width": 269.484375,
+          "height": 24,
+          "pageX": 1318,
+          "pageY": 32.5
+        }
+      ],
+      ".sg-mi": [
+        {
+          "x": 688,
+          "y": -646.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 67.5
+        },
+        {
+          "x": 688,
+          "y": -624.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 89.5
+        },
+        {
+          "x": 688,
+          "y": -602.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 111.5
+        },
+        {
+          "x": 688,
+          "y": -580.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 133.5
+        },
+        {
+          "x": 688,
+          "y": -547.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 166.5
+        }
+      ]
+    },
+    "text": {
+      "time": "0:39",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceListening 0:39"
+    }
+  },
+  "dark-12-menu-idle.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=idle&menu=1",
+    "cropBoxCssPx": {
+      "x": 1313,
+      "y": 1.5,
+      "width": 279.484375,
+      "height": 192
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-menu": [
+        {
+          "x": 683,
+          "y": -686.5,
+          "width": 279.484375,
+          "height": 166,
+          "pageX": 1313,
+          "pageY": 27.5
+        }
+      ],
+      ".sg-mh": [
+        {
+          "x": 688,
+          "y": -681.5,
+          "width": 269.484375,
+          "height": 24,
+          "pageX": 1318,
+          "pageY": 32.5
+        }
+      ],
+      ".sg-mi": [
+        {
+          "x": 688,
+          "y": -646.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 67.5
+        },
+        {
+          "x": 688,
+          "y": -624.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 89.5
+        },
+        {
+          "x": 688,
+          "y": -602.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 111.5
+        },
+        {
+          "x": 688,
+          "y": -580.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 133.5
+        },
+        {
+          "x": 688,
+          "y": -547.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 166.5
+        }
+      ]
+    },
+    "text": {
+      "time": "0:00",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceReady"
+    }
+  },
+  "light-01-listening.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=listening",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 690,
+      "width": 460,
+      "height": 197
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-preview p": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ]
+    },
+    "text": {
+      "time": "0:39",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceListening 0:39"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "light-02-listening-hover.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=listening&hover=1",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 690,
+      "width": 460,
+      "height": 197
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-preview p": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ]
+    },
+    "text": {
+      "time": "0:39",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceListening 0:39"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "light-03-listening-hoverchip-cancel.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=listening&hoverChip=cancel",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 690,
+      "width": 460,
+      "height": 197
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-preview p": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ]
+    },
+    "text": {
+      "time": "0:39",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceListening 0:39"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "light-04-listening-density-quiet.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=listening&density=quiet",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 690,
+      "width": 460,
+      "height": 197
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-preview p": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ]
+    },
+    "text": {
+      "time": "0:39",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceListening 0:39"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "light-05-transcribing.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=transcribing",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 690,
+      "width": 460,
+      "height": 197
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-preview p": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ]
+    },
+    "text": {
+      "time": "0:41",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceWorking"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "light-06-delivered-hold.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=delivered&hold=1",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 690,
+      "width": 460,
+      "height": 197
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-done": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-stamp": [
+        {
+          "x": 18,
+          "y": 24,
+          "width": 30,
+          "height": 30,
+          "pageX": 648,
+          "pageY": 738
+        }
+      ]
+    },
+    "text": {
+      "time": "0:41",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11118 words",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceReady"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "light-07-failed.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=failed",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 629,
+      "width": 460,
+      "height": 258
+    },
+    "pill": {
+      "x": 630,
+      "y": 653,
+      "width": 340,
+      "height": 210
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 210,
+          "pageX": 630,
+          "pageY": 653
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 61,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 61,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 61,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 180,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 61,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 180,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 115,
+          "pageX": 648,
+          "pageY": 665
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 133,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 145,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 133,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 146,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 152,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 146,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 187,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-fail h3": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 18,
+          "pageX": 648,
+          "pageY": 665
+        }
+      ],
+      ".sg-fail p": [
+        {
+          "x": 18,
+          "y": 36,
+          "width": 304,
+          "height": 51,
+          "pageX": 648,
+          "pageY": 689
+        }
+      ],
+      ".sg-copy": [
+        {
+          "x": 18,
+          "y": 99,
+          "width": 88,
+          "height": 28,
+          "pageX": 648,
+          "pageY": 752
+        }
+      ],
+      ".sg-dismiss": [
+        {
+          "x": 122,
+          "y": 99,
+          "width": 48.1875,
+          "height": 28,
+          "pageX": 752,
+          "pageY": 752
+        }
+      ],
+      ".sg-fail-meta": [
+        {
+          "x": 259.4296875,
+          "y": 99,
+          "width": 62.5703125,
+          "height": 28,
+          "pageX": 889.4296875,
+          "pageY": 752
+        }
+      ]
+    },
+    "text": {
+      "time": "0:41",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceReady"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "light-08-failed-copied.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=failed&copied=1",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 629,
+      "width": 460,
+      "height": 258
+    },
+    "pill": {
+      "x": 630,
+      "y": 653,
+      "width": 340,
+      "height": 210
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 210,
+          "pageX": 630,
+          "pageY": 653
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 61,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 61,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 61,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 180,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 61,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 180,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 115,
+          "pageX": 648,
+          "pageY": 665
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 133,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 145,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 133,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 146,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 152,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 146,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 187,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-fail h3": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 18,
+          "pageX": 648,
+          "pageY": 665
+        }
+      ],
+      ".sg-fail p": [
+        {
+          "x": 18,
+          "y": 36,
+          "width": 304,
+          "height": 51,
+          "pageX": 648,
+          "pageY": 689
+        }
+      ],
+      ".sg-copy": [
+        {
+          "x": 18,
+          "y": 99,
+          "width": 88,
+          "height": 28,
+          "pageX": 648,
+          "pageY": 752
+        }
+      ],
+      ".sg-dismiss": [
+        {
+          "x": 122,
+          "y": 99,
+          "width": 48.1875,
+          "height": 28,
+          "pageX": 752,
+          "pageY": 752
+        }
+      ],
+      ".sg-fail-meta": [
+        {
+          "x": 259.4296875,
+          "y": 99,
+          "width": 62.5703125,
+          "height": 28,
+          "pageX": 889.4296875,
+          "pageY": 752
+        }
+      ]
+    },
+    "text": {
+      "time": "0:41",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceReady"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "light-09-history.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=history",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 204,
+      "width": 528,
+      "height": 683
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-preview p": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-hist": [
+        {
+          "x": -36,
+          "y": -486,
+          "width": 480,
+          "height": 480,
+          "pageX": 594,
+          "pageY": 228
+        }
+      ],
+      ".sg-hist header": [
+        {
+          "x": -35,
+          "y": -485,
+          "width": 478,
+          "height": 36,
+          "pageX": 595,
+          "pageY": 229
+        }
+      ],
+      ".sg-hist footer": [
+        {
+          "x": -35,
+          "y": -35,
+          "width": 478,
+          "height": 28,
+          "pageX": 595,
+          "pageY": 679
+        }
+      ],
+      ".sg-hrow": [
+        {
+          "x": -35,
+          "y": -421,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 293
+        },
+        {
+          "x": -35,
+          "y": -304,
+          "width": 478,
+          "height": 99,
+          "pageX": 595,
+          "pageY": 410
+        },
+        {
+          "x": -35,
+          "y": -205,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 509
+        },
+        {
+          "x": -35,
+          "y": -88,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 626
+        },
+        {
+          "x": -35,
+          "y": 29,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 743
+        },
+        {
+          "x": -35,
+          "y": 146,
+          "width": 478,
+          "height": 81,
+          "pageX": 595,
+          "pageY": 860
+        },
+        {
+          "x": -35,
+          "y": 227,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 941
+        },
+        {
+          "x": -35,
+          "y": 344,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 1058
+        },
+        {
+          "x": -35,
+          "y": 489,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 1203
+        },
+        {
+          "x": -35,
+          "y": 606,
+          "width": 478,
+          "height": 63,
+          "pageX": 595,
+          "pageY": 1320
+        },
+        {
+          "x": -35,
+          "y": 669,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 1383
+        },
+        {
+          "x": -35,
+          "y": 786,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 1500
+        }
+      ],
+      ".sg-hday": [
+        {
+          "x": -35,
+          "y": -449,
+          "width": 478,
+          "height": 28,
+          "pageX": 595,
+          "pageY": 265
+        },
+        {
+          "x": -35,
+          "y": 461,
+          "width": 478,
+          "height": 28,
+          "pageX": 595,
+          "pageY": 1175
+        }
+      ]
+    },
+    "text": {
+      "time": "0:39",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceListening 0:39"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "light-10-history-hoverrow2.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=history&hoverRow=2",
+    "cropBoxCssPx": {
+      "x": 570,
+      "y": 204,
+      "width": 528,
+      "height": 683
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-preview p": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-hist": [
+        {
+          "x": -36,
+          "y": -486,
+          "width": 480,
+          "height": 480,
+          "pageX": 594,
+          "pageY": 228
+        }
+      ],
+      ".sg-hist header": [
+        {
+          "x": -35,
+          "y": -485,
+          "width": 478,
+          "height": 36,
+          "pageX": 595,
+          "pageY": 229
+        }
+      ],
+      ".sg-hist footer": [
+        {
+          "x": -35,
+          "y": -35,
+          "width": 478,
+          "height": 28,
+          "pageX": 595,
+          "pageY": 679
+        }
+      ],
+      ".sg-hrow": [
+        {
+          "x": -35,
+          "y": -421,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 293
+        },
+        {
+          "x": -35,
+          "y": -304,
+          "width": 478,
+          "height": 99,
+          "pageX": 595,
+          "pageY": 410
+        },
+        {
+          "x": -35,
+          "y": -205,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 509
+        },
+        {
+          "x": -35,
+          "y": -88,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 626
+        },
+        {
+          "x": -35,
+          "y": 29,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 743
+        },
+        {
+          "x": -35,
+          "y": 146,
+          "width": 478,
+          "height": 81,
+          "pageX": 595,
+          "pageY": 860
+        },
+        {
+          "x": -35,
+          "y": 227,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 941
+        },
+        {
+          "x": -35,
+          "y": 344,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 1058
+        },
+        {
+          "x": -35,
+          "y": 489,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 1203
+        },
+        {
+          "x": -35,
+          "y": 606,
+          "width": 478,
+          "height": 63,
+          "pageX": 595,
+          "pageY": 1320
+        },
+        {
+          "x": -35,
+          "y": 669,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 1383
+        },
+        {
+          "x": -35,
+          "y": 786,
+          "width": 478,
+          "height": 117,
+          "pageX": 595,
+          "pageY": 1500
+        }
+      ],
+      ".sg-hday": [
+        {
+          "x": -35,
+          "y": -449,
+          "width": 478,
+          "height": 28,
+          "pageX": 595,
+          "pageY": 265
+        },
+        {
+          "x": -35,
+          "y": 461,
+          "width": 478,
+          "height": 28,
+          "pageX": 595,
+          "pageY": 1175
+        }
+      ]
+    },
+    "text": {
+      "time": "0:39",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceListening 0:39"
+    },
+    "fonts": {
+      "sgTime": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Bold",
+          "isCustomFont": false,
+          "glyphCount": 4
+        }
+      ],
+      "sgMic": [
+        {
+          "familyName": "Menlo",
+          "postScriptName": "Menlo-Regular",
+          "isCustomFont": false,
+          "glyphCount": 22
+        }
+      ]
+    }
+  },
+  "light-11-menu-listening.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=listening&menu=1",
+    "cropBoxCssPx": {
+      "x": 1313,
+      "y": 1.5,
+      "width": 279.484375,
+      "height": 192
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149,
+          "pageX": 630,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 594,
+          "pageY": 833
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 714
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30,
+          "pageX": 976,
+          "pageY": 833
+        }
+      ],
+      ".sg-top": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-trace-row": [
+        {
+          "x": 18,
+          "y": 72,
+          "width": 304,
+          "height": 50,
+          "pageX": 648,
+          "pageY": 786
+        }
+      ],
+      ".sg-app": [
+        {
+          "x": 18,
+          "y": 84,
+          "width": 20,
+          "height": 20,
+          "pageX": 648,
+          "pageY": 798
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 49.4296875,
+          "y": 72,
+          "width": 206,
+          "height": 50,
+          "pageX": 679.4296875,
+          "pageY": 786
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18,
+          "pageX": 896.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-dot": [
+        {
+          "x": 266.8515625,
+          "y": 91,
+          "width": 6,
+          "height": 6,
+          "pageX": 896.8515625,
+          "pageY": 805
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18,
+          "pageX": 906.8515625,
+          "pageY": 799
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13,
+          "pageX": 648,
+          "pageY": 840
+        }
+      ],
+      ".sg-preview p": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 54,
+          "pageX": 648,
+          "pageY": 726
+        }
+      ],
+      ".sg-menu": [
+        {
+          "x": 683,
+          "y": -686.5,
+          "width": 279.484375,
+          "height": 166,
+          "pageX": 1313,
+          "pageY": 27.5
+        }
+      ],
+      ".sg-mh": [
+        {
+          "x": 688,
+          "y": -681.5,
+          "width": 269.484375,
+          "height": 24,
+          "pageX": 1318,
+          "pageY": 32.5
+        }
+      ],
+      ".sg-mi": [
+        {
+          "x": 688,
+          "y": -646.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 67.5
+        },
+        {
+          "x": 688,
+          "y": -624.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 89.5
+        },
+        {
+          "x": 688,
+          "y": -602.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 111.5
+        },
+        {
+          "x": 688,
+          "y": -580.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 133.5
+        },
+        {
+          "x": 688,
+          "y": -547.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 166.5
+        }
+      ]
+    },
+    "text": {
+      "time": "0:39",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceListening 0:39"
+    }
+  },
+  "light-12-menu-idle.png": {
+    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=idle&menu=1",
+    "cropBoxCssPx": {
+      "x": 1313,
+      "y": 1.5,
+      "width": 279.484375,
+      "height": 192
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-menu": [
+        {
+          "x": 683,
+          "y": -686.5,
+          "width": 279.484375,
+          "height": 166,
+          "pageX": 1313,
+          "pageY": 27.5
+        }
+      ],
+      ".sg-mh": [
+        {
+          "x": 688,
+          "y": -681.5,
+          "width": 269.484375,
+          "height": 24,
+          "pageX": 1318,
+          "pageY": 32.5
+        }
+      ],
+      ".sg-mi": [
+        {
+          "x": 688,
+          "y": -646.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 67.5
+        },
+        {
+          "x": 688,
+          "y": -624.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 89.5
+        },
+        {
+          "x": 688,
+          "y": -602.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 111.5
+        },
+        {
+          "x": 688,
+          "y": -580.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 133.5
+        },
+        {
+          "x": 688,
+          "y": -547.5,
+          "width": 269.484375,
+          "height": 22,
+          "pageX": 1318,
+          "pageY": 166.5
+        }
+      ]
+    },
+    "text": {
+      "time": "0:00",
+      "mic": "MacBook Pro Microphone",
+      "doneText": "Delivered to c11",
+      "failH3": "Couldn’t paste into c11",
+      "failMeta": "118 words",
+      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
+      "mh": "Liquid VoiceReady"
+    }
+  }
+}

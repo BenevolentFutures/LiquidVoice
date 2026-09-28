@@ -609,7 +609,41 @@ struct ContentView: View {
 
         self.loadProviderState()
         self.installShortcutCaptureMonitor()
+        #if DEBUG
+        StopPathBenchmark.runDictation = { samples, recordingSeconds in
+            await self.runStopPathBenchmarkDictation(samples: samples, recordingSeconds: recordingSeconds)
+        }
+        #endif
     }
+
+    #if DEBUG
+    /// One fixture dictation through the real stop pipeline (see `StopPathBenchmark`). Starts
+    /// like `beginDictationRecording` minus the microphone, then stops like the hotkey does.
+    private func runStopPathBenchmarkDictation(samples: [Float], recordingSeconds: Double) async -> StopPathTrace? {
+        guard !self.asr.isRunningOrStarting else { return nil }
+        self.applyDictationShortcutSelectionContext(for: .primary)
+        self.setActiveRecordingMode(.dictate)
+        self.advanceOverlayLifecycle()
+        self.menuBarManager.setOverlayMode(.dictation)
+        self.menuBarManager.showRecordingOverlayImmediately()
+        guard self.asr.beginSyntheticCaptureForBenchmark(samples: samples) else {
+            self.clearActiveRecordingMode()
+            self.menuBarManager.hideRecordingOverlayImmediately(reason: "benchmark_start_failed")
+            return nil
+        }
+        // A fixed target instead of reading the operator's focused app: the benchmark never
+        // looks at, or records, what is on this Mac's screen. c11 is where dictation usually lands.
+        self.recordingAppInfo = (name: StopPathBenchmark.appName, bundleId: "com.stage11.c11", windowTitle: "")
+        self.recordingStartTarget = nil
+        self.recordingPrecedingText = ""
+        NotchContentState.shared.recordingTargetPID = nil
+        try? await Task.sleep(nanoseconds: UInt64(max(recordingSeconds, 0) * 1_000_000_000))
+        let trace = StopPathTrace(trigger: .benchmark)
+        StopPathTrace.stagePending(trace)
+        await self.stopAndProcessTranscription(route: .normal)
+        return trace
+    }
+    #endif
 
     private func scheduleDelayedAudioInitialization() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
@@ -2053,6 +2087,13 @@ struct ContentView: View {
     // MARK: - Stop and Process Transcription
 
     private func stopAndProcessTranscription(route: DictationOutputRoute = .normal) async {
+        let trace = StopPathTrace.takePending()
+        trace.mark(.stopEnter)
+        #if DEBUG
+        MainRunLoopProbe.watch(traceID: trace.id)
+        #endif
+        var traceOutcome = "stopped"
+        defer { trace.finishUnlessDelivering(outcome: traceOutcome) }
         DebugLogger.shared.debug("stopAndProcessTranscription called", source: "ContentView")
         DebugLogger.shared.info("Output route selected: \(route.rawValue)", source: "ContentView")
         self.appBench("stop_path_enter route=\(route.rawValue)")
@@ -2110,9 +2151,15 @@ struct ContentView: View {
         // Play the stop cue as soon as the audio engine has stopped, before the
         // (potentially slow) final transcription pass. Scoped to dictation only —
         // Command/Edit modes call asr.stop() without this callback.
-        let transcribedText = await asr.stop(onCaptureStopped: {
-            TranscriptionSoundPlayer.shared.playStopSound()
-        })
+        let transcribedText = await asr.stop(
+            onCaptureStopped: {
+                // The benchmark stays silent (the stop cue plays off the main thread anyway).
+                guard trace.trigger != .benchmark else { return }
+                TranscriptionSoundPlayer.shared.playStopSound()
+            },
+            trace: trace
+        )
+        trace.mark(.asrReturn)
         self.appBench("asr_stop_return elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - asrStopStartedAt) * 1000).rounded()))")
         let audioSnapshot = self.asr.consumeLastCompletedAudioSnapshot()
         DebugLogger.shared.info(
@@ -2124,6 +2171,7 @@ struct ContentView: View {
         NotchOverlayManager.shared.updateTranscriptionText("")
 
         guard transcribedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+            traceOutcome = "empty"
             DebugLogger.shared.debug("Transcription returned empty text", source: "ContentView")
             // Finish the same short exit transition even when no text is emitted.
             if !didRequestOverlayHideOnStop {
@@ -2134,6 +2182,7 @@ struct ContentView: View {
 
         // Prompt Test Mode: reroute dictation hotkey output into the prompt editor (no typing/clipboard/history).
         if promptTest.isActive {
+            traceOutcome = "prompt_test"
             promptTest.lastTranscriptionText = transcribedText
             promptTest.lastOutputText = ""
             promptTest.lastError = ""
@@ -2174,6 +2223,7 @@ struct ContentView: View {
 
         // If this was a rewrite recording, process the rewrite instead of typing
         if wasRewriteMode {
+            traceOutcome = "rewrite"
             DebugLogger.shared.info("Processing rewrite with instruction: \(transcribedText)", source: "ContentView")
             AnalyticsService.shared.recordModelUsage(
                 role: .transcription,
@@ -2187,6 +2237,7 @@ struct ContentView: View {
 
         // If this was a command recording, process the command
         if wasCommandMode {
+            traceOutcome = "command"
             DebugLogger.shared.info("Processing command: \(transcribedText)", source: "ContentView")
             AnalyticsService.shared.recordModelUsage(
                 role: .transcription,
@@ -2324,6 +2375,10 @@ struct ContentView: View {
 
         DebugLogger.shared.info("Transcription finalized (chars: \(finalText.count))", source: "ContentView")
         let finalTextReadyAt = ProcessInfo.processInfo.systemUptime
+        trace.mark(.textReady, at: finalTextReadyAt)
+        trace.note("chars", String(finalText.count))
+        trace.note("ai", String(postProcessingModel != nil))
+        traceOutcome = aiFallbackReason == nil ? "not_typed" : "ai_fallback_not_typed"
         let finalOutputPlan = ASRService.makeDictationLiteralOutputPlan(
             for: finalText,
             appName: appInfo.name,
@@ -2384,7 +2439,8 @@ struct ContentView: View {
         // itself is frontmost and nothing is typed externally (ported from
         // altic-dev/FluidVoice@7d6d0e7c).
         let shouldCopyToClipboard = shouldPersistOutputs &&
-            SettingsStore.shared.copyTranscriptionToClipboard
+            SettingsStore.shared.copyTranscriptionToClipboard &&
+            trace.trigger != .benchmark // never touch the clipboard from the benchmark
 
         if shouldCopyToClipboard {
             // Through the paste session, so a clipboard restore still in flight cannot undo it.
@@ -2392,7 +2448,14 @@ struct ContentView: View {
         }
 
         var didTypeExternally = false
-        let shouldTypeExternally = shouldPersistOutputs && !isFluidFrontmost
+        // The fixture benchmark stops at the handoff: it must never restore focus to, or type
+        // into, whatever app has focus on this Mac.
+        let isBenchmark = trace.trigger == .benchmark
+        let shouldTypeExternally = shouldPersistOutputs && !isFluidFrontmost && !isBenchmark
+        if isBenchmark {
+            trace.mark(.handoff)
+            traceOutcome = "benchmark_handoff"
+        }
 
         DebugLogger.shared.debug(
             "Typing decision → frontmost: \(frontmostName), fluidFrontmost: \(isFluidFrontmost), editorFocused: \(self.isTranscriptionFocused), willTypeExternally: \(shouldTypeExternally)",
@@ -2420,7 +2483,9 @@ struct ContentView: View {
                 "text_ready_to_type_request elapsedMs=\(Int(((ProcessInfo.processInfo.systemUptime - finalTextReadyAt) * 1000).rounded()))"
             )
             let isInHistory = shouldPersistOutputs && SettingsStore.shared.saveTranscriptionHistory
+            trace.mark(.handoff)
             if isTargetReady {
+                traceOutcome = "handoff"
                 self.asr.typeOutputPlanToActiveField(
                     finalOutputPlan,
                     preferredTargetPID: typingTargetPID,
@@ -2431,6 +2496,7 @@ struct ContentView: View {
             } else {
                 // The field chosen at stop could not be brought back. Typing into whatever
                 // has focus now could land the text in the wrong place, so keep it instead.
+                traceOutcome = "target_restore_failed"
                 TypingService.reportDeliveryFailure(.targetRestoreFailed, transcript: finalText, inHistory: isInHistory)
             }
             didTypeExternally = true

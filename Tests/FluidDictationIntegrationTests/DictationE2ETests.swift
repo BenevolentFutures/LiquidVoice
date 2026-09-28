@@ -2520,3 +2520,187 @@ final class TestHostQuietModeTests: XCTestCase {
         return windows.filter { ($0[kCGWindowOwnerPID as String] as? pid_t) == pid }.count
     }
 }
+
+final class StopPathTraceTests: XCTestCase {
+    func testSummaryReportsEachStageFromThePreviousMark() {
+        let line = StopPathTrace.summaryLine(
+            id: 7,
+            trigger: .holdRelease,
+            latched: false,
+            marks: [
+                .trigger: 100.000,
+                .stopEnter: 100.002,
+                .captureStopped: 100.010,
+                .asrBegin: 100.030,
+                .asrEnd: 100.090,
+                .asrReturn: 100.095,
+                .textReady: 100.096,
+                .handoff: 100.100,
+                .pastePosted: 100.140,
+            ],
+            details: ["audioMs": "2500", "chars": "17"],
+            outcome: "pasted"
+        )
+        XCTAssertEqual(
+            line,
+            "STOP_SUMMARY id=7 trigger=hold_release latched=false releaseMs=2.0 captureMs=8.0 drainMs=20.0 " +
+                "asrMs=60.0 returnMs=5.0 postMs=1.0 handoffMs=4.0 pasteMs=40.0 totalMs=140.0 lastStage=paste_posted " +
+                "audioMs=2500 chars=17 outcome=pasted"
+        )
+    }
+
+    func testSummaryFoldsASkippedStageIntoTheNextOne() {
+        let line = StopPathTrace.summaryLine(
+            id: 1,
+            trigger: .toggle,
+            latched: true,
+            marks: [.trigger: 10.0, .stopEnter: 10.5, .asrReturn: 10.6],
+            details: [:],
+            outcome: "empty"
+        )
+        XCTAssertTrue(line.contains("releaseMs=500.0 captureMs=- drainMs=- asrMs=- returnMs=100.0 postMs=-"), line)
+        XCTAssertTrue(line.hasSuffix("totalMs=600.0 lastStage=asr_return outcome=empty"), line)
+    }
+
+    func testTraceIsFinishedOnceAndDeliveryOwnsItsEnd() {
+        let trace = StopPathTrace(trigger: .ui, at: 5.0)
+        trace.mark(.stopEnter, at: 5.1)
+        trace.expectDelivery()
+        trace.finishUnlessDelivering(outcome: "handoff")
+        trace.mark(.pastePosted, at: 5.3)
+        XCTAssertEqual(trace.elapsedMilliseconds(from: .trigger, to: .pastePosted) ?? 0, 300, accuracy: 0.001)
+        trace.finish(outcome: "pasted")
+        trace.mark(.handoff, at: 5.4) // after finishing: ignored
+        XCTAssertNil(trace.elapsedMilliseconds(from: .trigger, to: .handoff))
+    }
+}
+
+/// Times the real stop pipeline on the dictation fixture, N times in one test-host launch, and
+/// reports median and p90 per stage. Headless and silent (TestHostQuietMode): no window on screen,
+/// no sound, no focus change. Explicitly invoked, since it loads the Parakeet model:
+///
+///     xcodebuild ... test -only-testing:FluidDictationIntegrationTests/StopPathLatencyBenchmarkTests \
+///       TEST_RUNNER_LIQUID_VOICE_STOP_BENCH=30
+///
+/// Optional: TEST_RUNNER_LIQUID_VOICE_STOP_BENCH_AUDIO_SECONDS (fixture tiled to this length,
+/// default 8), TEST_RUNNER_LIQUID_VOICE_STOP_BENCH_HISTORY (history size, default 13600, the operator's
+/// real history) and TEST_RUNNER_LIQUID_VOICE_STOP_BENCH_OUT (JSON results path). Each run stops at
+/// the handoff to the typing service: it never types, pastes or touches the clipboard, and the
+/// Debug build's history is put back afterwards.
+@MainActor
+final class StopPathLatencyBenchmarkTests: XCTestCase {
+    func testStopPathLatencyOnFixture() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let runsValue = environment["LIQUID_VOICE_STOP_BENCH"], let runs = Int(runsValue), runs > 0 else {
+            throw XCTSkip("Set TEST_RUNNER_LIQUID_VOICE_STOP_BENCH=<runs> to run the stop-path benchmark.")
+        }
+        let audioSeconds = environment["LIQUID_VOICE_STOP_BENCH_AUDIO_SECONDS"].flatMap(Double.init) ?? 8
+
+        var runner = StopPathBenchmark.runDictation
+        for _ in 0..<200 where runner == nil {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            runner = StopPathBenchmark.runDictation
+        }
+        guard let runner else {
+            throw XCTSkip("The app window never appeared, so the stop pipeline is unavailable.")
+        }
+
+        let asr = AppServices.shared.asr
+        await asr.checkIfModelsExistAsync()
+        guard asr.modelsExistOnDisk || asr.isAsrReady else {
+            throw XCTSkip("The selected speech model (\(SettingsStore.shared.selectedSpeechModel.displayName)) is not downloaded.")
+        }
+        try await asr.ensureAsrReady()
+        print("STOP_BENCH model=\(SettingsStore.shared.selectedSpeechModel.displayName)")
+
+        // A long history is part of the real stop path (it is saved and summarized on each
+        // dictation). Seed the Debug build's history to that size, and put it back afterwards.
+        // Every benchmark entry (seeded or dictated) is recorded under StopPathBenchmark.appName,
+        // so a run that was killed midway is cleaned up by the next one.
+        let historySize = environment["LIQUID_VOICE_STOP_BENCH_HISTORY"].flatMap(Int.init) ?? 13_600
+        let history = TranscriptionHistoryStore.shared
+        let originalHistory = history.makeBackupPayload().filter { $0.appName != StopPathBenchmark.appName }
+        history.restore(from: originalHistory + Self.syntheticHistory(count: historySize))
+        defer { history.restore(from: originalHistory) }
+
+        let fixture = try AudioFixtureLoader.load16kMonoFloatSamples(named: "dictation_fixture", ext: "wav")
+        var samples: [Float] = []
+        while Double(samples.count) / 16_000 < audioSeconds {
+            samples.append(contentsOf: fixture)
+        }
+        let recordingSeconds = Double(samples.count) / 16_000
+
+        // Warm-up: first overlay presentation and first inference are not representative.
+        for _ in 0..<2 {
+            _ = await runner(samples, recordingSeconds)
+            try await Task.sleep(nanoseconds: 500_000_000)
+        }
+
+        let stages: [(name: String, from: StopPathTrace.Stage, to: StopPathTrace.Stage)] = [
+            ("stop_enter -> capture_stopped", .stopEnter, .captureStopped),
+            ("capture_stopped -> asr_begin", .captureStopped, .asrBegin),
+            ("asr_begin -> asr_end (model)", .asrBegin, .asrEnd),
+            ("asr_end -> asr_return", .asrEnd, .asrReturn),
+            ("asr_return -> text_ready", .asrReturn, .textReady),
+            ("text_ready -> handoff", .textReady, .handoff),
+            ("stop_enter -> handoff (total)", .stopEnter, .handoff),
+        ]
+        var samplesByStage: [String: [Double]] = [:]
+        for _ in 0..<runs {
+            let finished = await runner(samples, recordingSeconds)
+            let trace = try XCTUnwrap(finished, "A recording was already active")
+            XCTAssertEqual(TestHostQuietModeTests.onScreenWindowCount(), 0, "The benchmark put a window on screen")
+            for stage in stages {
+                if let value = trace.elapsedMilliseconds(from: stage.from, to: stage.to) {
+                    samplesByStage[stage.name, default: []].append(value)
+                }
+            }
+            try await Task.sleep(nanoseconds: 500_000_000)
+        }
+
+        func percentile(_ values: [Double], _ p: Double) -> Double {
+            let sorted = values.sorted()
+            guard !sorted.isEmpty else { return .nan }
+            let rank = p * Double(sorted.count - 1)
+            let lower = Int(rank.rounded(.down))
+            let upper = min(lower + 1, sorted.count - 1)
+            return sorted[lower] + (sorted[upper] - sorted[lower]) * (rank - Double(lower))
+        }
+
+        var report: [[String: Any]] = []
+        var lines = ["STOP_BENCH runs=\(runs) audioMs=\(Int(recordingSeconds * 1000)) history=\(historySize)"]
+        for stage in stages {
+            let values = samplesByStage[stage.name] ?? []
+            let median = percentile(values, 0.5)
+            let p90 = percentile(values, 0.9)
+            lines.append(String(format: "STOP_BENCH %-32@ n=%3d median=%7.1f p90=%7.1f", stage.name as NSString, values.count, median, p90))
+            report.append(["stage": stage.name, "n": values.count, "medianMs": median, "p90Ms": p90, "valuesMs": values])
+        }
+        lines.forEach { print($0) }
+        DebugLogger.shared.info(lines.joined(separator: "\n"), source: "StopPathBenchmark")
+        if let outPath = environment["LIQUID_VOICE_STOP_BENCH_OUT"] {
+            let data = try JSONSerialization.data(withJSONObject: ["audioMs": Int(recordingSeconds * 1000), "runs": runs, "stages": report], options: [.prettyPrinted])
+            try data.write(to: URL(fileURLWithPath: outPath))
+        }
+        XCTAssertEqual(samplesByStage["stop_enter -> handoff (total)"]?.count, runs, "Every run should reach the handoff")
+        XCTAssertEqual(TranscriptionSoundPlayer.shared.createdPlayerCount, 0, "The benchmark created a sound player")
+    }
+
+    /// Entries shaped like real dictations: about 150 characters, spread over 60 days with a
+    /// busy "today".
+    private static func syntheticHistory(count: Int) -> [TranscriptionHistoryEntry] {
+        let sentence = "Please look at the stop path and tell me where the time goes before the text lands in the terminal window today"
+        let now = Date()
+        return (0..<count).map { index in
+            let age = index < 200 ? Double(index) * 60 : Double(index) * 380
+            return TranscriptionHistoryEntry(
+                timestamp: now.addingTimeInterval(-age),
+                rawText: sentence,
+                processedText: sentence + " \(index).",
+                appName: StopPathBenchmark.appName,
+                windowTitle: "",
+                wasAIProcessed: false
+            )
+        }
+    }
+}

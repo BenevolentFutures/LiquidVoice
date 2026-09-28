@@ -5,6 +5,16 @@ import SwiftUI
 class DebugLogger: ObservableObject {
     static let shared = DebugLogger()
 
+    /// Verbose stage-by-stage diagnostics (the stop-path trace, benchmark lines). Debug builds
+    /// only; a local Release investigation opts in with the FLUIDVOICE_DIAGNOSTICS flag.
+    nonisolated static let diagnosticsEnabled: Bool = {
+        #if DEBUG || FLUIDVOICE_DIAGNOSTICS
+        true
+        #else
+        false
+        #endif
+    }()
+
     @Published var logs: [LogEntry] = []
     private let maxLogs = 1000 // Keep last 1000 log entries
     private let queue = DispatchQueue(label: "debug.logger", qos: .utility)

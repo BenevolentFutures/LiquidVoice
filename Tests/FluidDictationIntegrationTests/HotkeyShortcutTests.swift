@@ -2279,7 +2279,7 @@ private final class FakeCaptureStartState {
             isStarting: { [unowned self] in self.isStarting },
             isRunning: { [unowned self] in self.isRunning },
             isTargetActive: { [unowned self] type in self.activeTargets?.contains(type) ?? true },
-            stop: stop
+            stop: { request, _ in stop(request) }
         )
     }
 }

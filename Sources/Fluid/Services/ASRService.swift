@@ -2297,6 +2297,54 @@ final class ASRService: ObservableObject {
         }
     }
 
+    #if DEBUG
+    /// Debug builds only: stands in for a microphone capture with fixed 16 kHz mono samples, so
+    /// the real stop path can be timed without audio hardware (see `StopPathBenchmark`). The
+    /// session bookkeeping and streaming previews run as in a real recording; media playback is
+    /// never paused and no audio device is touched.
+    func beginSyntheticCaptureForBenchmark(samples: [Float]) -> Bool {
+        guard self.isRunning == false, self.isStarting == false, !samples.isEmpty else { return false }
+        self.benchmarkSessionID += 1
+        self.finalText.removeAll()
+        self.audioBuffer.clear(keepingCapacity: true)
+        self.partialTranscription.removeAll()
+        self.previousFullTranscription.removeAll()
+        self.lastBoostHitTerm = nil
+        self.lastProcessedSampleCount = 0
+        self.isProcessingChunk = false
+        self.skipNextChunk = false
+        self.benchmarkRecordingStartedAt = Date().timeIntervalSince1970
+        self.benchmarkStreamingChunkIndex = 0
+        self.benchmarkCompletedStreamingChunks = 0
+        self.benchmarkLastChunkSampleCount = 0
+        (self.transcriptionProvider as? FluidAudioProvider)?.resetStreamingPreviewCache()
+        self.audioBuffer.append(samples)
+        self.activeAudioCaptureBackend = .none
+        self.isDictionaryTrainingCaptureActive = false
+        self.isRunning = true
+        self.benchmarkLog("synthetic_capture_start samples=\(samples.count)")
+        if SettingsStore.shared.selectedSpeechModel.supportsStreaming {
+            self.startStreamingTranscription()
+        }
+        // A real capture publishes one level per hardware buffer (512 frames at 48 kHz, about
+        // 94 Hz), and the overlay waveform redraws on each; replay that load from the samples.
+        let sessionID = self.benchmarkSessionID
+        Task { @MainActor [weak self] in
+            let window = 171 // 512 frames at 48 kHz, in 16 kHz samples
+            var offset = 0
+            while let self, self.isRunning, self.benchmarkSessionID == sessionID {
+                let end = min(offset + window, samples.count)
+                let slice = samples[offset..<end]
+                let meanSquare = slice.reduce(Float(0)) { $0 + $1 * $1 } / Float(max(slice.count, 1))
+                self.audioLevelSubject.send(CGFloat(min(1, sqrt(sqrt(meanSquare)) * 2)))
+                offset = end >= samples.count ? 0 : end
+                try? await Task.sleep(nanoseconds: 10_667_000)
+            }
+        }
+        return true
+    }
+    #endif
+
     func waitForPendingStart() async {
         guard self.isStarting else { return }
         await withCheckedContinuation { continuation in
@@ -2518,9 +2566,12 @@ final class ASRService: ObservableObject {
     ///   final transcription pass. Use this for immediate stop cues that
     ///   shouldn't wait on finalization. Only invoked when capture was actually
     ///   running (i.e. not when `stop()` early-returns because `isRunning` is false).
+    /// - Parameter trace: the dictation's stop-path trace, marked at capture stop and around
+    ///   the final transcription.
     func stop(
         onCaptureStopped: (@MainActor () -> Void)? = nil,
-        forDictionaryTraining: Bool = false
+        forDictionaryTraining: Bool = false,
+        trace: StopPathTrace? = nil
     ) async -> String {
         DebugLogger.shared.info("🛑 STOP() called - beginning shutdown sequence", source: "ASRService")
         if forDictionaryTraining || self.isDictionaryTrainingCaptureActive {
@@ -2592,6 +2643,7 @@ final class ASRService: ObservableObject {
         // stop cue or release capture-dependent UI without waiting on the
         // (potentially slow) final transcription pass.
         await MainActor.run { onCaptureStopped?() }
+        trace?.mark(.captureStopped)
 
         let directCaptureSnapshot = self.directAudioLifecycleController.snapshot
         self.benchmarkLog(
@@ -2616,6 +2668,7 @@ final class ASRService: ObservableObject {
         var pcm = self.audioBuffer.getAll()
         self.audioBuffer.clear()
         let capturedPCM = pcm
+        trace?.note("audioMs", String(Int((Double(pcm.count) / 16_000.0 * 1000).rounded())))
         self.benchmarkLog("stop_audio_drained samples=\(pcm.count) audioMs=\(Int((Double(pcm.count) / 16_000.0 * 1000).rounded()))")
 
         // Drop recordings with no audio at all — nothing to transcribe.
@@ -2712,8 +2765,11 @@ final class ASRService: ObservableObject {
                 self.lastDictionaryTrainingResult = result
                 finalSource = "dictionaryTraining"
             } else {
+                trace?.mark(.asrBegin)
                 result = try await self.transcriptionExecutor.run { [provider] in
-                    try await provider.transcribeFinal(pcm)
+                    let result = try await provider.transcribeFinal(pcm)
+                    trace?.mark(.asrEnd)
+                    return result
                 }
                 finalSource = "full"
             }

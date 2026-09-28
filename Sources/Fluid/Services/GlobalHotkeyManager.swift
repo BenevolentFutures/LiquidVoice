@@ -237,6 +237,8 @@ final class HoldReleaseStopLatch {
         let label: String
         /// Skip the stop if a different recording mode is active by the time the start settles.
         let requireTargetMode: Bool
+        /// When the release happened; the stop-path trace starts here even when the stop waits.
+        var releasedAt: TimeInterval = ProcessInfo.processInfo.systemUptime
     }
 
     enum Outcome: Equatable {
@@ -248,7 +250,7 @@ final class HoldReleaseStopLatch {
     private let isStarting: () -> Bool
     private let isRunning: () -> Bool
     private let isTargetActive: (HotkeyHoldModeType) -> Bool
-    private let stop: (Request) -> Void
+    private let stop: (Request, _ wasLatched: Bool) -> Void
     private(set) var pending: [HotkeyHoldModeType: Request] = [:]
     /// Hotkey actions that may still start a capture ASR has not begun yet.
     private(set) var outstandingStartRequests = 0
@@ -257,7 +259,7 @@ final class HoldReleaseStopLatch {
         isStarting: @escaping () -> Bool,
         isRunning: @escaping () -> Bool,
         isTargetActive: @escaping (HotkeyHoldModeType) -> Bool,
-        stop: @escaping (Request) -> Void
+        stop: @escaping (Request, _ wasLatched: Bool) -> Void
     ) {
         self.isStarting = isStarting
         self.isRunning = isRunning
@@ -289,7 +291,7 @@ final class HoldReleaseStopLatch {
     func release(_ request: Request) -> Outcome {
         if self.isRunning() {
             self.pending.removeValue(forKey: request.type)
-            self.stop(request)
+            self.stop(request, false)
             return .stoppedNow
         }
         guard self.isStartInFlight else {
@@ -332,7 +334,7 @@ final class HoldReleaseStopLatch {
             "\(request.label) release stop honored (\(reason)) - stopping now",
             source: "GlobalHotkeyManager"
         )
-        self.stop(request)
+        self.stop(request, true)
     }
 }
 
@@ -355,6 +357,9 @@ private final nonisolated class HotkeyState: @unchecked Sendable {
     var automaticPressStartedTypes: Set<HotkeyHoldModeType> = []
     var activePrimaryShortcutPress: ActivePrimaryShortcutPress?
     var oneShotMouseUpSwallow = OneShotMouseUpSwallow()
+    /// When the tap thread received the key event now being handled on main. Lets the stop-path
+    /// trace start at the real release, before any wait for a busy main thread.
+    var eventReceivedAt: TimeInterval?
 
     func withLock<T>(_ block: () -> T) -> T {
         self.lock.lock()
@@ -559,7 +564,13 @@ final class GlobalHotkeyManager: NSObject {
         isStarting: { [weak self] in self?.asrService.isStarting ?? false },
         isRunning: { [weak self] in self?.asrService.isRunning ?? false },
         isTargetActive: { [weak self] type in self?.isRecordingTargetActive(for: type) ?? false },
-        stop: { [weak self] _ in self?.stopRecordingIfNeeded() }
+        stop: { [weak self] request, wasLatched in
+            self?.stopRecordingIfNeeded(
+                trigger: .holdRelease,
+                triggeredAt: request.releasedAt,
+                latched: wasLatched
+            )
+        }
     )
     private var captureStartSettledObserver: AnyCancellable?
 
@@ -810,6 +821,8 @@ final class GlobalHotkeyManager: NSObject {
                     }
                     return Unmanaged.passUnretained(event)
                 }
+                manager.noteEventReceived()
+                defer { manager.clearEventReceived() }
                 if Thread.isMainThread {
                     return MainActor.assumeIsolated {
                         manager.handleKeyEvent(proxy: proxy, type: type, event: event)
@@ -900,6 +913,21 @@ final class GlobalHotkeyManager: NSObject {
     }
 
     nonisolated static let ownProcessID = Int64(ProcessInfo.processInfo.processIdentifier)
+
+    /// Records when an event tap received the event about to be handled (tap thread or main).
+    private nonisolated func noteEventReceived() {
+        let now = ProcessInfo.processInfo.systemUptime
+        self.state.withLock { self.state.eventReceivedAt = now }
+    }
+
+    private nonisolated func clearEventReceived() {
+        self.state.withLock { self.state.eventReceivedAt = nil }
+    }
+
+    /// When the event being handled reached the tap, or now outside event handling.
+    private func currentEventReceivedAt() -> TimeInterval {
+        self.state.withLock { self.state.eventReceivedAt } ?? ProcessInfo.processInfo.systemUptime
+    }
 
     /// True for a key or modifier event this process posted itself (TypingService's
     /// synthesized paste and typed text). Tap-disabled notices never count, so the
@@ -1115,6 +1143,8 @@ final class GlobalHotkeyManager: NSObject {
             callback: { _, type, event, refcon -> Unmanaged<CGEvent>? in
                 guard let refcon else { return Unmanaged.passUnretained(event) }
                 let manager = Unmanaged<GlobalHotkeyManager>.fromOpaque(refcon).takeUnretainedValue()
+                manager.noteEventReceived()
+                defer { manager.clearEventReceived() }
                 return manager.handleMouseShortcutEvent(type: type, event: event)
             },
             userInfo: Unmanaged.passUnretained(self).toOpaque()
@@ -1973,7 +2003,12 @@ final class GlobalHotkeyManager: NSObject {
         requireTargetMode: Bool = true
     ) {
         let outcome = self.holdReleaseStopLatch.release(
-            .init(type: type, label: label, requireTargetMode: requireTargetMode)
+            .init(
+                type: type,
+                label: label,
+                requireTargetMode: requireTargetMode,
+                releasedAt: self.currentEventReceivedAt()
+            )
         )
         if outcome == .nothingToStop {
             DebugLogger.shared.debug("\(label) released with no recording or start in flight", source: "GlobalHotkeyManager")
@@ -2556,7 +2591,20 @@ final class GlobalHotkeyManager: NSObject {
         }
     }
 
-    private func stopRecordingIfNeeded() {
+    /// - Parameters:
+    ///   - trigger: what asked for the stop, for the stop-path trace.
+    ///   - triggeredAt: when; defaults to when the tap received the event being handled.
+    ///   - latched: the stop waited for a capture start to settle (see HoldReleaseStopLatch).
+    private func stopRecordingIfNeeded(
+        trigger: StopPathTrace.Trigger = .toggle,
+        triggeredAt: TimeInterval? = nil,
+        latched: Bool = false
+    ) {
+        let trace = StopPathTrace(
+            trigger: trigger,
+            at: triggeredAt ?? self.currentEventReceivedAt(),
+            latched: latched
+        )
         Task { @MainActor [weak self] in
             guard let self = self else { return }
 
@@ -2573,12 +2621,12 @@ final class GlobalHotkeyManager: NSObject {
                 return
             }
 
-            await self.stopRecordingInternal()
+            await self.stopRecordingInternal(trace: trace)
         }
     }
 
     @MainActor
-    private func stopRecordingInternal() async {
+    private func stopRecordingInternal(trace: StopPathTrace? = nil) async {
         if self.asrService.isStarting, self.asrService.isRunning == false {
             DebugLogger.shared.debug("Cancelling pending audio capture start", source: "GlobalHotkeyManager")
             await self.asrService.cancelPendingAudioCaptureStart(reason: "hotkey_released")
@@ -2597,6 +2645,8 @@ final class GlobalHotkeyManager: NSObject {
         defer { isProcessingStop = false }
 
         if let callback = stopAndProcessCallback {
+            // Taken by the stop pipeline on this same main-actor turn.
+            StopPathTrace.stagePending(trace ?? StopPathTrace(trigger: .toggle))
             await callback()
         } else {
             await self.asrService.stopWithoutTranscription()

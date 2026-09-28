@@ -50,27 +50,20 @@ nonisolated enum TextDeliveryResult: Equatable, Sendable {
     }
 }
 
-/// Logging for delivery code that runs off the main actor. `DebugLogger` is main-actor
-/// isolated in this target, so the line is timestamped here, at the call, and handed to it.
+/// Logging for delivery code that runs off the main actor. `DebugLogger` is callable from any
+/// thread, so lines go straight to it: nothing hops to the main thread mid-paste.
 nonisolated enum DeliveryLog {
-    static func bench(_ message: String) {
-        let now = ProcessInfo.processInfo.systemUptime
-        let line = "TYPING_BENCH t=\(String(format: "%.6f", now)) \(message)"
-        DispatchQueue.main.async {
-            DebugLogger.shared.info(line, source: "TypingBenchmark")
-        }
+    /// A delivery timing line. Debug builds only, like every benchmark line.
+    static func bench(_ message: @autoclosure () -> String) {
+        DebugLogger.shared.benchmark("TYPING_BENCH", message: message(), source: "TypingBenchmark")
     }
 
     static func warning(_ message: String, source: String = "TypingService") {
-        DispatchQueue.main.async {
-            DebugLogger.shared.warning(message, source: source)
-        }
+        DebugLogger.shared.warning(message, source: source)
     }
 
     static func info(_ message: String, source: String = "TypingService") {
-        DispatchQueue.main.async {
-            DebugLogger.shared.info(message, source: source)
-        }
+        DebugLogger.shared.info(message, source: source)
     }
 }
 

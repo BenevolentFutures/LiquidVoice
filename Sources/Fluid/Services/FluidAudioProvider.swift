@@ -204,7 +204,8 @@ final class FluidAudioProvider: TranscriptionProvider {
         let elapsedMs = Int(((Date().timeIntervalSince1970 - startedAt) * 1000).rounded())
         let audioMs = Int((Double(samples.count) / 16_000.0 * 1000).rounded())
         let rtf = audioMs > 0 ? Double(elapsedMs) / Double(audioMs) : 0
-        DebugLogger.shared.info(
+        // Per-chunk timing: Debug builds only.
+        DebugLogger.shared.debug(
             """
             ASR_BENCH provider_streaming_done samples=\(samples.count) audioMs=\(audioMs) \
             elapsedMs=\(elapsedMs) textChars=\(text.trimmingCharacters(in: .whitespacesAndNewlines).count) \

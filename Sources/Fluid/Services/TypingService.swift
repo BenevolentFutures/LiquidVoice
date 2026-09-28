@@ -525,7 +525,7 @@ final class TypingService {
             guard ProcessInfo.processInfo.systemUptime < deadline else { break }
             let result = AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
             if result == .success, Self.isCurrentlyFocusedElement(element, expectedPID: target.pid) {
-                DeliveryLog.bench("restore_exact_target result=restored attempt=\(attempt)")
+                DeliveryLog.info("restore_exact_target result=restored attempt=\(attempt)")
                 return true
             }
             if attempt < 2 {
@@ -534,11 +534,11 @@ final class TypingService {
         }
 
         guard ProcessInfo.processInfo.systemUptime < deadline else {
-            DeliveryLog.bench("restore_exact_target result=deadline")
+            DeliveryLog.info("restore_exact_target result=deadline")
             return false
         }
         let isFocused = Self.isCurrentlyFocusedElement(element, expectedPID: target.pid)
-        DeliveryLog.bench("restore_exact_target result=\(isFocused ? "restored" : "unconfirmed")")
+        DeliveryLog.info("restore_exact_target result=\(isFocused ? "restored" : "unconfirmed")")
         return isFocused
     }
 
@@ -565,7 +565,7 @@ final class TypingService {
         DeliveryLog.warning("Text delivery failed reason=\(failure.rawValue) chars=\(transcript.count)")
         guard failure.isUserVisible, !transcript.isEmpty else { return }
         pasteSession.keepTranscript(transcript, since: revision) { outcome in
-            DeliveryLog.bench("delivery_failure_transcript_kept clipboard=\(outcome.rawValue) inHistory=\(inHistory)")
+            DeliveryLog.info("delivery_failure_transcript_kept clipboard=\(outcome.rawValue) inHistory=\(inHistory)")
             let report = DeliveryFailureReport(failure: failure, transcript: transcript, clipboard: outcome, inHistory: inHistory)
             Task { @MainActor in
                 TypingService.deliveryFailureHandler(report)
@@ -1300,7 +1300,7 @@ final class TypingService {
         ) -> TextDeliveryFailure? {
             let first = self.attempt(text, to: pid, activateFirst: activateFirst, beforeDispatch: beforeDispatch, makeConsumptionWait: makeConsumptionWait)
             guard let first, Self.isClipboardRace(first) else { return first }
-            DeliveryLog.bench("terminal_paste_retry reason=\(first.rawValue)")
+            DeliveryLog.info("terminal_paste_retry reason=\(first.rawValue)")
             usleep(useconds_t(self.retryDelay * 1_000_000))
             return self.attempt(text, to: pid, activateFirst: activateFirst, beforeDispatch: beforeDispatch, makeConsumptionWait: makeConsumptionWait)
         }
@@ -1344,7 +1344,7 @@ final class TypingService {
             )
             if leftFront { return .targetRestoreFailed }
             if let failure {
-                DeliveryLog.bench("terminal_paste_failed reason=\(failure.rawValue)")
+                DeliveryLog.info("terminal_paste_failed reason=\(failure.rawValue)")
             }
             return failure
         }

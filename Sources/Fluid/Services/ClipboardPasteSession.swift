@@ -527,8 +527,10 @@ nonisolated final class SystemPasteboardManager: PasteboardManaging, @unchecked 
             .joined(separator: ",")
     }
 
+    /// A few lines per paste, kept in Release: clipboard snapshot, restore and backup outcomes
+    /// are what an agent needs to diagnose a clobbered clipboard in the installed app.
     private func log(_ message: @autoclosure () -> String) {
-        DeliveryLog.bench(message())
+        DeliveryLog.info(message(), source: "ClipboardPasteSession")
     }
 
     private static func elapsedMs(since start: TimeInterval) -> Int {
@@ -664,8 +666,10 @@ nonisolated final class ClipboardPasteSession: @unchecked Sendable {
         self.gate.signal()
     }
 
+    /// A few lines per paste, kept in Release: clipboard snapshot, restore and backup outcomes
+    /// are what an agent needs to diagnose a clobbered clipboard in the installed app.
     private func log(_ message: @autoclosure () -> String) {
-        DeliveryLog.bench(message())
+        DeliveryLog.info(message(), source: "ClipboardPasteSession")
     }
 }
 

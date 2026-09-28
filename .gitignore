@@ -198,8 +198,6 @@ RELEASE_NOTES_*
 
 **.dmg
 **.dmg.zip
-# Documentation backups (for future reference, not needed in repo)
-docs/
 
 
 .agent/
@@ -209,7 +207,6 @@ create_dmg_only.sh
 # Scratch directory
 scratch/
 
-assets/
 .swiftpm/
 scripts/
 

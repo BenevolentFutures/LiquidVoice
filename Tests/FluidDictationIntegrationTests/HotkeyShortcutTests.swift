@@ -485,13 +485,17 @@ final class HotkeyShortcutTests: XCTestCase {
         let shown = try XCTUnwrap(controller.windowStateForTests)
         XCTAssertEqual(shown.alpha, 1)
         XCTAssertFalse(shown.isParkedOffscreen)
+        XCTAssertTrue(controller.contentPaintsPixelsForTests(), "the shown pill paints")
 
         // A stop pipeline is running: the hide must not park yet.
         StopPipelineWindowWork.hold()
+        defer { StopPipelineWindowWork.release() } // never leave the hold behind if a check throws
         let outcome = await controller.hideAndWait()
         XCTAssertEqual(outcome, .hidden)
         let hidden = try XCTUnwrap(controller.windowStateForTests)
         XCTAssertEqual(hidden.alpha, 0)
+        // Not just a zero window alpha: the content paints nothing, so every click passes through.
+        XCTAssertFalse(controller.contentPaintsPixelsForTests(), "a hidden overlay must paint nothing")
         XCTAssertFalse(hidden.isParkedOffscreen, "no window-management fence before the handoff")
         XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented, "controls are inert while hidden")
 
@@ -522,6 +526,7 @@ final class HotkeyShortcutTests: XCTestCase {
         await Task.yield()
         controller.show(audioPublisher: audioPublisher, mode: .dictation)
         StopPipelineWindowWork.hold()
+        defer { StopPipelineWindowWork.release() }
         _ = await controller.hideAndWait()
         controller.show(audioPublisher: audioPublisher, mode: .dictation)
         StopPipelineWindowWork.release()

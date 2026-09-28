@@ -73,6 +73,21 @@ final class BottomOverlayWindowController {
     private var activeHideGeneration: UInt64?
     private var hideWaiters: [CheckedContinuation<RecordingOverlayHideOutcome, Never>] = []
 
+    /// Whether the panel's content paints any non-transparent pixel right now. For tests.
+    func contentPaintsPixelsForTests() -> Bool {
+        guard let view = self.window?.contentView, view.bounds.width > 0, view.bounds.height > 0 else { return false }
+        view.layoutSubtreeIfNeeded()
+        view.displayIfNeeded()
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return false }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        for y in 0..<rep.pixelsHigh {
+            for x in 0..<rep.pixelsWide where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.01 {
+                return true
+            }
+        }
+        return false
+    }
+
     /// The panel's alpha, and whether it sits outside every display. For tests.
     var windowStateForTests: (alpha: CGFloat, isParkedOffscreen: Bool, ignoresMouse: Bool)? {
         guard let window else { return nil }
@@ -3400,6 +3415,12 @@ struct BottomOverlayView: View {
         // A hiding or hidden overlay (alpha 0 until it is parked) must never act on a click that
         // was meant for the app beneath it: no chip fires, no menu opens, no drag starts.
         .allowsHitTesting(self.isInteractive)
+        // Once hidden, paint nothing at all, not just a zero window alpha: a transparent panel
+        // passes clicks to the app beneath wherever its own pixels are clear, so from the hide on
+        // the whole panel is click-through, long before it is parked offscreen after the stop's
+        // handoff (up to 1.5 s for long audio). A render commit, not a WindowServer fence. And
+        // still never ignoresMouseEvents: setting it once makes the pill's margin take clicks.
+        .opacity(self.contentState.isBottomOverlayPresented ? 1 : 0)
     }
 
     /// Moves the panel by tracking the pointer in screen coordinates. The gesture's own

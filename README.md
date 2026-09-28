@@ -1,297 +1,92 @@
-# FluidVoice
+# Liquid Voice
 
-<p align="center">
-  <a href="https://github.com/altic-dev/FluidVoice/stargazers"><img src="https://img.shields.io/github/stars/altic-dev/FluidVoice?style=social" alt="GitHub stars"/></a>
-  <a href="https://github.com/sponsors/altic-dev"><img src="https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ea4aaa?logo=githubsponsors&logoColor=white" alt="Sponsor FluidVoice"/></a>
-  <a href="https://x.com/ALTIC_DEV"><img src="https://img.shields.io/badge/X-%40ALTIC__DEV-black?logo=x&logoColor=white" alt="X @ALTIC_DEV"/></a>
-  <br />
-  <a href="https://huggingface.co/nvidia/parakeet_realtime_eou_120m-v1"><img src="https://img.shields.io/badge/Models-Nemotron%20Speech%203.5%20%7C%20Parakeet%20Flash%20%7C%20Parakeet%20v3%20%26%20v2%20%7C%20Cohere%20%7C%20Apple%20Speech%20%7C%20Whisper-blue" alt="Supported Models"/></a>
-  <br /><br />
-  <a href="https://trendshift.io/repositories/16601?utm_source=repository-badge&utm_medium=badge&utm_campaign=badge-repository-16601" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/16601" alt="altic-dev%2FFluidVoice | Trendshift" width="250" height="55"/></a>
-</p>
+<p align="center"><b><i>Straight voice to text for macOS, built to land every word</i></b></p>
 
-Open source voice-to-text dictation app for macOS with on-device AI enhancement.
-
-**Install with Homebrew:** `brew install --cask fluidvoice`
-
-**Manual download:** [latest release](https://github.com/altic-dev/FluidVoice/releases/latest)
-
-> [!NOTE]
-> FluidVoice is on macOS today. **iOS and Windows are on the way** — join the waitlist to get notified when we launch: **[altic.dev/fluid/waitlist](https://www.altic.dev/fluid/waitlist)**
-
-
-> [!IMPORTANT]
-> This project is free and open source under GPLv3. If FluidVoice is useful to you, please star the repository — it helps visibility and keeps development going.
+<!-- hero: screenshot of the overlay mid-dictation. The orchestrator adds the image after install. -->
 
 ---
 
-## Support FluidVoice
+listen.
 
-If FluidVoice helps you, you can support continued development and future platform work for iOS and Windows on [GitHub Sponsors](https://github.com/sponsors/altic-dev).
+you talk to your computer all day now. prompts for agents, replies, notes. dictation should be the fastest way in, but it fails quietly. the text lands in the wrong window. a terminal swallows it. the clipboard you were holding is gone. you find out when you look up.
 
----
+the problem is not hearing you. the problem is. delivery.
 
-## What's New in 1.6.0
+**Liquid Voice is on-device dictation for macOS.** hold or tap a hotkey, speak, and the text lands where you were typing when you stopped. the speech model runs on your Mac: Parakeet, Nemotron, Cohere Transcribe, Whisper or Apple Speech. when it sees a paste fail, it tells you and puts the words on your clipboard. AI cleanup through a provider you choose is there too, off until you turn it on.
 
-- **Insanely fast Parakeet** — rebuilt Parakeet implementation with pretty much zero delay between speaking and seeing words on screen
-- **Fluid Intelligence** — fully local AI model for on-device dictation enhancement. No cloud, no API keys, no data leaving your Mac
-- **Better Theming** — adaptive light/dark theme with a compact toolbar switcher
-- **Refreshed Onboarding** — language-first voice engine setup, real dictation tryout, and AI enhancement setup in one clean pass
+## how it differs from FluidVoice.
 
-> [!WARNING]
-> Based on early feedback, Fluid Intelligence may cause you to unsubscribe from other dictation apps and save money. You've been warned.
+Liquid Voice is a fork of [FluidVoice](https://github.com/altic-dev/FluidVoice) by altic-dev, taken on 2026-08-15 at upstream [`d62adc9`][base]. it is a separate product now. what changed:
 
-## Fluid Intelligence
+- **no Fluid Intelligence.** the private AI layer is gone, with its settings and prompt routes. [#3]
+- **no telemetry.** analytics are hard-wired off and the keys are blank. [`0e2948a`][0e2948a], [#3]
+- **no upstream updater.** it would install stock FluidVoice over this build. you update by rebuilding. [`19202c1`][19202c1], [#3]
+- **no silent drops.** a failed paste shows a card, and the text goes on your clipboard unless you copied something since. your own clipboard comes back whole, images and files included. c11 and Ghostty always get Reliable Paste, and back-to-back dictations queue instead of dropping. [#4], [`8ed75b9`][8ed75b9], [`8ab26a8`][8ab26a8]
+- **Spoken Send, in c11 too.** end with "send it" and Return follows the text, only in the pane you stopped in. off by default. [#7], [#8]
+- **a faster stop.** in a headless benchmark, stop-path work outside the model fell from a 145 ms median to 4 ms; model time is unchanged. a stalled model no longer loses the recording: it is kept for Reprocess, even across a restart. [#9], [#10]
+- **hotkey, mic and media fixes.** holds that always end, removed mics that stay removed, media resumed only if we paused it, a hung mic routed around, and a hotkey to reprocess the last dictation. [#2], [`8295536`][8295536], [`68afebc`][68afebc], [`0e2948a`][0e2948a]
+- **Atin's overlay.** a vertical action rail, a scrolling voice trace, a history browser, drag anywhere, and copy, reprocess and cancel one click away. [overlay history][overlay]
 
-FluidVoice is fully open source under GPLv3. **Fluid Intelligence** is a separate, privately maintained local AI runtime that powers advanced on-device dictation enhancement — smart formatting, context-aware capitalization, and post-processing — all running locally on your Mac.
+## install.
 
-The app works great on its own with any supported speech model and optional cloud AI providers. Fluid Intelligence adds a fully local, private AI layer for users who want on-device enhancement without sending data anywhere.
-
-We're keeping Fluid Intelligence private for now so we can sustainably offer the core dictation experience for free. This may change in the future.
-
----
-
-## Fluid Intelligence Sneak Peek
-
-<table>
-  <tr>
-    <td width="50%" align="center"><b>Email Template</b></td>
-    <td width="50%" align="center"><b>Flowers</b></td>
-  </tr>
-  <tr>
-    <td width="50%"><video src="https://github.com/user-attachments/assets/36747e9d-1ea3-4d27-8d38-eaacb6d57285" width="100%"></video></td>
-    <td width="50%"><video src="https://github.com/user-attachments/assets/5f6063ab-0506-4687-b825-c7bf4ab66ed6" width="100%"></video></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><b>Change Time & Name</b></td>
-    <td width="50%" align="center"><b>Emoji</b></td>
-  </tr>
-  <tr>
-    <td width="50%"><video src="https://github.com/user-attachments/assets/6c7a7c4c-17a8-453d-8eff-1aa1fa9f6077" width="100%"></video></td>
-    <td width="50%"><video src="https://github.com/user-attachments/assets/04e00f3d-a602-448d-9bde-50b5e8f61ac6" width="100%"></video></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><b>Hyphens & Numbers</b></td>
-    <td width="50%"></td>
-  </tr>
-  <tr>
-    <td width="50%"><video src="https://github.com/user-attachments/assets/47175f2b-9f06-452e-b892-42488e4ba536" width="100%"></video></td>
-    <td width="50%"></td>
-  </tr>
-</table>
-
-## Demo
-
-### Command Mode — Take any action on your Mac using FluidVoice
-
-https://github.com/user-attachments/assets/ffb47afd-1621-432a-bdca-baa4b8526301
-
-### Write Mode — Write or rewrite text in any text box in any app
-
-https://github.com/user-attachments/assets/c57ef6d5-f0a1-4a3f-a121-637533442c24
-
----
-
-## Features
-
-- **Fluid Intelligence** — on-device AI enhancement for smart formatting, context-aware capitalization, and post-processing, all running locally on your Mac with zero data leaving your machine
-- **Command Mode** — control your Mac by voice: launch apps, run shortcuts, trigger system actions, and automate workflows without touching the keyboard
-- **Write Mode** — write or rewrite text directly in any text field across any app. Select text and rewrite it, or dictate new content inline
-- **Live Preview** — real-time transcription overlay with notch support, so you see words appear as you speak
-- **Multiple Speech Models** — Nemotron Speech 3.5, Parakeet Flash, Parakeet TDT v3 & v2, Cohere Transcribe, Apple Speech, and Whisper. Pick the model that fits your language and latency needs
-- **AI Enhancement** — optional post-processing via OpenAI, Groq, custom providers, or local Fluid Intelligence for cleaner, more accurate transcripts
-- **Audio History** — optional local recording history with budget controls and ZIP export, so you can review past dictations without cloud storage
-- **Today-Usage Stats** — daily usage tracking at a glance with a stats header card and toolbar pill
-- **Adaptive Theming** — light/dark theme that follows your system, with a compact toolbar switcher
-- **Global Hotkey** — instant voice capture from anywhere, no app switching needed
-- **Smart Typing** — direct insertion into any app via accessibility APIs for reliable, app-independent text entry
-- **Menu Bar Integration** — quick access, status, and settings from the menu bar
-- **Auto-Updates** — seamless updates with an optional beta channel for early previews
-- **Per-App Configuration** — assign different prompt sets to different apps, so your dictation adapts to whatever you're working in. Fully optional
-- **Notch-Aware Overlay** — transcription overlay that fits cleanly around the MacBook notch, or use a standard overlay if your Mac doesn't have one
-- **Local-First** — your voice and text never leave your machine unless you opt in to a cloud AI provider
-- **Fastest Parakeet on Mac** — one of the fastest native implementations of Parakeet on macOS, with near-instant transcription and minimal latency
-- **Configurable Overlay** — choose from pill-shaped to large overlay sizes to show live preview, or keep it minimal. Everything is optional
-- **Everything is Optional** — AI enhancement, Fluid Intelligence, audio history, analytics, and beta builds are all opt-in. The core dictation experience works out of the box with zero configuration beyond permissions and a hotkey
-
----
-
-## Supported Models
-
-| Model | Best for | Language support | Download size | Hardware |
-| --- | --- | --- | --- | --- |
-| Nemotron Speech 3.5 — Ultra Fast Low Latency | Streaming-capable multilingual dictation | ~40 languages | ~670 MB | Apple Silicon |
-| Nemotron 3.5 Multilingual | Higher-accuracy multilingual dictation | ~40 languages | ~530 MB | Apple Silicon |
-| [Parakeet Flash (Beta)](https://huggingface.co/nvidia/parakeet_realtime_eou_120m-v1) | Lowest-latency live English dictation | English | ~250 MB | Apple Silicon |
-| Parakeet TDT v3 | Fast default multilingual dictation | [25 languages](#parakeet-tdt-v3-languages) | ~500 MB | Apple Silicon |
-| Parakeet TDT v2 | Fastest English-only dictation | [English](#parakeet-tdt-v2-languages) | ~500 MB | Apple Silicon |
-| Cohere Transcribe | High-accuracy multilingual dictation | [14 languages](#cohere-transcribe-languages) | ~1.4 GB | Apple Silicon |
-| Apple Speech | Zero-download native macOS speech | [System languages](#apple-speech-languages) | Built-in | Apple Silicon + Intel |
-| Whisper Tiny / Base / Small / Medium / Large | Broad compatibility, including Intel Macs | [99 languages](#whisper-language-support) | ~75 MB to ~2.9 GB | Apple Silicon + Intel |
-
-### Parakeet TDT v3 Languages
-
-Bulgarian, Croatian, Czech, Danish, Dutch, English, Estonian, Finnish, French, German, Greek, Hungarian, Italian, Latvian, Lithuanian, Maltese, Polish, Portuguese, Romanian, Russian, Slovak, Slovenian, Spanish, Swedish, and Ukrainian.
-
-### Parakeet TDT v2 Languages
-
-English.
-
-### Cohere Transcribe Languages
-
-English, French, German, Italian, Spanish, Portuguese, Greek, Dutch, Polish, Mandarin, Japanese, Korean, Vietnamese, and Arabic.
-
-### Apple Speech Languages
-
-System language support depends on the macOS speech recognition languages available on your machine.
-
-### Whisper Language Support
-
-Whisper supports up to 99 languages, depending on the model size you choose.
-
----
-
-## Quick Start
-
-1. **Install** with Homebrew:
-   ```bash
-   brew install --cask fluidvoice
-   ```
-   Or download the [latest release](https://github.com/altic-dev/FluidVoice/releases/latest).
-
-2. **Grant permissions** — FluidVoice will ask for microphone and accessibility access. Both are required for dictation and typing into other apps.
-
-3. **Set your hotkey** — pick a global hotkey in settings that triggers voice capture from anywhere.
-
-4. **Go through onboarding** — choose your voice model based on your language and latency needs. Models range from zero-download Apple Speech to high-accuracy Nemotron and Whisper.
-
-5. **(Optional) Enable Fluid Intelligence** — download the local AI model during onboarding for on-device dictation enhancement. Everything runs locally, no data leaves your Mac.
-
-6. **(Optional) Bring your own AI provider** — add an OpenAI, Groq, or custom provider API key for cloud-based enhancement. Keys are stored securely in macOS Keychain. Select "Always allow" for key access.
-
-7. **(Optional) Opt in to beta builds** — `Settings → Automatic Updates → Beta Releases` for early access to new features.
-
----
-
-## Requirements
-
-- macOS 15.0 (Sequoia) or later
-- Apple Silicon Mac for all models
-- Intel Macs supported via Whisper models (from 1.5.1+)
-- ~1 GB disk space for a voice model
-- ~3.5 GB disk space for the Fluid Intelligence model (optional)
-- Microphone access
-- Accessibility permissions for typing
-
----
-
-## Building from Source
+no binaries yet. you build it, with macOS 15 or later and Xcode 26. Parakeet, Nemotron and Cohere need Apple Silicon. Whisper (up to Medium) and Apple Speech also run on Intel, untested in this fork.
 
 ```bash
-git clone https://github.com/altic-dev/FluidVoice.git
-cd FluidVoice
-open Fluid.xcodeproj
+git clone https://github.com/BenevolentFutures/LiquidVoice.git
+cd LiquidVoice
+./build.sh install
 ```
 
-Build and run in Xcode. All dependencies are managed via Swift Package Manager.
+`./build.sh install` builds a signed Release, quits a running Liquid Voice, backs up the previous app, and installs `/Applications/Liquid Voice.app`. to update, pull and run it again.
 
-Run a signed Debug build using the script:
+**signing.** the install needs an Apple Development identity, so macOS keeps your permissions across rebuilds. a free Personal Team is enough: add an Apple Account in Xcode › Settings › Accounts, then create an Apple Development certificate. with several teams, set `FLUIDVOICE_DEVELOPMENT_TEAM` to the Team ID you want. without one, `./build.sh unsigned` makes an unsigned Debug build in `DerivedData/`, and macOS may ask for Accessibility again after each rebuild.
 
-```bash
-./build.sh
-```
+**permissions.** Microphone, to hear you. Accessibility, to type into other apps. then pick a speech model.
 
-The signed build is written to `DerivedData/Build/Products/Debug/FluidVoice Debug.app`.
-Keep launching that product after each rebuild so macOS can preserve its Accessibility
-authorization.
+## privacy.
 
-For CI or contributors who do not have a signing identity, use the explicit unsigned
-fallback:
+your audio and your text stay on your Mac. no telemetry, no account. the app goes online for three things, each your choice:
 
-```bash
-./build.sh unsigned
-```
+- downloading the speech model you pick.
+- AI cleanup, if you set up a provider: OpenAI, Anthropic, Google, xAI, Groq, Cerebras, OpenRouter or a custom endpoint. Ollama and LM Studio stay on your Mac.
+- **Apple ASR Legacy**, which lets macOS choose where speech is recognized, and that may be Apple's servers. every other engine runs on the Mac.
 
-Unsigned builds are tied to a specific executable version and may require Accessibility
-permission to be removed and granted again after rebuilding.
+Feedback opens a draft GitHub issue in your browser. the app posts nothing; you read it and submit it yourself.
+
+## upstream.
+
+we don't merge FluidVoice. we read its fixes and port the ones that belong here by hand, crediting each in the commit. what we took, what we skipped, and why: [UPSTREAM.md](UPSTREAM.md).
+
+## contributing.
+
+bugs and ideas go in [issues](https://github.com/BenevolentFutures/LiquidVoice/issues). pull requests target `liquid-voice`; start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
-## Contributing
-
-Contributions are welcome! Please create an issue first to discuss major changes before submitting a pull request.
-
-### Development Setup
-
-1. Clone and open in Xcode as above.
-2. **Signing:** `FluidVoice → Signing & Capabilities → Automatically manage signing → pick your Team` (Personal Team is fine). If you have certificates for multiple teams, select one without changing the project by running `FLUIDVOICE_DEVELOPMENT_TEAM=YOUR_TEAM_ID ./build.sh`.
-3. Build and run — SPM handles dependencies.
-4. **(Optional) Pre-commit hook** to prevent accidental team ID commits:
-   ```bash
-   cp scripts/check-team-id.sh .git/hooks/pre-commit
-   chmod +x .git/hooks/pre-commit
-   ```
-
-### Pull Request Guidelines
-
-- **One feature or fix per PR** — keep changes focused and atomic
-- **Create an issue first** so work is trackable before review
-- **Discuss non-trivial changes** before opening a PR
-- **Follow the PR template**
-- **Test thoroughly** on your machine
-- **Never commit personal team IDs or API keys**
-- **Check `git diff`** before committing
+*your voice is the fastest way you have to get a thought out of your head. it should land where you meant it.*
 
 ---
 
-## Run Integration Tests
+## license.
 
-```bash
-xcodebuild test -project Fluid.xcodeproj -scheme Fluid -destination 'platform=macOS'
-```
+GPL-3.0, unchanged from FluidVoice. See [LICENSE](LICENSE).
 
-CI uses unsigned builds:
+**Modification notice.** Liquid Voice is a modified version of [FluidVoice](https://github.com/altic-dev/FluidVoice) by altic-dev. Atin Woodard has modified it since 2026-08-15. The changes are listed under *how it differs from FluidVoice* above; [UPSTREAM.md](UPSTREAM.md) and the git history record each one.
 
-```bash
-xcodebuild test -project Fluid.xcodeproj -scheme Fluid -destination 'platform=macOS' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
-```
+FluidVoice by altic-dev and its contributors built nearly all of this: the speech pipeline, hotkeys, typing, settings and model downloads. The models themselves come from NVIDIA, Cohere, OpenAI and Apple. If Liquid Voice is useful to you, please [sponsor altic-dev](https://github.com/sponsors/altic-dev).
 
----
-
-## Privacy & Analytics
-
-FluidVoice is **local-first**. Your voice, audio, and transcribed text never leave your machine unless you explicitly opt in to a cloud AI provider.
-
-### What's Collected (Opt-In)
-
-Anonymous analytics are enabled by default to track app health and feature usage. You can disable at any time from `Settings → Share Anonymous Analytics`.
-
-**Collected:**
-
-- App version, build, macOS version
-- Low-cardinality feature/config flags (e.g. app mode, major settings)
-- Approximate usage ranges (not exact values)
-- High-level success/error outcomes
-
-**Not Collected:**
-
-- Voice, raw audio, or transcribed text
-- Selected text, prompts, or AI responses
-- Terminal commands, window titles, file paths, clipboard, or typed content
-- Any personal or private information
-
----
-
-## Community
-
-Join our Discord: https://discord.gg/VUPHaKSvYV
-
-Follow development on X: [@ALTIC_DEV](https://x.com/ALTIC_DEV)
-
----
-
-## License
-
-From 2026-02-23 onward, this project is licensed under the [GNU General Public License, Version 3.0 (GPLv3)](LICENSE).
-
-Versions published before this date were licensed under Apache License 2.0.
+[base]: https://github.com/altic-dev/FluidVoice/commit/d62adc9ac35467f9933fda689111514545466a2d
+[0e2948a]: https://github.com/BenevolentFutures/LiquidVoice/commit/0e2948ac
+[19202c1]: https://github.com/BenevolentFutures/LiquidVoice/commit/19202c1a
+[8ed75b9]: https://github.com/BenevolentFutures/LiquidVoice/commit/8ed75b9a
+[8ab26a8]: https://github.com/BenevolentFutures/LiquidVoice/commit/8ab26a8f
+[8295536]: https://github.com/BenevolentFutures/LiquidVoice/commit/82955361
+[68afebc]: https://github.com/BenevolentFutures/LiquidVoice/commit/68afebce
+[overlay]: https://github.com/BenevolentFutures/LiquidVoice/commits/liquid-voice/Sources/Fluid/Views/BottomOverlayView.swift
+[#2]: https://github.com/BenevolentFutures/LiquidVoice/pull/2
+[#3]: https://github.com/BenevolentFutures/LiquidVoice/pull/3
+[#4]: https://github.com/BenevolentFutures/LiquidVoice/pull/4
+[#7]: https://github.com/BenevolentFutures/LiquidVoice/pull/7
+[#8]: https://github.com/BenevolentFutures/LiquidVoice/pull/8
+[#9]: https://github.com/BenevolentFutures/LiquidVoice/pull/9
+[#10]: https://github.com/BenevolentFutures/LiquidVoice/pull/10

@@ -1482,7 +1482,7 @@ final class TypingService {
         /// Returns nil once the paste is sent. `.targetRestoreFailed` when the terminal is not in
         /// front (nothing is sent; the clipboard is left or put back as it was). A clipboard
         /// race (snapshot or write) is retried once; a terminal that is not in front never is.
-        /// `atDispatch` runs once the terminal is confirmed in front, right before the Cmd+V goes.
+        /// `atDispatch` runs right before the dispatch instant's frontmost look and the Cmd+V.
         func paste(
             _ text: String,
             to pid: pid_t,
@@ -1597,13 +1597,15 @@ final class TypingService {
             let failure = self.session.paste(
                 text,
                 dispatch: {
+                    // Before the last look, so a slow read here (Spoken Send's AX focus check)
+                    // cannot open a gap between the look and the Cmd+V.
+                    atDispatch()
                     // Last look, with the transcript already on the clipboard: never send blind.
                     guard self.isInFront(pid) else {
                         leftFront = true
                         TypingService.logFrontmostCheck(stage: "at_dispatch", target: pid, waitedMs: 0, inFront: false)
                         return false
                     }
-                    atDispatch()
                     return self.postPaste(pid)
                 },
                 makeConsumptionWait: {

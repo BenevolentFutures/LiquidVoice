@@ -15,6 +15,25 @@ import SwiftUI
 
 // MARK: - AI Processing Errors
 
+/// Whether a failed streaming AI call is worth retrying without streaming. Only a response the
+/// server could not stream (bad response, HTTP error) is; a transport failure or cancellation
+/// would fail the same way again. Ported from altic-dev/FluidVoice@42e33e68 (#950, "remove
+/// fallback and history stalls").
+nonisolated enum DictationStreamingFallbackPolicy {
+    static func shouldRetryWithoutStreaming(after error: Error) -> Bool {
+        if error is CancellationError || error is URLError {
+            return false
+        }
+        guard let llmError = error as? LLMError else { return true }
+        switch llmError {
+        case .networkError, .timeout, .invalidURL, .encodingError, .invalidRequest:
+            return false
+        case .invalidResponse, .httpError:
+            return true
+        }
+    }
+}
+
 enum AIProcessingError: LocalizedError {
     case noVerifiedProvider
     case missingAPIKey(provider: String)
@@ -2042,6 +2061,15 @@ struct ContentView: View {
             do {
                 response = try await LLMClient.shared.call(config)
             } catch {
+                // A transport failure (offline, timeout, bad URL) would only fail again without
+                // streaming, doubling the wait before the raw text is typed as the fallback.
+                guard DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: error) else {
+                    DebugLogger.shared.warning(
+                        "Streaming dictation post-processing failed; not retrying (transport): \(error.localizedDescription)",
+                        source: "ContentView"
+                    )
+                    throw error
+                }
                 DebugLogger.shared.warning(
                     "Streaming dictation post-processing failed; retrying without streaming: \(error.localizedDescription)",
                     source: "ContentView"

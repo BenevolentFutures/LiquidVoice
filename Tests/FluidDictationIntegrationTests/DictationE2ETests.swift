@@ -2803,3 +2803,16 @@ final class StopUIRefreshHoldTests: XCTestCase {
         XCTAssertFalse(asr.holdsStopUIRefresh)
     }
 }
+
+final class DictationStreamingFallbackPolicyTests: XCTestCase {
+    func testOnlyAResponseTheServerCouldNotStreamIsRetriedWithoutStreaming() {
+        XCTAssertTrue(DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: LLMError.invalidResponse))
+        XCTAssertTrue(DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: LLMError.httpError(400, "no stream")))
+
+        XCTAssertFalse(DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: LLMError.timeout(30)))
+        XCTAssertFalse(DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: LLMError.networkError(URLError(.notConnectedToInternet))))
+        XCTAssertFalse(DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: LLMError.invalidURL))
+        XCTAssertFalse(DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: URLError(.timedOut)))
+        XCTAssertFalse(DictationStreamingFallbackPolicy.shouldRetryWithoutStreaming(after: CancellationError()))
+    }
+}

@@ -449,6 +449,9 @@ final class GlobalHotkeyManager: NSObject {
     /// Asked first when the cancel shortcut is pressed: drops a pending Spoken Send Return and
     /// returns true when one was showing (DESIGN.md §15), so the dictation goes on.
     private var spokenSendCancelCallback: (() -> Bool)?
+    /// The cancel key's last press dropped a Spoken Send Return: its own auto-repeats are consumed
+    /// and do nothing else (they must neither cancel the dictation nor reach the app).
+    private var isSwallowingCancelKeyRepeats = false
     private var pasteLastTranscriptionCallback: (() -> Void)?
     private var reprocessLastDictationCallback: (() -> Void)?
     private var hotkeyMode: HotkeyActivationMode = SettingsStore.shared.hotkeyMode
@@ -1469,12 +1472,18 @@ final class GlobalHotkeyManager: NSObject {
 
             // Check the configured cancel shortcut first.
             if SettingsStore.shared.cancelRecordingHotkeyShortcut.matches(keyCode: keyCode, modifiers: eventModifiers) {
-                // While a Spoken Send Return is pending (SEND showing: armed, counting down, or
-                // stopped and transcribing), the first press drops only the Return, and the key is
-                // consumed so it never reaches the app (Esc would interrupt a Claude Code turn).
-                // The dictation goes on; a second press cancels it (DESIGN.md §15).
-                if let cancelsSend = self.spokenSendCancelCallback, cancelsSend() {
+                // While a Spoken Send Return is pending and the pill shows SEND, the first press
+                // drops only the Return, and the key is consumed so it never reaches the app (Esc
+                // would interrupt a Claude Code turn). The dictation goes on; a second press cancels
+                // it (DESIGN.md §15). The callback is the one gate; otherwise nothing changes here.
+                let isAutorepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+                if isAutorepeat, self.isSwallowingCancelKeyRepeats {
+                    return nil
+                }
+                self.isSwallowingCancelKeyRepeats = false
+                if !isAutorepeat, let cancelsSend = self.spokenSendCancelCallback, cancelsSend() {
                     DebugLogger.shared.info("Cancel shortcut pressed - canceled the Spoken Send Return", source: "GlobalHotkeyManager")
+                    self.isSwallowingCancelKeyRepeats = true
                     return nil
                 }
 
@@ -1685,6 +1694,10 @@ final class GlobalHotkeyManager: NSObject {
             }
 
         case .keyUp:
+            // The cancel key is up: a later press is a new one.
+            if keyCode == SettingsStore.shared.cancelRecordingHotkeyShortcut.keyCode {
+                self.isSwallowingCancelKeyRepeats = false
+            }
             // Prompt mode key up (press and hold mode)
             if self.handlePromptModeKeyUp(keyCode: keyCode) { return nil }
 

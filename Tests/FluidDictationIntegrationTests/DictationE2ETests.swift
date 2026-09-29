@@ -3509,7 +3509,7 @@ final class SignalOverlayBehaviorTests: XCTestCase {
     }
 
     /// Once the stop decides, the held pill's placard follows the decision: SEND only when the
-    /// Return will follow, NO SEND when the phrase was said but it will not.
+    /// Return will follow, NO SEND in ink for a cancel, dim when no Return goes there.
     func testThePlacardFollowsTheSendDecision() async {
         let controller = BottomOverlayWindowController.shared
         let model = SignalOverlayModel.shared
@@ -3518,11 +3518,13 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
         controller.markRecordingStopped()
         model.setStopPlacard(.send)
-        controller.spokenSendDecided(returnFollows: false, phraseDetected: true)
-        XCTAssertEqual(model.stopPlacard, .noSend)
-        controller.spokenSendDecided(returnFollows: true, phraseDetected: true)
+        controller.spokenSendDecided(.canceled)
+        XCTAssertEqual(model.stopPlacard, .noSend, "a cancel reads NO SEND in ink")
+        controller.spokenSendDecided(.returnFollows)
         XCTAssertEqual(model.stopPlacard, .send)
-        controller.spokenSendDecided(returnFollows: false, phraseDetected: false)
+        controller.spokenSendDecided(.noReturn)
+        XCTAssertEqual(model.stopPlacard, .noReturn, "a terminal without Return stays dim")
+        controller.spokenSendDecided(.noPhrase)
         XCTAssertEqual(model.stopPlacard, SignalPlacard.none)
         _ = await controller.hideAndWait()
     }

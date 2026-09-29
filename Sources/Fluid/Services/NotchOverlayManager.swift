@@ -437,6 +437,10 @@ final class NotchOverlayManager {
         let normalized = self.normalizedOverlayMode(mode)
         self.currentMode = normalized
         NotchContentState.shared.mode = normalized
+        // Spoken Send is dictation's: a switch to command or edit leaves nothing armed.
+        if normalized != .dictation {
+            SpokenSendController.shared.leftDictationMode()
+        }
         self.syncPromptPickerMode(for: normalized)
     }
 

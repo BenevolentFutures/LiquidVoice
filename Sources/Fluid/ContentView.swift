@@ -2317,8 +2317,9 @@ struct ContentView: View {
         )
         // The held pill's placard follows the decision from here (no longer cancelable).
         BottomOverlayWindowController.shared.spokenSendDecided(
-            returnFollows: spokenSend.shouldSend,
-            phraseDetected: spokenSend.phraseDetected
+            spokenSend.shouldSend
+                ? (SpokenSendController.shared.sendsInRecordingApp ? .returnFollows : .noReturn)
+                : (spokenSend.phraseDetected ? .canceled : .noPhrase)
         )
         if spokenSend.isPhraseOnly {
             traceOutcome = "spoken_send_phrase_only"
@@ -2588,7 +2589,7 @@ struct ContentView: View {
             } else if isTargetReady {
                 if spokenSend.shouldSend {
                     // The phrase was said but no Return goes here (a blocked target, AI fallback).
-                    BottomOverlayWindowController.shared.spokenSendDecided(returnFollows: false, phraseDetected: true)
+                    BottomOverlayWindowController.shared.spokenSendDecided(.noReturn)
                 }
                 // The typing service finishes the trace once the paste is posted.
                 trace.expectDelivery()
@@ -2685,6 +2686,7 @@ struct ContentView: View {
         SpokenSendController.shared.attach(
             partials: self.asr.$partialTranscription.eraseToAnyPublisher(),
             audioLevels: self.asr.audioLevelPublisher,
+            recording: self.asr.$isRunning.eraseToAnyPublisher(),
             hooks: SpokenSendController.Hooks(
                 isDictating: {
                     (self.activeRecordingMode == .dictate || self.activeRecordingMode == .promptMode)

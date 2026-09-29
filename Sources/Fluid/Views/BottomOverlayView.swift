@@ -486,22 +486,60 @@ final class BottomOverlayWindowController {
         return true
     }
 
-    /// Esc, the Cancel chip or a click on the pill while SEND shows: drop only the Return
-    /// (DESIGN.md §15), and say NO SEND. Returns false when no Return was pending, so the caller
-    /// goes on to cancel the dictation.
+    /// Esc, the Cancel chip or a click on the pill: drops only the Return (DESIGN.md §15) and says
+    /// NO SEND, when, and only when, (a) a Return is genuinely pending (the recording is live, or
+    /// its stop has begun and the send is not decided) and (b) the bottom pill is presented and
+    /// visibly shows SEND. The one gate for "should this cancel be the Return's?": in every other
+    /// state it returns false and the caller does what it always did.
     @discardableResult
-    func cancelSpokenSendIfArmed() -> Bool {
-        let spokenSend = SpokenSendController.shared
-        guard spokenSend.cancelsReturnFirst, spokenSend.cancelSend() else { return false }
+    func cancelSpokenSendIfArmed(_ spokenSend: SpokenSendController = .shared) -> Bool {
+        guard spokenSend.hasPendingReturn,
+              self.isShowingSendPlacard(spokenSend: spokenSend),
+              spokenSend.cancelSend()
+        else { return false }
         SignalOverlayModel.shared.markSendCanceled()
         return true
     }
 
-    /// The stop decided the Spoken Send outcome: the held pill's placard reads SEND only when the
-    /// Return will follow, NO SEND when the phrase was said but it will not.
-    func spokenSendDecided(returnFollows: Bool, phraseDetected: Bool) {
+    /// The pill is on screen, not fading, and shows the SEND placard right now.
+    func isShowingSendPlacard(spokenSend: SpokenSendController = .shared) -> Bool {
+        let state = NotchContentState.shared
+        let model = SignalOverlayModel.shared
+        guard state.isBottomOverlayPresented, !state.isBottomOverlayDismissing, !model.isFading,
+              self.window?.alphaValue ?? 0 > 0
+        else { return false }
+        let display = BottomOverlayView.display(contentState: state, model: model)
+        return BottomOverlayView.placard(
+            display: display,
+            model: model,
+            spokenSend: spokenSend,
+            spokenSendEnabled: SettingsStore.shared.spokenSendEnabled,
+            mode: state.mode
+        ) == .send
+    }
+
+    /// How the stop decided Spoken Send, for the held pill's placard.
+    enum SpokenSendOutcome {
+        /// A Return will follow the text: SEND.
+        case returnFollows
+        /// The user canceled it: NO SEND in ink.
+        case canceled
+        /// The phrase was said but no Return goes there (a terminal that never gets one, no
+        /// target, an AI fallback): NO SEND, dim. Ink is reserved for a cancel (DESIGN.md §15).
+        case noReturn
+        /// No phrase: no placard.
+        case noPhrase
+    }
+
+    /// The stop decided the Spoken Send outcome; the held pill's placard follows it from here.
+    func spokenSendDecided(_ outcome: SpokenSendOutcome) {
         guard NotchContentState.shared.isBottomOverlayPresented, SignalOverlayModel.shared.isPostStop else { return }
-        let placard: SignalPlacard = returnFollows ? .send : (phraseDetected ? .noSend : .none)
+        let placard: SignalPlacard = switch outcome {
+        case .returnFollows: .send
+        case .canceled: .noSend
+        case .noReturn: .noReturn
+        case .noPhrase: .none
+        }
         SignalOverlayModel.shared.setStopPlacard(placard)
     }
 

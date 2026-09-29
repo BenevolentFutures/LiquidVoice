@@ -42,9 +42,13 @@ struct BottomOverlayView: View {
     }
 
     var display: Display {
-        if self.contentState.isProcessing { return .transcribing }
-        if self.contentState.isAIProcessingFailureVisible { return .notice }
-        switch self.model.phase {
+        Self.display(contentState: self.contentState, model: self.model)
+    }
+
+    static func display(contentState: NotchContentState, model: SignalOverlayModel) -> Display {
+        if contentState.isProcessing { return .transcribing }
+        if contentState.isAIProcessingFailureVisible { return .notice }
+        switch model.phase {
         case .idle: return .idle
         case .listening: return .listening
         case .stopped: return .stopped
@@ -103,7 +107,7 @@ struct BottomOverlayView: View {
     /// After the stop, Cancel acts while it still has something to do: drop a pending Return, or,
     /// once dropped, dismiss the pill (the text still pastes; it is already on its way).
     private func isInert(_ role: ChipRole) -> Bool {
-        let cancelHasWork = self.spokenSend.cancelsReturnFirst || self.model.stopPlacard == .noSend
+        let cancelHasWork = self.canCancelSend || self.model.stopPlacard == .noSend
         return Self.isChipInert(role, display: self.display, cancelHasWork: cancelHasWork)
     }
 
@@ -362,22 +366,37 @@ struct BottomOverlayView: View {
     }
 
     private var canCancelSend: Bool {
-        self.placard == .send && self.spokenSend.cancelsReturnFirst
+        self.placard == .send && self.spokenSend.hasPendingReturn
     }
 
     private var placard: SignalPlacard {
         if let placard = self.model.inspectionPlacard { return placard }
-        switch self.display {
+        return Self.placard(
+            display: self.display,
+            model: self.model,
+            spokenSend: self.spokenSend,
+            spokenSendEnabled: self.settings.spokenSendEnabled,
+            mode: self.contentState.mode
+        )
+    }
+
+    /// The placard the pill shows for `display`. The view draws it; the cancel gate reads it, so
+    /// "the pill visibly shows SEND" means exactly what is on screen.
+    static func placard(
+        display: Display,
+        model: SignalOverlayModel,
+        spokenSend: SpokenSendController,
+        spokenSendEnabled: Bool,
+        mode: OverlayMode
+    ) -> SignalPlacard {
+        switch display {
         case .listening:
             // A canceled countdown keeps NO SEND while its bar is held (it only exists with Spoken Send).
-            if self.model.sendDrain?.isCanceled == true { return .noSend }
-            guard self.settings.spokenSendEnabled, self.contentState.mode == .dictation else { return .none }
-            return SignalOverlayModel.placard(
-                indicator: self.spokenSend.indicator,
-                sendsInApp: self.spokenSend.sendsInRecordingApp
-            )
+            if model.sendDrain?.isCanceled == true { return .noSend }
+            guard spokenSendEnabled, mode == .dictation else { return .none }
+            return SignalOverlayModel.placard(indicator: spokenSend.indicator, sendsInApp: spokenSend.sendsInRecordingApp)
         case .stopped, .transcribing, .delivered:
-            return self.model.stopPlacard
+            return model.stopPlacard
         case .notice, .idle:
             return .none
         }

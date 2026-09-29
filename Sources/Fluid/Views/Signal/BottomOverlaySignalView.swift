@@ -354,8 +354,9 @@ struct BottomOverlayView: View {
         if let placard = self.model.inspectionPlacard { return placard }
         switch self.display {
         case .listening:
-            guard self.settings.spokenSendEnabled, self.contentState.mode == .dictation else { return .none }
+            // A canceled countdown keeps NO SEND while its bar is held (it only exists with Spoken Send).
             if self.model.sendDrain?.isCanceled == true { return .noSend }
+            guard self.settings.spokenSendEnabled, self.contentState.mode == .dictation else { return .none }
             return SignalOverlayModel.placard(
                 indicator: self.spokenSend.indicator,
                 sendsInApp: self.spokenSend.sendsInRecordingApp

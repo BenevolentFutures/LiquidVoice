@@ -321,7 +321,7 @@ body {
 /* Brackets are a hover affordance that marks what is under the pointer: the pill's draw while the pointer is
    over the pill or the rails' empty gutter; over a chip or the history card, that element's own brackets draw
    instead (the 6 pt gutter cannot hold two brackets side by side). Never at rest, never orange. */
-.sg:hover:not(:has(.sg-chip:not(:disabled):hover, .sg-hist:hover)) .sg-pill > .tk, .sg.is-hover .sg-pill > .tk { opacity: 1; }
+.sg:hover:not(:has(.sg-chip:not(:disabled):hover, .sg-hist:hover, .sg-textbtn:hover)) .sg-pill > .tk, .sg.is-hover .sg-pill > .tk { opacity: 1; }
 
 .sg-top { position: relative; height: 54px; }           /* reserved: the 3-line preview, all non-failed states */
 .sg-gap { height: 6px; flex: none; }                     /* + the trace's own 2 pt top margin = 8 */
@@ -379,7 +379,28 @@ body {
 .sg[data-family="outcome"] .sg-rec { visibility: hidden; }          /* delivered (pasted) and sent */
 .sg[data-family="outcome"] .sg-done { display: flex; }
 
-/* Recovery card family (failed, timedout, asrback, micoff): one anatomy. The pill grows upward; the trace row,
+/* Notice row (asrback): a lighter swap inside the reserved 54 pt preview slot, like Pasted. No growth, no top rule.
+   Line 1 headline, line 2 reason, line 3 inline text actions: Reprocess (accent, glyph, no fill; hover draws its
+   outside bracket like a chip, press inverts) · Dismiss. */
+.sg-notice { position: absolute; inset: 0; display: none; }
+.sg[data-family="notice"] .sg-rec { visibility: hidden; }
+.sg[data-family="notice"] .sg-notice { display: block; }
+.sg-notice b { display: block; font: 600 13.5px/18px var(--sg-font); color: var(--sg-text); }
+.sg-notice span.r { display: block; font: 400 13px/18px var(--sg-font); color: var(--sg-text-2); }
+.sg-notice .acts { height: 18px; display: flex; align-items: center; gap: 6px; font: 400 13px/18px var(--sg-font); color: var(--sg-text-2); }
+.sg-textbtn {
+  position: relative; height: 18px; margin: 0 -4px; padding: 0 4px; border: 0; border-radius: 0; background: none; overflow: visible;
+  display: inline-flex; align-items: center; gap: 5px; cursor: default; outline: none;
+  font: 500 13px/18px var(--sg-font); color: var(--sg-text-2);
+  transition: background-color 60ms linear, color 60ms linear;
+}
+.sg-textbtn.accent { font-weight: 600; color: var(--sg-accent); }
+.sg-textbtn svg { display: block; width: 12px; height: 12px; flex: none; }
+.sg-textbtn .tk { --tk-gap: 2px; --tk-len: 6px; }
+.sg-textbtn:hover .tk { opacity: 1; }
+.sg-textbtn.is-pressed { background: var(--sg-inv-bg); color: var(--sg-inv-fg); }
+
+/* Recovery card family (failed, timedout, micoff): one anatomy. The pill grows upward; the trace row,
    the mic row, the rails and the chips stay put. Headline, reason line, [transcript, failed only], action row. */
 .sg-card { display: none; }
 .sg-fail-rule { position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--sg-accent); display: none; }
@@ -1038,6 +1059,11 @@ window.LV = {
           <span class="sg-stamp">${G.check.replace('viewBox', 'width="18" height="18" viewBox').replace('stroke-width="2"', 'stroke-width="2.25"')}</span>
           <span class="sg-done-text"><b class="sg-done-head"></b><span class="sg-done-meta"></span></span>
         </div>
+        <div class="sg-notice" role="status">
+          <b>Speech recognition is back</b>
+          <span class="r">A kept dictation is waiting</span>
+          <span class="acts"><button class="sg-textbtn accent" data-act="reprocess" title="Transcribe the kept audio">${TK}${G.reprocess}Reprocess</button><span aria-hidden="true">·</span><button class="sg-textbtn" data-act="dismiss">${TK}Dismiss</button></span>
+        </div>
         <div class="sg-card" role="alert">
           <h3 class="sg-card-head"></h3>
           <p class="sg-reason"></p>
@@ -1234,14 +1260,13 @@ window.LV = {
 
   // ---------------------------------------------------------------- state
   const FAMILY = { idle: "idle", listening: "live", history: "live", transcribing: "work", countdown: "countdown",
-    delivered: "outcome", sent: "outcome", failed: "card", timedout: "card", asrback: "card", micoff: "card" };
+    delivered: "outcome", sent: "outcome", failed: "card", timedout: "card", asrback: "notice", micoff: "card" };
   const REASONS = { nofocus: "No text field focused", clipboard: "The text is on your clipboard",
     clipboardkept: "Your newer clipboard was left alone, the text is in History" };
   const CARDS = {
     failed:   { head: () => `Couldn’t paste into ${TARGET}`, reason: () => REASONS[OPT.reason], text: true, action: "copy", meta: () => `${H0.words} words` },
-    // No meta on these two: the frozen timer below already shows the duration (each fact appears once).
+    // No meta here: the frozen timer below already shows the duration (each fact appears once).
     timedout: { head: () => "Transcription timed out", reason: () => "Your audio is kept", action: "reprocess", meta: () => "" },
-    asrback:  { head: () => "Speech recognition is back", reason: () => "A kept dictation is waiting", action: "reprocess", meta: () => "" },
     micoff:   { head: () => "Microphone access is off", reason: () => "Allow Liquid Voice in Privacy & Security", action: "settings", meta: () => "" },
   };
   const ACTIONS = {
@@ -1428,6 +1453,9 @@ window.LV = {
     else if (a === "settings") setTimeout(() => LVStage.setState("idle"), 120);   // native: open x-apple.systempreferences:…Privacy_Microphone
   });
   el.dismissBtn.addEventListener("click", () => LVStage.setState("idle"));
+  // Notice row actions (asrback). The Cancel chip also dismisses it (Cancel → idle).
+  root.querySelectorAll(".sg-textbtn").forEach((b) => { pressable(b);
+    b.addEventListener("click", () => { if (b.dataset.act === "reprocess") reprocess(); else LVStage.setState("idle"); }); });
 
   // Spoken Send demo (S): dictate, the phrase is heard at 2.6 s, stop at 3.8 s, transcribe, count down, send.
   let demo = 0;

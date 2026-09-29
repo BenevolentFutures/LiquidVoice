@@ -2611,6 +2611,11 @@ final class GlobalHotkeyManager: NSObject {
         return true
     }
 
+    /// Start / Stop Dictation from the menu bar menu: the same guarded toggle as the hotkey.
+    func toggleRecordingFromMenu() {
+        self.toggleRecording()
+    }
+
     private func toggleRecording() {
         Task { @MainActor [weak self] in
             guard let self = self else { return }

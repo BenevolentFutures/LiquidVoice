@@ -3533,6 +3533,10 @@ struct ContentView: View {
             self.applyDictationShortcutSelectionContext(for: slot)
         }
 
+        self.menuBarManager.onToggleDictationRequested = {
+            self.hotkeyManager?.toggleRecordingFromMenu()
+        }
+
         guard self.hotkeyManager == nil else { return }
 
         self.hotkeyManager = GlobalHotkeyManager(

@@ -3005,6 +3005,75 @@ final class SignalOverlayRenderTests: XCTestCase {
         }
     }
 
+    /// The menu bar mark (DESIGN.md §10): 22 x 16 template images, one per state, the same width
+    /// in every state; and the menu's mono header row.
+    func testMenuBarMarkStatesAndHeader() throws {
+        let trace = SignalTraceModel(barCount: 39)
+        trace.begin(at: 0)
+        for step in 0..<60 {
+            trace.ingest(level: step % 3 == 0 ? 0.95 : 0.6, at: Double(step) / 12)
+        }
+        let listeningBars = SignalMenuBarMark.listeningBars(from: trace)
+        XCTAssertEqual(listeningBars.count, 3)
+        XCTAssertTrue(listeningBars.allSatisfy { $0 >= 4 && $0 <= 12 && $0.truncatingRemainder(dividingBy: 2) == 0 })
+
+        let marks: [(String, NSImage)] = [
+            ("idle", SignalMenuBarMark.image(kind: .idle, bracket: false)),
+            ("idle-hover", SignalMenuBarMark.image(kind: .idle, bracket: true)),
+            ("listening", SignalMenuBarMark.image(kind: .listening, bars: listeningBars, bracket: false)),
+            ("listening-open", SignalMenuBarMark.image(kind: .listening, bars: listeningBars, bracket: true)),
+            ("transcribing", SignalMenuBarMark.image(kind: .transcribing, bracket: false)),
+        ]
+        for (_, image) in marks {
+            XCTAssertEqual(image.size, NSSize(width: 22, height: 16))
+            XCTAssertTrue(image.isTemplate)
+        }
+
+        guard let folder = self.outputFolder else { return }
+        for (theme, background, ink) in [("dark", NSColor(white: 0.16, alpha: 1), NSColor.white), ("light", NSColor(white: 0.93, alpha: 1), NSColor.black)] {
+            // The marks side by side at 4x, tinted as the menu bar tints a template image.
+            let scale: CGFloat = 4
+            let size = NSSize(width: CGFloat(marks.count) * 34 + 6, height: 28)
+            let rep = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+            rep.size = size
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            background.setFill()
+            NSRect(origin: .zero, size: size).fill()
+            for (index, entry) in marks.enumerated() {
+                let tinted = NSImage(size: entry.1.size, flipped: false) { rect in
+                    entry.1.draw(in: rect)
+                    ink.set()
+                    rect.fill(using: .sourceAtop)
+                    return true
+                }
+                tinted.draw(in: NSRect(x: 6 + CGFloat(index) * 34, y: 6, width: 22, height: 16))
+            }
+            NSGraphicsContext.restoreGraphicsState()
+            try SignalRenderStage.write(rep, to: folder.appendingPathComponent("\(theme)-21-menubar-marks.png"))
+
+            let header = SignalMenuHeaderView(frame: NSRect(x: 0, y: 0, width: 262, height: 24))
+            header.stateText = "Listening 0:37"
+            header.isLive = true
+            let headerRep = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 262 * 2, pixelsHigh: 24 * 2, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+            headerRep.size = header.bounds.size
+            NSGraphicsContext.saveGraphicsState()
+            let headerContext = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: headerRep))
+            NSGraphicsContext.current = headerContext
+            // The menu's own background stands behind the row in a real menu.
+            NSAppearance(named: theme == "dark" ? .darkAqua : .aqua)?.performAsCurrentDrawingAppearance {
+                background.setFill()
+                header.bounds.fill()
+                headerContext.cgContext.translateBy(x: 0, y: header.bounds.height)
+                headerContext.cgContext.scaleBy(x: 1, y: -1)
+                NSGraphicsContext.current = NSGraphicsContext(cgContext: headerContext.cgContext, flipped: true)
+                header.draw(header.bounds)
+            }
+            NSGraphicsContext.restoreGraphicsState()
+            try SignalRenderStage.write(headerRep, to: folder.appendingPathComponent("\(theme)-22-menu-header.png"))
+        }
+    }
+
     func testHistoryCardRendersAboveTheHistoryChip() throws {
         for appearance in [NSAppearance.Name.darkAqua, .aqua] {
             let theme = appearance == .darkAqua ? "dark" : "light"

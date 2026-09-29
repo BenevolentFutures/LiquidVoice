@@ -17,6 +17,20 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
 
     // Cached menu items to avoid rebuilding entire menu
     private var statusMenuItem: NSMenuItem?
+    private var headerView: SignalMenuHeaderView?
+    private var toggleDictationMenuItem: NSMenuItem?
+    private var headerRefreshTimer: Timer?
+
+    // The Signal menu bar mark (DESIGN.md §10).
+    private var markKind: SignalMenuBarMark.Kind = .idle
+    private var markBars: [CGFloat] = SignalMenuBarMark.restingBars
+    private var isMarkHovered = false
+    private var isMenuOpen = false
+    private var markTimer: Timer?
+    private var markHoverTracker: MenuBarMarkHoverTracker?
+
+    /// Start / Stop Dictation from the menu: the same toggle as the dictation hotkey.
+    var onToggleDictationRequested: (() -> Void)?
     private var copyLastTranscriptMenuItem: NSMenuItem?
     private var microphoneMenuItem: NSMenuItem?
     private var microphoneSubmenu: NSMenu?
@@ -109,7 +123,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
             .sink { [weak self, weak asrService] isRunning in
                 guard let self else { return }
                 self.isRecording = isRunning
-                self.updateMenuBarIcon()
+                self.recordingStateChanged(isRunning: isRunning)
                 // Rebuilding the menu is main-thread work nobody sees mid-stop: do it once the
                 // stop pipeline has handed the text off (from altic-dev/FluidVoice#950).
                 if !isRunning, asrService?.holdsStopUIRefresh == true {
@@ -365,6 +379,13 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         // Track processing state to prevent hide during AI refinement
         self.isProcessingActive = processing
         self.updateMenuItemsText()
+        // The outlined square only once the final pass is slow (this call is deferred 250 ms).
+        if processing, !self.isRecording {
+            self.markKind = .transcribing
+            self.applyMark()
+        } else if !processing {
+            self.refreshMarkKind()
+        }
 
         if processing {
             self.pendingProcessingShowOperation?.cancel()
@@ -439,6 +460,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         self.isProcessingActive = false
         self.overlayVisible = false
         NotchOverlayManager.shared.setProcessing(false)
+        self.refreshMarkKind()
         self.overlayBench("release_for_outcome_hold")
     }
 
@@ -450,6 +472,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         self.cancelPendingProcessingCompletionOperations()
         self.isProcessingActive = false
         self.overlayVisible = false
+        self.refreshMarkKind()
 
         NotchOverlayManager.shared.setProcessing(false)
         self.overlayBench("finish_hide_request")
@@ -464,6 +487,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
     func finishProcessingKeepingOverlayVisible() {
         self.cancelPendingProcessingCompletionOperations()
         self.isProcessingActive = false
+        self.refreshMarkKind()
         // Keep the physical overlay visible, but release recording/processing
         // ownership so the next recording can establish a fresh lifecycle.
         self.overlayVisible = false
@@ -501,15 +525,28 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         // Ensure we're not already set up
         guard !self.isSetup else { return }
 
-        // Create status item with error handling
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        // Create status item with error handling. Every mark is 22 x 16, so the width never changes.
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         guard let statusItem = statusItem else {
             throw NSError(domain: "MenuBarManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to create status item"])
         }
 
-        // Set initial icon
-        self.updateMenuBarIcon()
+        // Set initial icon, and draw the hover bracket inside the mark's box.
+        self.applyMark()
+        if let button = statusItem.button {
+            let tracker = MenuBarMarkHoverTracker { [weak self] hovering in
+                self?.isMarkHovered = hovering
+                self?.applyMark()
+            }
+            button.addTrackingArea(NSTrackingArea(
+                rect: .zero,
+                options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                owner: tracker,
+                userInfo: nil
+            ))
+            self.markHoverTracker = tracker
+        }
 
         // Create menu
         self.menu = NSMenu()
@@ -520,30 +557,111 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         self.updateMenu()
     }
 
-    private func updateMenuBarIcon() {
-        // The template icon is the same in every state. Assigning a fresh NSImage on each
-        // recording change forced a status item redraw and a WindowServer round trip on every
-        // start and stop (ported from altic-dev/FluidVoice@fea6d6c9).
-        guard let statusItem = statusItem, statusItem.button?.image == nil else { return }
+    // MARK: - Menu bar mark
 
-        // Use MenuBarIcon asset - vectorized from logo
-        if let image = NSImage(named: "MenuBarIcon") {
-            image.isTemplate = true // Adapts to light/dark mode
-            statusItem.button?.image = image
+    /// Recording started or stopped. Neither redraws the status item on the spot: a status item
+    /// image change is a WindowServer round trip, so the listening mark follows on the first 8 Hz
+    /// tick (125 ms, off the start path) and the resting mark once the stop has handed its text
+    /// off (never on the stop path).
+    private func recordingStateChanged(isRunning: Bool) {
+        if isRunning {
+            self.startMarkTimer()
+        } else {
+            self.stopMarkTimer()
+            StopPipelineWindowWork.afterHandoff { [weak self] in
+                self?.refreshMarkKind()
+            }
         }
     }
 
+    private func startMarkTimer() {
+        guard self.markTimer == nil else { return }
+        let timer = Timer(timeInterval: SignalTheme.Motion.menuBarBars, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.markTick() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        self.markTimer = timer
+    }
+
+    private func stopMarkTimer() {
+        self.markTimer?.invalidate()
+        self.markTimer = nil
+    }
+
+    /// 8 Hz while listening: the bars follow the trace in 2 pt steps, and hold still during Spoken
+    /// Send's countdown (the dictation is not finished until the send resolves).
+    private func markTick() {
+        guard self.isRecording else {
+            self.stopMarkTimer()
+            return
+        }
+        self.markKind = .listening
+        if SpokenSendController.shared.indicator != .countingDown,
+           NotchContentState.shared.isBottomOverlayPresented
+        {
+            self.markBars = SignalMenuBarMark.listeningBars(from: SignalOverlayModel.shared.trace)
+        }
+        self.applyMark()
+        if self.isMenuOpen { self.updateMenuItemsText() }
+    }
+
+    private func refreshMarkKind() {
+        if self.isRecording {
+            self.markKind = .listening
+        } else if self.isProcessingActive, NotchContentState.shared.isProcessing {
+            self.markKind = .transcribing
+        } else {
+            self.markKind = .idle
+            self.markBars = SignalMenuBarMark.restingBars
+        }
+        self.applyMark()
+    }
+
+    private func applyMark() {
+        guard let button = self.statusItem?.button else { return }
+        let image = SignalMenuBarMark.image(
+            kind: self.markKind,
+            bars: self.markKind == .listening ? self.markBars : SignalMenuBarMark.restingBars,
+            bracket: self.isMarkHovered || self.isMenuOpen
+        )
+        // The images are cached, so an unchanged state costs nothing.
+        if button.image !== image {
+            button.image = image
+        }
+    }
+
+    /// The menu (DESIGN.md §10): a plain NSMenu under a mono uppercase header. Start Dictation
+    /// with its hotkey, the microphone, History…, then the items the app already had (Copy Last
+    /// Transcript, Custom Dictionary, Open Liquid Voice), Settings… and Quit.
     private func buildMenuStructure() {
         guard let menu = menu else { return }
 
         menu.removeAllItems()
 
-        // Status indicator with hotkey info
-        self.statusMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        self.statusMenuItem?.isEnabled = false
-        if let statusItem = statusMenuItem {
-            menu.addItem(statusItem)
-        }
+        let header = SignalMenuHeaderView(frame: NSRect(x: 0, y: 0, width: 262, height: 24))
+        let headerItem = NSMenuItem()
+        headerItem.view = header
+        headerItem.isEnabled = false
+        menu.addItem(headerItem)
+        self.headerView = header
+        self.statusMenuItem = headerItem
+        menu.addItem(.separator())
+
+        let toggleItem = NSMenuItem(title: "Start Dictation", action: #selector(toggleDictation), keyEquivalent: "")
+        toggleItem.target = self
+        menu.addItem(toggleItem)
+        self.toggleDictationMenuItem = toggleItem
+
+        let microphoneSubmenu = NSMenu(title: "Microphone")
+        let microphoneMenuItem = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
+        microphoneMenuItem.submenu = microphoneSubmenu
+        menu.addItem(microphoneMenuItem)
+        self.microphoneMenuItem = microphoneMenuItem
+        self.microphoneSubmenu = microphoneSubmenu
+
+        let historyItem = NSMenuItem(title: "History…", action: #selector(openHistory), keyEquivalent: "")
+        historyItem.target = self
+        menu.addItem(historyItem)
 
         let copyLastTranscriptItem = NSMenuItem(
             title: "Copy Last Transcript",
@@ -554,19 +672,6 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         menu.addItem(copyLastTranscriptItem)
         self.copyLastTranscriptMenuItem = copyLastTranscriptItem
 
-        menu.addItem(.separator())
-
-        // Open Main Window
-        let openItem = NSMenuItem(title: "Open Liquid Voice", action: #selector(openMainWindow), keyEquivalent: "")
-        openItem.target = self
-        menu.addItem(openItem)
-
-        // Preferences
-        let preferencesItem = NSMenuItem(title: "Settings...", action: #selector(openPreferences), keyEquivalent: ",")
-        preferencesItem.target = self
-        preferencesItem.keyEquivalentModifierMask = [.command]
-        menu.addItem(preferencesItem)
-
         let customDictionaryItem = NSMenuItem(
             title: "Custom Dictionary",
             action: #selector(openCustomDictionary),
@@ -575,16 +680,17 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         customDictionaryItem.target = self
         menu.addItem(customDictionaryItem)
 
-        let microphoneSubmenu = NSMenu(title: "Microphone")
-        let microphoneMenuItem = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
-        microphoneMenuItem.submenu = microphoneSubmenu
-        menu.addItem(microphoneMenuItem)
-        self.microphoneMenuItem = microphoneMenuItem
-        self.microphoneSubmenu = microphoneSubmenu
+        let openItem = NSMenuItem(title: "Open Liquid Voice", action: #selector(openMainWindow), keyEquivalent: "")
+        openItem.target = self
+        menu.addItem(openItem)
+
+        let preferencesItem = NSMenuItem(title: "Settings…", action: #selector(openPreferences), keyEquivalent: ",")
+        preferencesItem.target = self
+        preferencesItem.keyEquivalentModifierMask = [.command]
+        menu.addItem(preferencesItem)
 
         menu.addItem(.separator())
 
-        // Quit
         let quitItem = NSMenuItem(
             title: "Quit Liquid Voice",
             action: #selector(NSApplication.terminate(_:)),
@@ -608,21 +714,77 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
     }
 
     private func updateMenuItemsText() {
-        // Update status text with hotkey info
-        let hotkeyDisplay = SettingsStore.shared.primaryDictationShortcutDisplayString
-        let hotkeyInfo = hotkeyDisplay.isEmpty ? "" : " (\(hotkeyDisplay))"
-        let statusTitle = self.isRecording ? "Recording...\(hotkeyInfo)" : "Ready to Record\(hotkeyInfo)"
-        self.statusMenuItem?.title = statusTitle
+        let live = self.isRecording
+        let state: String
+        if live {
+            let start = SignalOverlayModel.shared.recordingStartedAt ?? Date()
+            state = SpokenSendController.shared.indicator == .countingDown
+                ? "Sending"
+                : "Listening \(SignalOverlayModel.formatDuration(Date().timeIntervalSince(start)))"
+        } else {
+            state = self.isProcessingActive ? "Working" : "Ready"
+        }
+        self.headerView?.stateText = state
+        self.headerView?.isLive = live
+        self.toggleDictationMenuItem?.attributedTitle = Self.titleWithDetail(
+            live ? "Stop Dictation" : "Start Dictation",
+            detail: SettingsStore.shared.primaryDictationShortcutDisplayString
+        )
+        self.microphoneMenuItem?.attributedTitle = Self.titleWithDetail(
+            "Microphone",
+            detail: BottomOverlayWindowController.currentMicrophoneName()
+        )
         self.copyLastTranscriptMenuItem?.isEnabled = self.canCopyLastTranscript
         self.microphoneMenuItem?.isEnabled = true
+    }
+
+    /// A menu row with a secondary detail right-aligned after a tab ("Start Dictation  ⌥Space").
+    private static func titleWithDetail(_ title: String, detail: String) -> NSAttributedString {
+        let font = NSFont.menuFont(ofSize: 0)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.tabStops = [NSTextTab(textAlignment: .right, location: 236)]
+        let result = NSMutableAttributedString(string: title, attributes: [.font: font, .paragraphStyle: paragraph])
+        let trimmed = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            result.append(NSAttributedString(string: "\t" + trimmed, attributes: [
+                .font: font,
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .paragraphStyle: paragraph,
+            ]))
+        }
+        return result
     }
 
     func menuWillOpen(_ menu: NSMenu) {
         if menu === self.menu {
             AnalyticsService.shared.recordAppActivity()
+            self.isMenuOpen = true
+            self.applyMark()
             self.updateMenuItemsText()
             self.refreshMicrophoneMenu()
+            let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateMenuItemsText() }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            self.headerRefreshTimer = timer
         }
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        guard menu === self.menu else { return }
+        self.isMenuOpen = false
+        self.headerRefreshTimer?.invalidate()
+        self.headerRefreshTimer = nil
+        self.applyMark()
+    }
+
+    @objc private func toggleDictation() {
+        self.onToggleDictationRequested?()
+    }
+
+    @objc private func openHistory() {
+        self.openMainWindow()
+        AppNavigationRouter.shared.request(.history)
     }
 
     private func refreshMicrophoneMenu() {
@@ -892,5 +1054,28 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         }
         window.orderFrontRegardless()
         window.makeKeyAndOrderFront(nil)
+    }
+}
+
+/// Reports the pointer entering and leaving the status item, for the mark's hover bracket.
+private final class MenuBarMarkHoverTracker: NSResponder {
+    private let onChange: (Bool) -> Void
+
+    init(onChange: @escaping (Bool) -> Void) {
+        self.onChange = onChange
+        super.init()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        self.onChange(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        self.onChange(false)
     }
 }

@@ -79,7 +79,22 @@ final class DeliveryFailureOverlayController {
 
     /// A dictation whose transcription timed out (its audio is kept), a recovered model, or a
     /// recording refused while the model recovers. Reprocess is the primary action.
+    ///
+    /// "Speech recognition is back" is good news, so it is not a card but a notice row inside the
+    /// pill (DESIGN.md §15), with the same Reprocess. Only where there is no bottom pill to use (the
+    /// top overlay is set, or a recording owns the pill) does it fall back to the card.
     func showTranscriptionTimeout(_ notice: TranscriptionTimeoutNotice) {
+        if notice == .recovered,
+           BottomOverlayWindowController.shared.presentNotice(
+               .recognitionBack,
+               frozenDuration: AppServices.shared.asr.keptUntranscribedDictationDuration
+           )
+        {
+            // An earlier card (the timeout it recovers from) makes way.
+            if self.isVisible { self.hide() }
+            DebugLogger.shared.info("Recognition-back notice row shown in the pill", source: "DeliveryFailureCard")
+            return
+        }
         let content: SignalCardContent = switch notice {
         case .timedOut:
             SignalCardContent(headline: "Transcription timed out", reason: "Your audio is kept", primary: .reprocess)

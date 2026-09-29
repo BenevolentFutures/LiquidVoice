@@ -1392,6 +1392,11 @@ final class ASRService: ObservableObject {
         self.keptUntranscribedDictation?.stoppedAt
     }
 
+    /// The kept recording's length, for the notice that offers to reprocess it.
+    var keptUntranscribedDictationDuration: TimeInterval? {
+        self.keptUntranscribedDictation?.audio.map { Double($0.durationMilliseconds) / 1000 }
+    }
+
     /// The model has not yet returned a preview chunk that stalled; recording waits for it.
     var isRecoveringFromStalledTranscription: Bool {
         self.isRecoveringStalledStreamingChunk

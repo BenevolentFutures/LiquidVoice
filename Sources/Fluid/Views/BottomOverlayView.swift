@@ -37,6 +37,8 @@ final class BottomOverlayWindowController {
     private var pendingDelivery: PendingDelivery?
     private var deliveryWork: DispatchWorkItem?
     private var sendCancelHold: DispatchWorkItem?
+    /// A notice row's auto-dismiss (10 s, paused while the pointer is over the pill).
+    private var noticeWork: DispatchWorkItem?
     /// The next hide is a cut, not the 120 ms fade (a recovery card takes the overlay's place).
     private var nextHideIsCut = false
     private var pendingResizeWorkItem: DispatchWorkItem?
@@ -596,9 +598,98 @@ final class BottomOverlayWindowController {
         }
     }
 
+    // MARK: - Notice row (DESIGN.md §15)
+
+    /// How long a notice row stays, like the cards it replaced; 4 s more once the pointer leaves.
+    static var noticeDuration: TimeInterval = 10
+    private static let noticeResumeAfterHover: TimeInterval = 4
+
+    /// Shows a notice row in the pill's preview slot: the pill as at rest (flat trace, the kept
+    /// recording's frozen length, no square), no growth, no top rule. Returns false, and changes
+    /// nothing, when there is no bottom pill to use (the top overlay is set, or a recording or a
+    /// held dictation owns the pill); the caller then shows the notice another way.
+    @discardableResult
+    func presentNotice(_ notice: SignalNotice, frozenDuration: TimeInterval?) -> Bool {
+        guard SettingsStore.shared.overlayPosition == .bottom else { return false }
+        let state = NotchContentState.shared
+        let model = SignalOverlayModel.shared
+        if state.isBottomOverlayPresented, !state.isBottomOverlayDismissing, !model.isNotice, model.phase != .idle {
+            return false
+        }
+        Self.overlayBench("bottom_notice_show notice=\(notice)")
+        self.cancelInFlightHideForNewPresentation()
+        self.presentationGeneration &+= 1
+        self.endReleaseTransition(flushDeferredUpdate: false)
+        self.cancelDeliveryHold()
+        self.nextHideIsCut = false
+        BottomOverlayHistoryMenuController.shared.hide()
+        self.ensureMouseDownMonitors()
+        if self.window == nil {
+            self.createWindow()
+        }
+        state.setBottomOverlayPresented(true)
+        state.setBottomOverlayDismissing(false)
+        state.clearAIProcessingFailure()
+        model.ensureTraceBars(SignalOverlayGeometry.forSize(SettingsStore.shared.overlaySize).traceBars)
+        model.microphoneName = Self.cachedMicrophoneName(current: model.microphoneName)
+        model.showNotice(notice, frozenDuration: frozenDuration)
+
+        self.targetScreen = OverlayScreenResolver.screenForCurrentPointer()
+        self.positionWindow()
+        self.window?.setAccessibilityChildren(nil)
+        self.window?.setAccessibilityElement(true)
+        self.window?.alphaValue = 1
+        self.window?.orderFrontRegardless()
+        self.window?.contentView?.displayIfNeeded()
+        CATransaction.flush()
+        self.scheduleNoticeDismiss(after: Self.noticeDuration)
+        return true
+    }
+
+    /// Dismisses the notice row (Dismiss, the Cancel chip, the timer): the pill's usual 120 ms
+    /// fade, or a cut when something takes its place (Reprocess shows the pill again).
+    func dismissNotice(cut: Bool = false) {
+        guard SignalOverlayModel.shared.isNotice, NotchContentState.shared.isBottomOverlayPresented else { return }
+        self.noticeWork?.cancel()
+        self.noticeWork = nil
+        self.nextHideIsCut = cut
+        self.hide()
+    }
+
+    /// The notice's Reprocess: the same Reprocess as the chip, the hotkey and the card it replaced.
+    /// The notice gives way with a cut, since Reprocess shows the pill again.
+    func reprocessFromNotice() {
+        self.dismissNotice(cut: true)
+        NotchContentState.shared.onReprocessLastRequested?()
+    }
+
+    /// The pointer over the pill pauses the notice's timer; leaving resumes it with 4 s.
+    func noticeHoverChanged(_ hovering: Bool) {
+        guard SignalOverlayModel.shared.isNotice else { return }
+        if hovering {
+            self.noticeWork?.cancel()
+            self.noticeWork = nil
+        } else {
+            self.scheduleNoticeDismiss(after: Self.noticeResumeAfterHover)
+        }
+    }
+
+    private func scheduleNoticeDismiss(after delay: TimeInterval) {
+        self.noticeWork?.cancel()
+        let generation = self.presentationGeneration
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.presentationGeneration == generation else { return }
+            self.dismissNotice()
+        }
+        self.noticeWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
     private func cancelDeliveryHold() {
         self.deliveryWork?.cancel()
         self.deliveryWork = nil
+        self.noticeWork?.cancel()
+        self.noticeWork = nil
         self.pendingDelivery = nil
     }
 

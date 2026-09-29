@@ -66,7 +66,7 @@ Nothing inside the overlay is smaller than 10 pt mono uppercase; prose never dro
 | Recovery cards | the pill grown **upward** to 174 (+25, one-line card), 231 (+82, failed with its transcript) or 248 (+99, failed with a two-line reason); its bottom rows, rails and chips do not move |
 | Rails | 149 tall, bottom-aligned, 6 pt out from the pill; chips at the pill's top and bottom corners |
 | Chip | 30 × 30, square, no edge at rest |
-| Trace | 39 bars, 2 pt wide on a 4 pt pitch, 154 × 44, min 2 / max 40 tall, mirrored about a 1 px midline; 12 samples per second, so 3.25 s of history (52 bars before the Spoken Send placard was reserved) |
+| Trace | 39 bars, 2 pt wide on a 4 pt pitch, 154 × 44, min 2 / max 40 tall, mirrored about a 1 px midline; 12 bars per second of voice, so 3.25 s of speech (52 bars before the Spoken Send placard was reserved); silence adds none (§8) |
 | Trace row | target-app icon 20 pt (left) · trace · Spoken Send placard (7 ch reserved, empty at rest) · orange square 6 pt · timer (right), all centred on the midline |
 | Age ruler | static ticks at bar centres 1 pt below the trace: 2 pt every 0.25 s, 4 pt every 1 s; its 6 pt is reserved even when hidden |
 | History card | 480 wide, ≤ 480 tall, square, 1 px edge; 36 pt header, 28 pt day rows, 68 pt index column, 28 pt title-block footer; 6 pt above the History chip, anchored to its leading edge |
@@ -93,7 +93,7 @@ The one flourish. Four L marks sit **outside** a box's corners, a gap clear of t
 
 | Element | Gap | Arm | Shows when |
 |---|---|---|---|
-| Pill | 3 pt (bottom gap measured from the drop rule) | 10 pt | pointer over the pill or the rails' gutter, **only while SEND shows** (a click cancels the Return) |
+| Pill | 3 pt (bottom gap measured from the drop rule) | 10 pt | pointer over the pill itself (not the rails, their gutter or the empty chip slot), **only while SEND shows** (a click cancels the Return) |
 | Chip | 2 pt | 6 pt | pointer over that chip |
 | Card button, notice action | 2 pt | 6 pt | pointer over that button |
 | Menu bar mark | inside its 22 × 16 box | 4 pt | pointer over the item, or menu open |
@@ -107,17 +107,17 @@ Rules: stroke 1.5 pt in `bracket` over a 1 pt `halo` in the surface colour (with
 | Entrance | 0 ms | none | The panel is simply there (first frame composed offscreen, as today) |
 | Dismiss | 120 ms | linear | Opacity 1 → 0. No scale, no drop |
 | Selection brackets | 60 ms | linear | Opacity in on hover, out on leave. Colour never changes, never blinks |
-| Trace sample | every 83.3 ms | none | 12 per second; one new bar enters at the right; continues through silence at 2 pt |
-| Bar morph | 60 ms | linear | Each slot morphs to its right neighbour's height, snapped to 2 pt steps |
+| Trace advance (Atin, 2026-09-29) | 83.3 ms of voice per bar | continuous | Voice-gated: the trace adds bars only while the voice is on (a level above the calibrated gate, held on for a 250 ms hangover so it never stutters between words); in silence it holds still, the last words on screen. While it advances, every bar slides left through the 4 pt pitch with the frame clock, one new bar entering at the right every 83.3 ms of voice |
+| Bar height (Atin, 2026-09-29) | ~135 ms | exponential ease | Each drawn bar eases toward its height; a new bar grows from 2 pt. No 2 pt snapping: edges land on device pixels, bars stay square-ended |
 | Stop → flat | 60 ms | linear | All bars go to 2 pt; the write head goes ink |
 | Transcribing sweep | 1050 ms, repeating | linear | Solid 24 × 4 accent block stepped on the 4 pt pitch |
 | Chip press | ≥ 60 ms | 60 ms linear colour | Inverts to a solid square with a 1 pt surface keyline. No scale |
 | Copy feedback | 900 ms (chip), 1400 ms (card button) | none | Orange fill and check, same size |
 | Pasted / Sent hold | 600 ms | none | Then dismiss (shortened from 1200 ms by Atin, 2026-09-28) |
 | Menu bar bars | 8 Hz | none | 2 pt steps while listening |
-| Reduced motion | | | Bars jump without morph; the sweep holds 4 positions per cycle; dismiss and bracket fades are cuts |
+| Reduced motion | | | Bars step a whole pitch and take their height at once; the sweep holds 4 positions per cycle; dismiss and bracket fades are cuts |
 
-No springs. Nothing eases softly. Everything is deliberate.
+No springs. Everything is deliberate; the trace's bar heights are the one soft ease (Atin, 2026-09-29: the stepped trace felt choppy).
 
 ## 9. Anatomy of each overlay state
 
@@ -157,7 +157,7 @@ A 22 × 16 template mark: three square-ended bars at rest; bars plus a solid squ
 | Chip | a `ButtonStyle`: `Rectangle` fill `chip`; `Bracket(len: 6)` at gap 2 on hover; `isPressed` or latched swaps to `inv-bg` with an outer 1 pt `surface` stroke |
 | Trace row | `HStack(alignment: .center)`: the target icon, the `Canvas`, `Spacer`, a 6 pt `Rectangle` (filled or 1.5 pt outline), then the timer `.system(size: 15, weight: .semibold, design: .monospaced)` in a fixed-width trailing frame |
 | Trace and ruler | one `Canvas` in `TimelineView(.animation)`: `fill(Path(rect))` per bar, then the static ruler ticks; the write head is the newest 6 bars in `accent`; the sweep is one accent rect stepped on the pitch |
-| Trace heights | calibrated per recording, not a fixed gate: a window's peak draws by how far it rises above the recording's quiet floor (falls at once, rises 1.65 dB/s), scaled to its loud peak (rises at once, falls 1.1 dB/s, kept at least 11 dB above the gate). Settings > Sensitivity sets the gate: 6 dB above the floor at the default 0.4, 15 dB at 1.0. The fixed gate at -33 dBFS left a quiet microphone's speech on the 2 pt floor for whole dictations (2026-09-29). Each stop logs `TRACE_SUMMARY` |
+| Trace heights | calibrated per recording, not a fixed gate: a window's peak draws by how far it rises above the recording's quiet floor (falls at once, rises 1.65 dB/s), scaled to its loud peak (rises at once, falls 1.1 dB/s, kept at least 11 dB above the gate). Settings > Sensitivity sets the gate: 6 dB above the floor at the default 0.4, 15 dB at 1.0. The fixed gate at -33 dBFS left a quiet microphone's speech on the 2 pt floor for whole dictations (2026-09-29). Each stop logs `TRACE_SUMMARY` (windows, voiced windows, bars pushed, bars raised, loudest, floor, gate, peak) |
 | Mic row | mono 10.5 medium, `.textCase(.uppercase)`, `.tracking(0.63)`, centred |
 | Failed top rule | `Rectangle().frame(height: 2)` aligned `.top` |
 | Menu bar mark | `NSStatusItem` with a square-cornered template `NSImage` per state |
@@ -172,7 +172,7 @@ The full table is in `prototypes/signal/DIRECTION.md`.
 - Use inversion (white on black, black on white) for pressed, latched and hovered rows.
 - Use orange only for something live or actionable right now.
 - Snap every rule, tick and bar to whole points.
-- Keep the trace scrolling through silence.
+- Advance the trace only while the voice is on, smoothly; hold it still in silence (Atin, 2026-09-29).
 - Mono uppercase for every label and number; SF Pro for anything read as prose.
 - Draw brackets only under the pointer, only outside the box, only one at a time.
 

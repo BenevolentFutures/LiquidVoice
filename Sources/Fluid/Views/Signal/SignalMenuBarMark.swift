@@ -67,10 +67,17 @@ enum SignalMenuBarMark {
 
     /// Three recent trace samples as the listening bars, in 2 pt steps. The floor keeps the
     /// mark's own silhouette in silence (never three dots, which would read as an overflow "…").
-    static func listeningBars(from trace: SignalTraceModel) -> [CGFloat] {
+    /// The pill's trace holds its last words still in silence; the mark does not: once the voice
+    /// has been off past the 250 ms hangover it rests on the floor, so it never looks loud while
+    /// Atin is quiet.
+    static func listeningBars(
+        from trace: SignalTraceModel,
+        at now: TimeInterval = Date().timeIntervalSinceReferenceDate
+    ) -> [CGFloat] {
         let floor: [CGFloat] = [4, 6, 4]
         let cap: [CGFloat] = [10, 12, 10]
         let ages = [4, 1, 7]
+        guard trace.isVoiceActive(at: now) else { return floor }
         let count = trace.current.count
         return ages.enumerated().map { index, age in
             guard count > age else { return floor[index] }

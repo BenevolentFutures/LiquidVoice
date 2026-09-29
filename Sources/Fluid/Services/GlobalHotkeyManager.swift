@@ -2432,8 +2432,17 @@ final class GlobalHotkeyManager: NSObject {
     /// Runs a hotkey action that may start a capture. Until the capture start it dispatched has
     /// finished, a hold release counts as arriving during a start, so it is latched rather than
     /// lost (see HoldReleaseStopLatch.trackStart).
+    /// When the last starting press arrived, for START_SUMMARY: the start counts from the press,
+    /// recorded only once the action's own checks accept it (`markStartAccepted`).
+    private var startPressAt: TimeInterval?
+
+    private func markStartAccepted() {
+        StartPathTrace.hotkeyPressed(at: self.startPressAt ?? ProcessInfo.processInfo.systemUptime)
+        self.startPressAt = nil
+    }
+
     private func performStartingHotkeyAction(_ action: @escaping @MainActor () async -> HotkeyCaptureStartTask?) {
-        StartPathTrace.hotkeyPressed()
+        self.startPressAt = ProcessInfo.processInfo.systemUptime
         self.holdReleaseStopLatch.trackStart(action)
     }
 
@@ -2441,6 +2450,7 @@ final class GlobalHotkeyManager: NSObject {
         self.performStartingHotkeyAction { [weak self] in
             guard let self = self else { return nil }
             guard self.canTriggerRecordingAction("Prompt mode hotkey") else { return nil }
+            self.markStartAccepted()
             DebugLogger.shared.info("Prompt mode hotkey triggered", source: "GlobalHotkeyManager")
             return await self.promptModeCallback?() ?? nil
         }
@@ -2450,6 +2460,7 @@ final class GlobalHotkeyManager: NSObject {
         self.performStartingHotkeyAction { [weak self] in
             guard let self = self else { return nil }
             guard self.canTriggerRecordingAction("Prompt selection hotkey") else { return nil }
+            self.markStartAccepted()
             DebugLogger.shared.info("Prompt selection hotkey triggered", source: "GlobalHotkeyManager")
             return await self.promptSelectionCallback?(selection) ?? nil
         }
@@ -2459,6 +2470,7 @@ final class GlobalHotkeyManager: NSObject {
         self.performStartingHotkeyAction { [weak self] in
             guard let self = self else { return nil }
             guard self.canTriggerRecordingAction("Command mode hotkey") else { return nil }
+            self.markStartAccepted()
             DebugLogger.shared.info("Command mode hotkey triggered", source: "GlobalHotkeyManager")
             DebugLogger.shared.debug(
                 "GlobalHotkeyManager: command callback path, isRunning=\(self.asrService.isRunning), isReady=\(self.asrService.isAsrReady)",
@@ -2472,6 +2484,7 @@ final class GlobalHotkeyManager: NSObject {
         self.performStartingHotkeyAction { [weak self] in
             guard let self = self else { return nil }
             guard self.canTriggerRecordingAction("Rewrite mode hotkey") else { return nil }
+            self.markStartAccepted()
             DebugLogger.shared.info("Rewrite mode hotkey triggered", source: "GlobalHotkeyManager")
             DebugLogger.shared.debug(
                 "GlobalHotkeyManager: rewrite callback path, isRunning=\(self.asrService.isRunning), isReady=\(self.asrService.isAsrReady)",
@@ -2575,6 +2588,7 @@ final class GlobalHotkeyManager: NSObject {
         self.performStartingHotkeyAction { [weak self] in
             guard let self = self else { return nil }
             guard self.canTriggerRecordingAction("Dictate mode hotkey") else { return nil }
+            self.markStartAccepted()
             let model = SettingsStore.shared.selectedSpeechModel
             DebugLogger.shared.info("Dictate mode hotkey triggered", source: "GlobalHotkeyManager")
             DebugLogger.shared.debug(
@@ -2684,6 +2698,7 @@ final class GlobalHotkeyManager: NSObject {
             guard self.canTriggerRecordingAction("start") else { return nil }
 
             guard !self.asrService.isRunning else { return nil }
+            self.markStartAccepted()
             // Use callback if available, otherwise fallback to direct start
             if let callback = self.startRecordingCallback {
                 return await callback()

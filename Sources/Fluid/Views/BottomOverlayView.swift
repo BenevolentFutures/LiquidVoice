@@ -437,15 +437,18 @@ final class BottomOverlayWindowController {
         Self.overlayBench("bottom_recording_stopped placard=\(placard)")
     }
 
-    /// What the trace drew for the recording that just stopped, so a flat or lively trace can be
-    /// read from the log: windows pushed, windows drawn above the floor, the loudest window, and the
-    /// calibration it ended on (levels are linear in dB: 0 is -55 dBFS, 1 is 0 dBFS).
+    /// What the trace drew for the recording that just stopped, so a flat, lively or stalled trace
+    /// can be read from the log: real-time windows, windows with voice, bars pushed (the trace
+    /// advances only with voice), bars above the floor, the loudest window, and the calibration it
+    /// ended on (levels are linear in dB: 0 is -55 dBFS, 1 is 0 dBFS).
     static func logTraceSummary(_ trace: SignalTraceModel) {
         let stats = trace.stats
         DebugLogger.shared.info(
             String(
-                format: "TRACE_SUMMARY windows=%d raised=%d loudest=%.3f floor=%.3f gate=%.3f peak=%.3f sensitivity=%.2f",
+                format: "TRACE_SUMMARY windows=%d voiced=%d pushed=%d raised=%d loudest=%.3f floor=%.3f gate=%.3f peak=%.3f sensitivity=%.2f",
                 stats.windows,
+                stats.voiced,
+                stats.pushed,
                 stats.raised,
                 stats.loudest,
                 trace.quietFloor ?? 0,

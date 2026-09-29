@@ -1,15 +1,24 @@
 import CoreGraphics
 import Foundation
 
-/// The voice trace's samples (DESIGN.md §4, §8). Levels arrive about 94 times a second; the trace
-/// keeps the peak of each 83.3 ms window and pushes one bar per window, 12 a second, so 39 bars
-/// hold 3.25 s. It keeps scrolling through silence at 2 pt. Each push morphs every slot to its
-/// right neighbour's height over 60 ms, snapped to 2 pt steps.
+/// The voice trace's samples (DESIGN.md §4, §8). Levels arrive about 94 times a second.
+///
+/// Motion (Atin, 2026-09-29): the trace advances only while the voice is on, and smoothly.
+/// - Voice-gated: a level above the gate (the calibrated quiet floor plus the Sensitivity share)
+///   marks the voice on, and it stays on for a 250 ms hangover, so the trace does not stutter
+///   between words. Only then does the advance clock run; in silence the trace holds still.
+/// - Continuous: the advance clock pushes one bar every 83.3 ms (12 a second, 39 bars hold 3.25 s
+///   of speech), and between pushes every bar slides left by the elapsed fraction of the 4 pt
+///   pitch (`scrollFraction`), driven by the frame clock, instead of jumping a pitch at once.
+/// - Eased: each drawn bar eases toward its target height (about 135 ms to settle), unsnapped;
+///   the view snaps edges to device pixels, so bars stay square-ended and crisp.
+/// The stop is as before: every bar to 2 pt over 60 ms, linear, and nothing moves after.
 ///
 /// Heights are calibrated to the recording itself: a level draws by how far it rises above this
 /// recording's quiet floor, scaled to its loud peak. A fixed gate (level 0.4, about -33 dBFS)
 /// left a quiet microphone's speech at the 2 pt floor for whole dictations (Atin's fifine USB
-/// microphone, 2026-09-29), while the frame clock, sampler and feed all ran.
+/// microphone, 2026-09-29), while the frame clock, sampler and feed all ran. The floor and peak
+/// follow real-time 83.3 ms windows whether or not the trace advances.
 ///
 /// A plain reference type, not observed by SwiftUI: a level tick costs no view invalidation. The
 /// trace's Canvas reads it from a `TimelineView` and drives `advance(to:)` from its frame clock.
@@ -21,15 +30,33 @@ final class SignalTraceModel {
     /// above the recording's quiet floor a level must rise to draw, `sensitivitySpan` at 1.0.
     var noiseThreshold: CGFloat
 
-    private(set) var previous: [CGFloat]
+    /// Each bar's target height, oldest first (the menu bar mark reads these).
     private(set) var current: [CGFloat]
+    /// Each bar's drawn height, easing toward `current`.
+    private(set) var shown: [CGFloat]
+    /// When the last bar was pushed (real time), and how many were pushed this recording.
     private(set) var lastPush: TimeInterval = 0
+    private(set) var pushes = 0
     /// True while recording: the newest bars are the orange write head.
     private(set) var isLive = false
+    /// The last level above the gate: the voice is on until `voiceHangover` after it.
+    private(set) var lastVoice: TimeInterval?
+    /// Seconds the trace has advanced (the clock runs only while the voice is on), and where it
+    /// stood at the last push.
+    private var advanced: TimeInterval = 0
+    private var advancedAtPush: TimeInterval = 0
+    private var lastFrame: TimeInterval = 0
+    /// The loudest level since the last push: the next bar's height.
+    private var pendingPeak: CGFloat = 0
+    /// The real-time calibration window.
     private var windowStart: TimeInterval = 0
     private var windowPeak: CGFloat = 0
     private var grainTick = 0
     var reducesMotion = false
+    /// The stop: when, and the drawn heights and scroll it started from.
+    private var stoppedAt: TimeInterval?
+    private var stopFrom: [CGFloat]
+    private var stoppedFraction: CGFloat = 0
 
     /// The recording's quiet floor: the quietest recent window, falling at once and rising slowly,
     /// so a steady background settles under the gate. Levels are linear in dB, 55 dB per unit.
@@ -40,9 +67,13 @@ final class SignalTraceModel {
     private(set) var stats = Stats()
 
     struct Stats: Equatable {
-        /// Windows pushed while live.
+        /// Real-time 83.3 ms windows while live.
         var windows = 0
-        /// Windows drawn above the 2 pt floor.
+        /// Windows whose peak cleared the gate (voice).
+        var voiced = 0
+        /// Bars pushed (the trace advanced).
+        var pushed = 0
+        /// Bars pushed above the 2 pt floor.
         var raised = 0
         /// The loudest window peak.
         var loudest: CGFloat = 0
@@ -63,87 +94,133 @@ final class SignalTraceModel {
     init(barCount: Int = 39, noiseThreshold: CGFloat = 0.4) {
         self.barCount = barCount
         self.noiseThreshold = noiseThreshold
-        self.previous = Array(repeating: Self.floor, count: barCount)
         self.current = Array(repeating: Self.floor, count: barCount)
+        self.shown = self.current
+        self.stopFrom = self.current
     }
 
-    /// A new recording: a flat trace, live from `now`.
+    /// A new recording: a flat trace, live from `now`, holding still until the voice comes on.
     func begin(at now: TimeInterval) {
-        self.previous = Array(repeating: Self.floor, count: self.barCount)
-        self.current = self.previous
+        self.current = Array(repeating: Self.floor, count: self.barCount)
+        self.shown = self.current
         self.lastPush = now
+        self.pushes = 0
+        self.lastVoice = nil
+        self.advanced = 0
+        self.advancedAtPush = 0
+        self.lastFrame = now
+        self.pendingPeak = 0
         self.windowStart = now
         self.windowPeak = 0
         self.grainTick = 0
+        self.stoppedAt = nil
+        self.stoppedFraction = 0
         self.quietFloor = nil
         self.loudPeak = 0
         self.stats = Stats()
         self.isLive = true
     }
 
-    /// One audio level (0...1). Only its window's peak survives.
+    /// One audio level (0...1): feeds the calibration window and the next bar, and turns the voice
+    /// on when it clears the gate.
     func ingest(level: CGFloat, at now: TimeInterval) {
         guard self.isLive else { return }
-        self.windowPeak = max(self.windowPeak, min(max(level, 0), 1))
+        let level = min(max(level, 0), 1)
+        self.windowPeak = max(self.windowPeak, level)
+        self.pendingPeak = max(self.pendingPeak, level)
+        if level > self.gate {
+            self.lastVoice = now
+        }
         self.advance(to: now)
     }
 
-    /// Pushes one bar per elapsed sample window, including silent ones. Called on every level and
-    /// on every frame while live. After a stall (a hidden or busy frame clock) it pushes at most
-    /// one trace's worth, so it never loops long.
+    /// Whether the voice is on at `now`: a level cleared the gate within the hangover.
+    func isVoiceActive(at now: TimeInterval) -> Bool {
+        guard let lastVoice else { return false }
+        return now - lastVoice <= SignalTheme.Motion.voiceHangover
+    }
+
+    /// Called on every level and every frame while live: closes real-time calibration windows,
+    /// runs the advance clock while the voice is on (one bar per 83.3 ms of it), and eases the
+    /// drawn heights. After a stall (a hidden or busy frame clock) it moves at most a quarter
+    /// second and pushes at most one trace's worth, so it never loops long or leaps.
     func advance(to now: TimeInterval) {
         guard self.isLive else { return }
         let sample = SignalTheme.Motion.traceSample
-        var pushes = 0
-        while now - self.windowStart >= sample, pushes < self.barCount {
+        let dt = min(max(now - self.lastFrame, 0), 0.25)
+        self.lastFrame = max(self.lastFrame, now)
+
+        var windows = 0
+        while now - self.windowStart >= sample, windows < self.barCount {
             self.calibrate(with: self.windowPeak)
-            let height = self.height(for: self.windowPeak)
             self.stats.windows += 1
             self.stats.loudest = max(self.stats.loudest, self.windowPeak)
-            if Self.snapped(height) > Self.floor { self.stats.raised += 1 }
-            self.push(height, at: now)
+            if self.windowPeak > self.gate { self.stats.voiced += 1 }
             self.windowPeak = 0
             self.windowStart += sample
-            pushes += 1
+            windows += 1
         }
         if now - self.windowStart >= sample {
             self.windowStart = now
         }
+
+        if self.isVoiceActive(at: now) {
+            self.advanced += dt
+            var pushed = 0
+            while self.advanced - self.advancedAtPush >= sample, pushed < self.barCount {
+                self.push(self.height(for: self.pendingPeak), at: now)
+                self.pendingPeak = 0
+                self.advancedAtPush += sample
+                pushed += 1
+            }
+            if self.advanced - self.advancedAtPush >= sample {
+                self.advancedAtPush = self.advanced
+            }
+        }
+
+        let ease = self.reducesMotion ? 1 : 1 - CGFloat(exp(-dt / (SignalTheme.Motion.barEase / 3)))
+        for index in 0..<self.barCount {
+            self.shown[index] += (self.current[index] - self.shown[index]) * ease
+        }
     }
 
-    /// The recording stopped: every bar goes to 2 pt over 60 ms and the write head goes ink.
+    /// How far the bars have slid toward the next slot, 0..<1 of the pitch: the advance clock's
+    /// progress through the current sample. Held in silence; 0 under reduced motion.
+    var scrollFraction: CGFloat {
+        if self.stoppedAt != nil { return self.stoppedFraction }
+        guard !self.reducesMotion else { return 0 }
+        let sample = SignalTheme.Motion.traceSample
+        return CGFloat(min(max((self.advanced - self.advancedAtPush) / sample, 0), 0.999))
+    }
+
+    /// The recording stopped: every bar goes to 2 pt over 60 ms, linear, the write head goes ink,
+    /// and nothing moves after (the stop path's cost is as before).
     func stop(at now: TimeInterval) {
         guard self.isLive else { return }
-        for index in 0..<self.barCount {
-            self.previous[index] = self.shownHeight(at: index, now: now)
-        }
+        self.stoppedFraction = self.scrollFraction
+        self.stopFrom = self.shown
+        self.stoppedAt = now
         self.current = Array(repeating: Self.floor, count: self.barCount)
-        self.lastPush = now
         self.isLive = false
     }
 
     /// A flat, idle trace (a card's trace row, or the hidden overlay).
     func flatten() {
-        self.previous = Array(repeating: Self.floor, count: self.barCount)
-        self.current = self.previous
+        self.current = Array(repeating: Self.floor, count: self.barCount)
+        self.shown = self.current
+        self.stoppedAt = nil
+        self.stoppedFraction = 0
+        self.advanced = 0
+        self.advancedAtPush = 0
         self.isLive = false
     }
 
-    /// Whether a morph is still running at `now` (the frame clock may pause after it).
-    func isMorphing(at now: TimeInterval) -> Bool {
-        !self.reducesMotion && now - self.lastPush < SignalTheme.Motion.barMorph
-    }
-
-    /// The height to draw for slot `index` (0 = oldest): the morph between the last two pushes,
-    /// snapped to even whole points so every bar is symmetric about the midline.
+    /// The height to draw for slot `index` (0 = oldest): the eased height while live; after a
+    /// stop, the 60 ms linear run down to the floor.
     func shownHeight(at index: Int, now: TimeInterval) -> CGFloat {
-        let fraction = self.reducesMotion ? 1 : min(1, max(0, (now - self.lastPush) / SignalTheme.Motion.barMorph))
-        let raw = self.previous[index] + (self.current[index] - self.previous[index]) * CGFloat(fraction)
-        return Self.snapped(raw)
-    }
-
-    static func snapped(_ height: CGFloat) -> CGFloat {
-        max(self.floor, (height / 2).rounded() * 2)
+        guard let stoppedAt else { return max(Self.floor, self.shown[index]) }
+        let progress = self.reducesMotion ? 1 : min(1, max(0, (now - stoppedAt) / SignalTheme.Motion.stopToFlat))
+        return self.stopFrom[index] + (Self.floor - self.stopFrom[index]) * CGFloat(progress)
     }
 
     /// The level that draws above the floor: the quiet floor plus the Sensitivity setting's share.
@@ -180,13 +257,18 @@ final class SignalTraceModel {
         return min(Self.ceiling, max(Self.floor, Self.floor + span * amplitude * grain))
     }
 
+    /// One bar in at the right: every slot takes its right neighbour's target and drawn height (the
+    /// scroll offset returns to 0 at the same moment, so nothing jumps) and the new bar grows from
+    /// the floor.
     private func push(_ height: CGFloat, at now: TimeInterval) {
-        for index in 0..<self.barCount {
-            self.previous[index] = self.shownHeight(at: index, now: now)
-        }
         self.current.removeFirst()
         self.current.append(height)
+        self.shown.removeFirst()
+        self.shown.append(Self.floor)
         self.lastPush = now
+        self.pushes += 1
+        self.stats.pushed += 1
+        if height >= Self.floor + 1 { self.stats.raised += 1 }
     }
 
     /// The four printed opacity steps by age (0 = newest), as fractions of the trace so a shorter

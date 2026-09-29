@@ -301,8 +301,12 @@ enum SignalTheme {
         static let bracketFade: TimeInterval = 0.06
         /// One trace sample: 12 per second.
         static let traceSample: TimeInterval = 1.0 / 12.0
-        /// Each bar slot morphs to its right neighbour's height, linear, snapped to 2 pt.
-        static let barMorph: TimeInterval = 0.06
+        /// Each drawn bar eases toward its target height, settling in about this long (Atin,
+        /// 2026-09-29: smoother than the 60 ms linear, 2 pt-snapped morph).
+        static let barEase: TimeInterval = 0.135
+        /// The trace advances only while the voice is on, and stays on this long after the last
+        /// level above the gate, so it does not stutter between words (Atin, 2026-09-29).
+        static let voiceHangover: TimeInterval = 0.25
         /// Stop: every bar to 2 pt; the write head goes ink.
         static let stopToFlat: TimeInterval = 0.06
         /// The transcribing sweep, stepped on the bar pitch.

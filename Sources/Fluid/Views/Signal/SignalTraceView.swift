@@ -71,16 +71,26 @@ struct SignalTraceView: View {
         let count = self.model.barCount
         let flat = self.drain != nil
         let live = self.model.isLive && !flat
+        // Bars slide left through the pitch between pushes (DESIGN.md §8, Atin 2026-09-29), and
+        // every edge lands on a device pixel, so a moving or easing bar stays square-ended.
+        let scale = max(context.environment.displayScale, 1)
+        func pixel(_ value: CGFloat) -> CGFloat { (value * scale).rounded() / scale }
+        let slide = flat ? 0 : self.model.scrollFraction * metrics.barPitch
+        var bars = context
+        bars.clip(to: Path(CGRect(x: 0, y: 0, width: self.width, height: metrics.traceHeight)))
         for index in 0..<count {
             let age = count - 1 - index
             let barHeight = flat ? SignalTraceModel.floor : self.model.shownHeight(at: index, now: now)
-            let x = self.width - metrics.barWidth - CGFloat(age) * metrics.barPitch
+            let x = pixel(self.width - metrics.barWidth - CGFloat(age) * metrics.barPitch - slide)
+            guard x + metrics.barWidth > 0 else { continue }
             let isHead = live && age < metrics.writeHeadBars
             let color = isHead
                 ? self.palette.accent
                 : self.palette.ink.opacity(SignalTraceModel.bandOpacity(age: age, of: count))
-            context.fill(
-                Path(CGRect(x: x, y: mid - barHeight / 2, width: metrics.barWidth, height: barHeight)),
+            let top = pixel(mid - barHeight / 2)
+            let bottom = max(pixel(mid + barHeight / 2), top + 1 / scale)
+            bars.fill(
+                Path(CGRect(x: x, y: top, width: metrics.barWidth, height: bottom - top)),
                 with: .color(color)
             )
         }

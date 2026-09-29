@@ -3431,31 +3431,71 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         _ = await controller.hideAndWait()
     }
 
-    func testTheTraceTakesTwelveSamplesASecondAndScrollsThroughSilence() {
+    /// Feeds `level` at 94 Hz from `start` for `seconds`, with a frame at each tick like the clock.
+    private func feed(_ trace: SignalTraceModel, _ level: CGFloat, from start: TimeInterval, seconds: Double) -> TimeInterval {
+        var t = start
+        while t < start + seconds {
+            trace.ingest(level: level, at: t)
+            t += 0.0107
+        }
+        return t
+    }
+
+    func testSilenceHoldsTheTraceStillAndSpeechAdvancesIt() {
         let trace = SignalTraceModel(barCount: 39, noiseThreshold: 0.4)
         trace.begin(at: 100)
-        // One second of silence: twelve pushes, every bar at the 2 pt floor, still scrolling.
-        trace.advance(to: 101)
-        XCTAssertEqual(trace.lastPush, 101, accuracy: 0.0001)
+        // A second of room tone (the ASR gates it to 0): nothing advances, nothing slides.
+        var t = self.feed(trace, 0, from: 100, seconds: 1)
+        trace.advance(to: t)
+        XCTAssertEqual(trace.pushes, 0, "silence adds no bars")
+        XCTAssertEqual(trace.scrollFraction, 0)
         XCTAssertTrue(trace.current.allSatisfy { $0 == 2 })
-        // A loud level inside the next window becomes the newest bar once the window closes.
-        trace.ingest(level: 1, at: 101.02)
-        XCTAssertEqual(trace.current.last, 2, "no push before the window closes")
-        trace.advance(to: 101 + 1.0 / 12 + 0.001)
-        XCTAssertGreaterThan(trace.current.last ?? 0, 2)
-        // Heights snap to even points; the morph runs 60 ms, then the frame clock may pause.
-        let shown = trace.shownHeight(at: 38, now: trace.lastPush + 0.03)
-        XCTAssertEqual(shown.truncatingRemainder(dividingBy: 2), 0)
-        XCTAssertTrue(trace.isMorphing(at: trace.lastPush + 0.03))
-        XCTAssertFalse(trace.isMorphing(at: trace.lastPush + 0.07))
-        // Stop: every bar to the floor within 60 ms, and nothing pushes after.
-        trace.stop(at: 102)
-        XCTAssertEqual(trace.shownHeight(at: 38, now: 102.07), 2)
-        let pushed = trace.lastPush
-        trace.advance(to: 110)
-        XCTAssertEqual(trace.lastPush, pushed)
-        XCTAssertEqual(SignalTraceModel.snapped(3.1), 4)
-        XCTAssertEqual(SignalTraceModel.snapped(0.4), 2)
+
+        // A second of speech: twelve bars, and the bars slide between pushes.
+        t = self.feed(trace, 0.6, from: t, seconds: 1)
+        XCTAssertEqual(trace.pushes, 12, accuracy: 1)
+        XCTAssertGreaterThan(trace.current.suffix(10).filter { $0 > 2 }.count, 5)
+        trace.advance(to: t + 0.04)
+        XCTAssertGreaterThan(trace.scrollFraction, 0, "mid-sample the bars sit part way through the pitch")
+
+        // Silence again: the 250 ms hangover carries about three more bars, then it holds still.
+        let spoken = trace.pushes
+        t = self.feed(trace, 0, from: t, seconds: 2)
+        XCTAssertEqual(trace.pushes - spoken, 3, accuracy: 1, "the hangover, no more")
+        let held = (trace.pushes, trace.scrollFraction, trace.current)
+        t = self.feed(trace, 0, from: t, seconds: 1)
+        XCTAssertEqual(trace.pushes, held.0, "silence holds the trace still")
+        XCTAssertEqual(trace.scrollFraction, held.1)
+        XCTAssertEqual(trace.current, held.2, "the last words stay on screen")
+
+        // A new word: the newest bar grows from the floor, easing toward its height over ~135 ms,
+        // unsnapped.
+        let before = trace.pushes
+        var u = t
+        while trace.pushes == before {
+            trace.ingest(level: 0.95, at: u)
+            u += 0.0107
+        }
+        let pushedAt = trace.lastPush
+        let pushesAtWord = trace.pushes
+        let target = trace.current[38]
+        XCTAssertGreaterThan(target, 10)
+        // The hangover may push more bars meanwhile: follow this one as it moves left.
+        func slot() -> Int { 38 - (trace.pushes - pushesAtWord) }
+        trace.advance(to: pushedAt + 0.03)
+        let early = trace.shownHeight(at: slot(), now: pushedAt + 0.03)
+        XCTAssertGreaterThan(early, 2)
+        XCTAssertLessThan(early, target - 1, "still easing at 30 ms")
+        trace.advance(to: pushedAt + 0.16)
+        XCTAssertEqual(trace.shownHeight(at: slot(), now: pushedAt + 0.16), target, accuracy: 1.5, "settled by ~150 ms")
+        XCTAssertNotEqual(target.truncatingRemainder(dividingBy: 2), 0, "no 2 pt snapping")
+
+        // Stop: every bar to the floor within 60 ms, and nothing moves after.
+        trace.stop(at: pushedAt + 0.2)
+        XCTAssertEqual(trace.shownHeight(at: 38, now: pushedAt + 0.27), 2)
+        let pushed = trace.pushes
+        trace.advance(to: pushedAt + 5)
+        XCTAssertEqual(trace.pushes, pushed)
     }
 
     func testTheMediumPillIsTheDesignedGeometry() {
@@ -3899,12 +3939,14 @@ final class SignalTraceLifecycleTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(loudBars.max() ?? 0, 20)
         XCTAssertGreaterThan(loudBars.filter { $0 > 2 }.count, loudBars.count / 2)
 
-        // A steady background settles under the gate within a few seconds and stays flat.
+        // A steady background settles under the gate within seconds; then it is silence: the
+        // trace holds still.
         let steady = SignalTraceModel(barCount: 39, noiseThreshold: 0.4)
         steady.begin(at: 0)
         _ = self.pushedHeights(steady, seconds: 1, from: 0) { _ in 0.1 }
-        let settled = self.pushedHeights(steady, seconds: 12, from: 1) { _ in 0.5 }
-        XCTAssertTrue(settled.suffix(24).allSatisfy { $0 == 2 }, "\(settled.suffix(24))")
+        _ = self.pushedHeights(steady, seconds: 12, from: 1) { _ in 0.5 }
+        let settled = self.pushedHeights(steady, seconds: 2, from: 13) { _ in 0.5 }
+        XCTAssertTrue(settled.isEmpty, "a settled background adds no bars: \(settled)")
 
         // Sensitivity "Less" asks for more above the floor than the default.
         let less = SignalTraceModel(barCount: 39, noiseThreshold: 0.8)

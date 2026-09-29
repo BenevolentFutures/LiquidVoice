@@ -62,10 +62,6 @@ struct BottomOverlayView: View {
         self.contentState.isBottomOverlayPresented && !self.contentState.isBottomOverlayDismissing && !self.model.isFading
     }
 
-    private var isVisible: Bool {
-        self.contentState.isBottomOverlayPresented && !self.model.isFading
-    }
-
     // MARK: Chips
 
     enum ChipRole {
@@ -245,14 +241,16 @@ struct BottomOverlayView: View {
         .signalPalette()
         // A hiding or hidden overlay must never act on a click meant for the app beneath it.
         .allowsHitTesting(self.isInteractive)
-        // Hidden paints nothing at all, not just a zero window alpha: a transparent panel passes
-        // clicks through wherever its pixels are clear, from the hide on. Dismiss fades over
-        // 120 ms linear (a cut under reduced motion); ignoresMouseEvents is never touched.
-        .opacity(self.isVisible ? 1 : 0)
+        // Dismiss fades over 120 ms linear (a cut under reduced motion)...
+        .opacity(self.model.isFading ? 0 : 1)
         .animation(
             self.model.isFading && !self.reduceMotion ? .linear(duration: SignalTheme.Motion.dismiss) : nil,
-            value: self.isVisible
+            value: self.model.isFading
         )
+        // ...and hidden paints nothing at all, at once, whatever the fade's progress: a transparent
+        // panel passes clicks through wherever its pixels are clear, from the hide on. Not
+        // animated, so it never depends on a frame clock. ignoresMouseEvents is never touched.
+        .opacity(self.contentState.isBottomOverlayPresented ? 1 : 0)
         .onChange(of: self.display) { _, display in
             switch display {
             case .delivered, .idle:

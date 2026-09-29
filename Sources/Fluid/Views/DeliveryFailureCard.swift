@@ -287,8 +287,7 @@ struct DeliveryFailureCardView: View {
     @State private var isHovered = false
     @State private var hoveredChips: Set<String> = []
     @State private var isCopyConfirming = false
-    @State private var historyChipFrameInScreen: CGRect = .zero
-    @State private var historyChipWindow: NSWindow?
+    @State private var historyChipAnchor = SignalChipAnchor()
     @State private var trace = SignalTraceModel()
 
     private var geometry: SignalOverlayGeometry {
@@ -308,17 +307,17 @@ struct DeliveryFailureCardView: View {
                     // The history card clears the grown pill: 6 pt above it, not above the chip.
                     let growth = self.pillHeight(geometry, cardHeight) - geometry.railHeight
                     BottomOverlayHistoryMenuController.shared.updateAnchor(
-                        selectorFrameInScreen: self.historyChipFrameInScreen,
-                        parentWindow: self.historyChipWindow,
+                        selectorFrameInScreen: self.historyChipAnchor.frameInScreen,
+                        parentWindow: self.historyChipAnchor.window,
                         maxWidth: SignalTheme.Metrics.historyWidth,
                         menuGap: SignalTheme.Metrics.historyGapAboveChip + max(0, growth)
                     )
                     BottomOverlayHistoryMenuController.shared.toggleFromTap()
                 }
                 .background(
-                    PromptSelectorAnchorReader { frame, window in
-                        self.historyChipFrameInScreen = frame
-                        self.historyChipWindow = window
+                    PromptSelectorAnchorReader { [historyChipAnchor] frame, window in
+                        historyChipAnchor.frameInScreen = frame
+                        historyChipAnchor.window = window
                     }
                     .allowsHitTesting(false)
                 )

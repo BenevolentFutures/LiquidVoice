@@ -23,8 +23,9 @@ struct BottomOverlayView: View {
     @State private var hoveredChips: Set<String> = []
     @State private var isCopyConfirming = false
     @State private var copyConfirmationID = 0
-    @State private var historyChipFrameInScreen: CGRect = .zero
-    @State private var historyChipWindow: NSWindow?
+    /// Where the History chip is on screen, for the card's anchor. A reference, not view state:
+    /// the anchor reader reports it during view updates, which must not invalidate the view.
+    @State private var historyChipAnchor = SignalChipAnchor()
     @State private var lastResolvedAppIcon: NSImage?
     @State private var dragStartMouseLocation: NSPoint?
     @State private var dragStartWindowOrigin: NSPoint?
@@ -128,8 +129,8 @@ struct BottomOverlayView: View {
         ) {
             self.perform {
                 BottomOverlayHistoryMenuController.shared.updateAnchor(
-                    selectorFrameInScreen: self.historyChipFrameInScreen,
-                    parentWindow: self.historyChipWindow,
+                    selectorFrameInScreen: self.historyChipAnchor.frameInScreen,
+                    parentWindow: self.historyChipAnchor.window,
                     maxWidth: SignalTheme.Metrics.historyWidth,
                     menuGap: SignalTheme.Metrics.historyGapAboveChip
                 )
@@ -137,9 +138,9 @@ struct BottomOverlayView: View {
             }
         }
         .background(
-            PromptSelectorAnchorReader { frameInScreen, window in
-                self.historyChipFrameInScreen = frameInScreen
-                self.historyChipWindow = window
+            PromptSelectorAnchorReader { [historyChipAnchor] frameInScreen, window in
+                historyChipAnchor.frameInScreen = frameInScreen
+                historyChipAnchor.window = window
             }
             .allowsHitTesting(false)
         )
@@ -267,6 +268,12 @@ struct BottomOverlayView: View {
             case .command: break
             }
         }
+        // A hidden overlay gets no hover-out: forget the hover so no bracket shows at rest next time.
+        .onChange(of: self.contentState.isBottomOverlayPresented) { _, presented in
+            guard !presented else { return }
+            self.isHoveringOverlay = false
+            self.hoveredChips.removeAll()
+        }
         .onAppear {
             self.rememberAppIcon(self.contentState.targetAppIcon ?? self.activeAppMonitor.activeAppIcon)
         }
@@ -289,10 +296,11 @@ struct BottomOverlayView: View {
             self.topArea(geometry, display: display)
         }
         // A click anywhere on the pill during Spoken Send's countdown cancels the Return.
-        .onTapGesture {
+        // Simultaneous, so the whole surface's double-click (reset position) and drag still work.
+        .simultaneousGesture(TapGesture().onEnded {
             guard self.isInteractive, self.countdownDrain?.isRunning == true else { return }
             self.spokenSend.cancelSend()
-        }
+        })
     }
 
     @ViewBuilder
@@ -469,4 +477,10 @@ struct BottomOverlayView: View {
                 }
             }
     }
+}
+
+/// A chip's on-screen frame and window, reported by `PromptSelectorAnchorReader`.
+final class SignalChipAnchor {
+    var frameInScreen: CGRect = .zero
+    weak var window: NSWindow?
 }

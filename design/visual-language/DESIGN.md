@@ -204,8 +204,10 @@ The trace row becomes `[icon 20] [trace 39 bars] [placard 7 ch] [■ 6] [timer 5
 |---|---|---|---|
 | Armed (the send phrase was heard) | `SEND` orange | as usual | as usual |
 | **Send countdown** (1.5 s of quiet after you stop) | `SEND` orange | flat trace plus a **drain bar**: solid orange, 4 pt tall, full trace width on the midline, shrinking from the right over 1.5 s, linear, stepped on the 4 pt pitch. No easing, no ring | `1.5` → `0.0`, orange mono, one decimal; square hollow |
-| Canceled (click anywhere on the pill, the Cancel chip, or Esc, whenever `SEND` shows: armed, counting down, stopped or transcribing; a second Esc or Cancel then cancels the dictation) | `NO SEND` ink | drain bar ink, stopped | frozen |
+| Canceled (click anywhere on the pill, the Cancel chip, or Esc, whenever `SEND` shows and the stop has not yet decided: armed, counting down, stopped or transcribing; that Esc is consumed and never reaches the app) | `NO SEND` ink | drain bar ink, stopped | frozen |
 | No Return will follow (a terminal that never gets one) | `NO SEND` dim, from the moment the phrase is heard | as usual | as usual |
+
+A second press after a cancel: while recording, Esc or Cancel cancels the dictation, as it always did. After the stop it only dismisses the pill; the text still pastes (it is already on its way), and that Esc is not consumed, since it cancels nothing and may be meant for the app. Once the stop decides, the placard follows the decision: `SEND` only when the Return will follow, `NO SEND` when the phrase was said but it will not.
 
 Outcomes: a completed countdown goes to **Sent** (the stamp layout, "Sent to c11", `118 WORDS · RETURN`, 1.2 s, then dismiss). A canceled send holds 700 ms, then the text lands as **Pasted** with the placard still reading `NO SEND`. Menu bar during the countdown: the listening mark with the bars still. Today's paper-plane chip in the rail's middle slot is retired; it remains in the prototype behind `?send=chip` as the unreviewed alternative.
 

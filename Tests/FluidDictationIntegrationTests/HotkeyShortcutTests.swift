@@ -456,6 +456,66 @@ final class HotkeyShortcutTests: XCTestCase {
         XCTAssertFalse(GlobalHotkeyManager.sessionIsLocked(sessionInfo: [:]))
     }
 
+    /// Esc through the event tap while recording with SEND showing (DESIGN.md §15): the first press
+    /// drops only the Return (the placard reads NO SEND), the dictation keeps recording, and the key
+    /// is consumed so it never reaches the app. A second press cancels the dictation.
+    @MainActor
+    func testEscThroughTheTapDropsOnlyTheReturnFirstThenCancelsTheDictation() async throws {
+        let asr = ASRService()
+        asr.isRunning = true // a recording, as the tap sees it
+        let spokenSend = SpokenSendController()
+        spokenSend.configuration = {
+            SpokenSendController.Configuration(enabled: true, phrase: "send it", stopsAfterPause: false, key: .enter, allowsC11: true)
+        }
+        spokenSend.attach(
+            partials: Empty().eraseToAnyPublisher(),
+            audioLevels: Empty().eraseToAnyPublisher(),
+            hooks: SpokenSendController.Hooks(
+                isDictating: { true },
+                recordingApp: { ("com.stage11.c11", "c11") },
+                isHoldingShortcut: { false },
+                stopAndProcess: {}
+            )
+        )
+        spokenSend.beginRecording()
+        spokenSend.handlePartial("Fix the typo in the README, send it")
+        XCTAssertEqual(spokenSend.indicator, .armed)
+
+        let manager = GlobalHotkeyManager(
+            asrService: asr,
+            primaryShortcuts: [HotkeyShortcut(keyCode: 61, modifierFlags: [], modifierKeyCodes: [61])],
+            promptModeShortcut: HotkeyShortcut(keyCode: 60, modifierFlags: []),
+            commandModeShortcut: nil,
+            rewriteModeShortcut: HotkeyShortcut(keyCode: 59, modifierFlags: []),
+            promptModeShortcutEnabled: false,
+            commandModeShortcutEnabled: false,
+            rewriteModeShortcutEnabled: false
+        )
+        manager.setSpokenSendCancelCallback { spokenSend.cancelsReturnFirst && spokenSend.cancelSend() }
+        var dictationCancels = 0
+        manager.setCancelCallback {
+            dictationCancels += 1
+            return true
+        }
+
+        let cancel = SettingsStore.shared.cancelRecordingHotkeyShortcut
+        let press = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: cancel.keyCode, keyDown: true))
+        press.flags = CGEventFlags(rawValue: UInt64(cancel.modifierFlags.rawValue))
+
+        XCTAssertTrue(manager.handleKeyEventForTests(press, type: .keyDown), "consumed: Esc never reaches the app")
+        XCTAssertTrue(asr.isRunning, "the dictation keeps recording")
+        XCTAssertEqual(dictationCancels, 0)
+        XCTAssertEqual(spokenSend.indicator, .canceled)
+        XCTAssertEqual(SignalOverlayModel.placard(indicator: spokenSend.indicator, sendsInApp: spokenSend.sendsInRecordingApp), .noSend)
+
+        XCTAssertTrue(manager.handleKeyEventForTests(press, type: .keyDown))
+        XCTAssertEqual(dictationCancels, 1, "the second press cancels the dictation")
+        for _ in 0..<50 where asr.isRunning {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertFalse(asr.isRunning, "stopped without transcription")
+    }
+
     @MainActor
     func testBottomOverlayRapidStopStartStopDoesNotDropFinalHide() async {
         let audioPublisher = Just(CGFloat.zero).eraseToAnyPublisher()

@@ -497,6 +497,14 @@ final class BottomOverlayWindowController {
         return true
     }
 
+    /// The stop decided the Spoken Send outcome: the held pill's placard reads SEND only when the
+    /// Return will follow, NO SEND when the phrase was said but it will not.
+    func spokenSendDecided(returnFollows: Bool, phraseDetected: Bool) {
+        guard NotchContentState.shared.isBottomOverlayPresented, SignalOverlayModel.shared.isPostStop else { return }
+        let placard: SignalPlacard = returnFollows ? .send : (phraseDetected ? .noSend : .none)
+        SignalOverlayModel.shared.setStopPlacard(placard)
+    }
+
     /// The app the held dictation traced `traceID` was pasted into, for its card's headline; nil
     /// for any other dictation, so a card never borrows another dictation's app.
     func heldDictationAppName(forDictation traceID: Int?) -> String? {

@@ -446,6 +446,9 @@ final class GlobalHotkeyManager: NSObject {
     private var isRewriteRecordingProvider: (() -> Bool)?
     private var isShortcutCaptureActiveProvider: (() -> Bool)?
     private var cancelCallback: (() -> Bool)? // Returns true if handled
+    /// Asked first when the cancel shortcut is pressed: drops a pending Spoken Send Return and
+    /// returns true when one was showing (DESIGN.md §15), so the dictation goes on.
+    private var spokenSendCancelCallback: (() -> Bool)?
     private var pasteLastTranscriptionCallback: (() -> Void)?
     private var reprocessLastDictationCallback: (() -> Void)?
     private var hotkeyMode: HotkeyActivationMode = SettingsStore.shared.hotkeyMode
@@ -785,6 +788,19 @@ final class GlobalHotkeyManager: NSObject {
     func setCancelCallback(_ callback: @escaping () -> Bool) {
         self.cancelCallback = callback
     }
+
+    func setSpokenSendCancelCallback(_ callback: @escaping () -> Bool) {
+        self.spokenSendCancelCallback = callback
+    }
+
+    #if DEBUG
+    /// Tests: runs one key event through the tap's handling, as the tap does on main. Returns
+    /// whether the tap consumed it.
+    func handleKeyEventForTests(_ event: CGEvent, type: CGEventType) -> Bool {
+        guard let proxy = OpaquePointer(bitPattern: 1) else { return false }
+        return self.handleKeyEvent(proxy: proxy, type: type, event: event) == nil
+    }
+    #endif
 
     func setPasteLastTranscriptionCallback(_ callback: @escaping () -> Void) {
         self.pasteLastTranscriptionCallback = callback
@@ -1453,6 +1469,15 @@ final class GlobalHotkeyManager: NSObject {
 
             // Check the configured cancel shortcut first.
             if SettingsStore.shared.cancelRecordingHotkeyShortcut.matches(keyCode: keyCode, modifiers: eventModifiers) {
+                // While a Spoken Send Return is pending (SEND showing: armed, counting down, or
+                // stopped and transcribing), the first press drops only the Return, and the key is
+                // consumed so it never reaches the app (Esc would interrupt a Claude Code turn).
+                // The dictation goes on; a second press cancels it (DESIGN.md §15).
+                if let cancelsSend = self.spokenSendCancelCallback, cancelsSend() {
+                    DebugLogger.shared.info("Cancel shortcut pressed - canceled the Spoken Send Return", source: "GlobalHotkeyManager")
+                    return nil
+                }
+
                 var handled = false
 
                 if self.asrService.isRunning || self.asrService.isStarting {

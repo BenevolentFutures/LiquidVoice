@@ -143,6 +143,10 @@ final class SignalOverlayModel: ObservableObject {
         self.sendDrain = drain
     }
 
+    func setStopPlacard(_ placard: SignalPlacard) {
+        if self.stopPlacard != placard { self.stopPlacard = placard }
+    }
+
     /// The Return was canceled after the stop: the held pill's placard reads NO SEND.
     func markSendCanceled() {
         if self.stopPlacard == .send { self.stopPlacard = .noSend }

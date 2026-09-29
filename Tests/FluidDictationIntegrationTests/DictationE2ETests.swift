@@ -3353,9 +3353,9 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         XCTAssertTrue(BottomOverlayView.isChipInert(.cancel, display: .transcribing))
         XCTAssertFalse(BottomOverlayView.isChipInert(.history, display: .stopped))
         // While SEND shows, Cancel still has a Return to drop after the stop.
-        XCTAssertFalse(BottomOverlayView.isChipInert(.cancel, display: .stopped, sendShows: true))
-        XCTAssertFalse(BottomOverlayView.isChipInert(.cancel, display: .transcribing, sendShows: true))
-        XCTAssertTrue(BottomOverlayView.isChipInert(.cancel, display: delivered, sendShows: true))
+        XCTAssertFalse(BottomOverlayView.isChipInert(.cancel, display: .stopped, cancelHasWork: true))
+        XCTAssertFalse(BottomOverlayView.isChipInert(.cancel, display: .transcribing, cancelHasWork: true))
+        XCTAssertTrue(BottomOverlayView.isChipInert(.cancel, display: delivered, cancelHasWork: true))
         // Transcribing: they dim instead.
         XCTAssertFalse(BottomOverlayView.isChipEnabled(.historyAction, display: .transcribing, hasHistory: true))
         XCTAssertTrue(BottomOverlayView.isChipEnabled(.historyAction, display: .listening, hasHistory: true))
@@ -3506,6 +3506,25 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         XCTAssertTrue(controller.yieldToNoticeCard(refusedStart: true), "no capture ever started")
         try await Task.sleep(nanoseconds: 100_000_000)
         XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
+    }
+
+    /// Once the stop decides, the held pill's placard follows the decision: SEND only when the
+    /// Return will follow, NO SEND when the phrase was said but it will not.
+    func testThePlacardFollowsTheSendDecision() async {
+        let controller = BottomOverlayWindowController.shared
+        let model = SignalOverlayModel.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        controller.markRecordingStopped()
+        model.setStopPlacard(.send)
+        controller.spokenSendDecided(returnFollows: false, phraseDetected: true)
+        XCTAssertEqual(model.stopPlacard, .noSend)
+        controller.spokenSendDecided(returnFollows: true, phraseDetected: true)
+        XCTAssertEqual(model.stopPlacard, .send)
+        controller.spokenSendDecided(returnFollows: false, phraseDetected: false)
+        XCTAssertEqual(model.stopPlacard, SignalPlacard.none)
+        _ = await controller.hideAndWait()
     }
 
     /// A new recording during the hold or the fade cancels the old timers: nothing from the

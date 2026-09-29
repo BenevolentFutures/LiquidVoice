@@ -159,8 +159,12 @@ final class DeliveryFailureOverlayController {
         hostingView.layer?.backgroundColor = .clear
         panel.contentView = hostingView
         self.hostingView = hostingView
-        // A card replacing one that was fading out starts opaque.
-        panel.alphaValue = 1
+        // A card replacing one that was fading out starts opaque: a zero-length animation group
+        // supersedes the fade still running on the animator.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            panel.animator().alphaValue = 1
+        }
         self.positionPanel(avoidingOverlay: avoidingOverlay)
         panel.orderFrontRegardless()
         self.scheduleDismiss(after: Self.displayDuration)

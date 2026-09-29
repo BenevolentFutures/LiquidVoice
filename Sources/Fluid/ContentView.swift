@@ -2315,6 +2315,11 @@ struct ContentView: View {
             target: spokenSendTarget,
             isNormalRoute: route == .normal
         )
+        // The held pill's placard follows the decision from here (no longer cancelable).
+        BottomOverlayWindowController.shared.spokenSendDecided(
+            returnFollows: spokenSend.shouldSend,
+            phraseDetected: spokenSend.phraseDetected
+        )
         if spokenSend.isPhraseOnly {
             traceOutcome = "spoken_send_phrase_only"
             await self.finishPhraseOnlyDictation(
@@ -2581,6 +2586,10 @@ struct ContentView: View {
                     stopTrace: trace
                 )
             } else if isTargetReady {
+                if spokenSend.shouldSend {
+                    // The phrase was said but no Return goes here (a blocked target, AI fallback).
+                    BottomOverlayWindowController.shared.spokenSendDecided(returnFollows: false, phraseDetected: true)
+                }
                 // The typing service finishes the trace once the paste is posted.
                 trace.expectDelivery()
                 self.asr.typeOutputPlanToActiveField(
@@ -3679,6 +3688,11 @@ struct ContentView: View {
         self.hotkeyManagerInitialized = self.hotkeyManager?.validateEventTapHealth() ?? false
 
         self.hotkeyManager?.setHotkeyMode(self.hotkeyMode)
+
+        // Esc first drops a pending Spoken Send Return (the dictation goes on).
+        self.hotkeyManager?.setSpokenSendCancelCallback {
+            BottomOverlayWindowController.shared.cancelSpokenSendIfArmed()
+        }
 
         // Set cancel callback for Escape key handling (closes transient UI, resets recording state)
         // Returns true if it handled something (so GlobalHotkeyManager knows to consume the event)

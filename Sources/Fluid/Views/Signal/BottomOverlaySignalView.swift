@@ -81,12 +81,13 @@ struct BottomOverlayView: View {
 
     /// Inert: the chip looks at rest but acts on nothing. During the delivered hold no chip may
     /// re-fire a paste or copy; Copy and Reprocess wait until the final pass is done.
-    /// `sendShows`: the SEND placard is up, so Cancel still has a Return to cancel after the stop.
-    static func isChipInert(_ role: ChipRole, display: Display, sendShows: Bool = false) -> Bool {
+    /// `cancelHasWork`: after the stop, Cancel can still drop a pending Return, or dismiss a pill
+    /// whose Return it already dropped.
+    static func isChipInert(_ role: ChipRole, display: Display, cancelHasWork: Bool = false) -> Bool {
         switch display {
         case .delivered, .idle: return true
-        case .stopped: return role == .historyAction || (role == .cancel && !sendShows)
-        case .transcribing: return role == .cancel && !sendShows
+        case .stopped: return role == .historyAction || (role == .cancel && !cancelHasWork)
+        case .transcribing: return role == .cancel && !cancelHasWork
         case .listening, .notice: return false
         }
     }
@@ -99,8 +100,11 @@ struct BottomOverlayView: View {
         }
     }
 
+    /// After the stop, Cancel acts while it still has something to do: drop a pending Return, or,
+    /// once dropped, dismiss the pill (the text still pastes; it is already on its way).
     private func isInert(_ role: ChipRole) -> Bool {
-        Self.isChipInert(role, display: self.display, sendShows: self.placard == .send)
+        let cancelHasWork = self.spokenSend.cancelsReturnFirst || self.model.stopPlacard == .noSend
+        return Self.isChipInert(role, display: self.display, cancelHasWork: cancelHasWork)
     }
 
     private func isEnabled(_ role: ChipRole) -> Bool {
@@ -302,11 +306,12 @@ struct BottomOverlayView: View {
         // A click anywhere on the pill while SEND shows cancels the Return (DESIGN.md §15).
         // Simultaneous, so the whole surface's double-click (reset position) and drag still work.
         .simultaneousGesture(TapGesture().onEnded {
-            // While SEND shows (listening, stopped or transcribing), a click cancels the Return.
-            guard self.isInteractive, self.placard == .send else { return }
+            // While SEND shows and the Return can still be dropped (listening, stopped or
+            // transcribing, until the stop decides), a click cancels it.
+            guard self.isInteractive, self.canCancelSend else { return }
             BottomOverlayWindowController.shared.cancelSpokenSendIfArmed()
         })
-        .help(self.placard == .send ? "Click to cancel Send" : "")
+        .help(self.canCancelSend ? "Click to cancel Send" : "")
     }
 
     @ViewBuilder
@@ -354,6 +359,10 @@ struct BottomOverlayView: View {
     private var countdownDrain: SignalDrain? {
         guard self.display == .listening, let drain = self.model.sendDrain else { return nil }
         return drain
+    }
+
+    private var canCancelSend: Bool {
+        self.placard == .send && self.spokenSend.cancelsReturnFirst
     }
 
     private var placard: SignalPlacard {

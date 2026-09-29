@@ -430,7 +430,10 @@ final class BottomOverlayWindowController {
                 sentReturn: outcome.sentReturn
             ))
             self.scheduleHoldEnd(after: SignalTheme.Motion.deliveredHold, reason: "delivered")
-            Self.overlayBench("bottom_delivered trace=\(outcome.traceID) sent=\(outcome.sentReturn)")
+            DebugLogger.shared.info(
+                "OVERLAY_OUTCOME trace=\(outcome.traceID) shown=\(outcome.sentReturn ? "sent" : "pasted") method=\(outcome.method?.rawValue ?? "none")",
+                source: "BottomOverlay"
+            )
         case let .recoverableFailure(failure):
             guard failure.isUserVisible else {
                 self.endDeliveryHold(reason: "not_delivered")
@@ -453,6 +456,7 @@ final class BottomOverlayWindowController {
         else { return false }
         self.cancelDeliveryHold()
         self.nextHideIsCut = true
+        DebugLogger.shared.info("OVERLAY_OUTCOME shown=card", source: "BottomOverlay")
         Self.overlayBench("bottom_yield_to_card")
         self.hideThroughOwner()
         return true
@@ -484,6 +488,11 @@ final class BottomOverlayWindowController {
               !NotchContentState.shared.isBottomOverlayDismissing,
               SignalOverlayModel.shared.isPostStop
         else { return }
+        if reason != "delivered" {
+            // The overlay held a stopped dictation but no outcome or card came: logged so a
+            // silent path shows up (the text itself was handed to the typing service).
+            DebugLogger.shared.info("OVERLAY_OUTCOME shown=none reason=\(reason)", source: "BottomOverlay")
+        }
         Self.overlayBench("bottom_hold_end reason=\(reason)")
         self.hideThroughOwner()
     }

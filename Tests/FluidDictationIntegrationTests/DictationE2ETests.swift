@@ -3789,3 +3789,51 @@ final class OverlayParkTimingBenchmarkTests: XCTestCase {
         DebugLogger.shared.info(line, source: "OverlayParkBenchmark")
     }
 }
+
+/// The voice trace keeps moving on every dictation: levels go through the same path a real
+/// capture uses (the ASR's level publisher, delivered on main, into the window controller's
+/// subscription), across two dictations with the outcome hold and the fade between them.
+@MainActor
+final class SignalTraceLifecycleTests: XCTestCase {
+    private func speak(into subject: PassthroughSubject<CGFloat, Never>, seconds: Double) async throws {
+        let end = Date().addingTimeInterval(seconds)
+        var step = 0
+        while Date() < end {
+            // Like AudioCapturePipeline.onLevel: hopped to main, one level per 512-frame buffer.
+            let level: CGFloat = step % 6 < 3 ? 0.95 : 0.55
+            DispatchQueue.main.async { subject.send(level) }
+            step += 1
+            try await Task.sleep(nanoseconds: 10_700_000)
+        }
+        try await Task.sleep(nanoseconds: 30_000_000)
+    }
+
+    private func dictate(_ controller: BottomOverlayWindowController, subject: PassthroughSubject<CGFloat, Never>, trace id: Int) async throws -> [CGFloat] {
+        controller.show(audioPublisher: subject.eraseToAnyPublisher(), mode: .dictation)
+        try await self.speak(into: subject, seconds: 0.8)
+        let heights = SignalOverlayModel.shared.trace.current
+        controller.markRecordingStopped()
+        controller.awaitDelivery(traceID: id, appName: "c11", words: 3, failureReported: false)
+        controller.dictationDeliveryFinished(DictationDeliveryOutcome(traceID: id, result: .dispatched, method: .paste, sentReturn: false))
+        return heights
+    }
+
+    func testTheTraceMovesOnTheSecondDictationAfterAHoldAndFade() async throws {
+        let controller = BottomOverlayWindowController.shared
+        let subject = PassthroughSubject<CGFloat, Never>()
+        controller.prepare()
+        await Task.yield()
+
+        let first = try await self.dictate(controller, subject: subject, trace: 91)
+        XCTAssertGreaterThan(first.filter { $0 > 2 }.count, 3, "the first dictation's trace moved")
+        // The hold, then the fade.
+        try await Task.sleep(nanoseconds: UInt64((BottomOverlayWindowController.deliveredHold + 0.4) * 1_000_000_000))
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
+
+        let second = try await self.dictate(controller, subject: subject, trace: 92)
+        XCTAssertGreaterThan(second.filter { $0 > 2 }.count, 3, "the second dictation's trace moved")
+        let bars = SignalMenuBarMark.listeningBars(from: SignalOverlayModel.shared.trace)
+        XCTAssertEqual(bars.count, 3)
+        _ = await controller.hideAndWait()
+    }
+}

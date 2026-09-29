@@ -19,7 +19,9 @@ struct BottomOverlayView: View {
     @ObservedObject private var historyCard = BottomOverlayHistoryMenuController.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var isHoveringOverlay = false
+    /// The pointer is over the pill itself (not the rails, their gutter or the empty chip slot):
+    /// the only place a click cancels a pending Return, so the only place its bracket shows.
+    @State private var isHoveringPill = false
     @State private var hoveredChips: Set<String> = []
     @State private var isCopyConfirming = false
     @State private var copyConfirmationID = 0
@@ -262,11 +264,8 @@ struct BottomOverlayView: View {
                 self.reprocessChip
             }
         }
-        // The pill's bracket shows over the pill and the rails' gutter, but only one bracket at a
-        // time: over a chip, that chip's own bracket draws instead.
         .onHover { hovering in
-            self.isHoveringOverlay = hovering
-            // A notice row's timer waits while the pointer is over the pill.
+            // A notice row's timer waits while the pointer is over the pill or its rails.
             BottomOverlayWindowController.shared.noticeHoverChanged(hovering)
         }
         .padding(SignalTheme.Metrics.windowInsets)
@@ -303,7 +302,7 @@ struct BottomOverlayView: View {
         // A hidden overlay gets no hover-out: forget the hover so no bracket shows at rest next time.
         .onChange(of: self.contentState.isBottomOverlayPresented) { _, presented in
             guard !presented else { return }
-            self.isHoveringOverlay = false
+            self.isHoveringPill = false
             self.hoveredChips.removeAll()
         }
         .onAppear {
@@ -314,10 +313,21 @@ struct BottomOverlayView: View {
         }
     }
 
+    /// The pill's bracket: under the pointer, and only while the pill is clickable as a whole
+    /// (SEND shows and a click cancels the Return). Brackets mark only what you can click.
+    static func showsPillBracket(isClickable: Bool, isHovered: Bool) -> Bool {
+        isClickable && isHovered
+    }
+
     private func pill(_ geometry: SignalOverlayGeometry) -> some View {
         let display = self.display
-        let pillBracket = (self.isHoveringOverlay && self.hoveredChips.isEmpty && !self.historyCard.isHovered
-            && self.isInteractive) || self.model.inspectionHover == "pill"
+        // Brackets mark only what you can click (DESIGN.md §7, Atin 2026-09-29). The pill is
+        // clickable as a whole only while SEND shows and a click cancels the Return.
+        let pillBracket = Self.showsPillBracket(
+            isClickable: self.canCancelSend || self.model.inspectionPlacard == .send,
+            isHovered: (self.isHoveringPill && !self.historyCard.isHovered && self.isInteractive)
+                || self.model.inspectionHover == "pill"
+        )
         return SignalPill(
             geometry: geometry,
             topHeight: geometry.topAreaHeight,
@@ -336,6 +346,10 @@ struct BottomOverlayView: View {
             BottomOverlayWindowController.shared.cancelSpokenSendIfArmed()
         })
         .help(self.canCancelSend ? "Click to cancel Send" : "")
+        // Tracked on the pill itself, so the bracket never shows where a click would not cancel.
+        .onHover { hovering in
+            if hovering != self.isHoveringPill { self.isHoveringPill = hovering }
+        }
         .signalFloatShadowSource(self.floatShadow)
     }
 

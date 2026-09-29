@@ -3012,7 +3012,7 @@ final class SignalOverlayRenderTests: XCTestCase {
         for step in 0..<60 {
             trace.ingest(level: step % 3 == 0 ? 0.95 : 0.6, at: Double(step) / 12)
         }
-        let listeningBars = SignalMenuBarMark.listeningBars(from: trace)
+        let listeningBars = SignalMenuBarMark.listeningBars(from: trace, at: 59.0 / 12)
         XCTAssertEqual(listeningBars.count, 3)
         XCTAssertTrue(listeningBars.allSatisfy { $0 >= 4 && $0 <= 12 && $0.truncatingRemainder(dividingBy: 2) == 0 })
 
@@ -3169,6 +3169,9 @@ enum SignalRenderStage {
         ("02-listening-hover", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionHover = "pill" }),
         ("03-listening-hover-cancel", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionHover = "cancel" }),
         ("04-listening-armed", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionPlacard = .send }),
+        // While SEND shows, a click on the pill cancels the Return: the pill is clickable, so it
+        // takes a bracket (DESIGN.md §7). Hovered at rest (02) it takes none.
+        ("04b-listening-armed-hover", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionPlacard = .send; SignalOverlayModel.shared.inspectionHover = "pill" }),
         ("05-transcribing", { SignalRenderStage.listening(); SignalRenderStage.stop(); NotchContentState.shared.setProcessing(true); SignalOverlayModel.shared.beginTranscribing(); SignalOverlayModel.shared.inspectionSweepProgress = 0.45 }),
         ("06-pasted", { SignalRenderStage.listening(); SignalRenderStage.stop(); SignalOverlayModel.shared.showDelivered(SignalDelivery(appName: "c11", words: 118, method: .paste, sentReturn: false)) }),
         ("13-countdown", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionPlacard = .send; SignalOverlayModel.shared.startSendCountdown(duration: 1.5, at: Date().addingTimeInterval(-0.55)) }),
@@ -3431,6 +3434,14 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         _ = await controller.hideAndWait()
     }
 
+    func testBracketsMarkOnlyWhatYouCanClick() {
+        // The pill at rest is not clickable as a whole: no bracket, hovered or not.
+        XCTAssertFalse(BottomOverlayView.showsPillBracket(isClickable: false, isHovered: true))
+        // While SEND shows a click cancels the Return: the hovered pill takes its bracket.
+        XCTAssertTrue(BottomOverlayView.showsPillBracket(isClickable: true, isHovered: true))
+        XCTAssertFalse(BottomOverlayView.showsPillBracket(isClickable: true, isHovered: false))
+    }
+
     /// Feeds `level` at 94 Hz from `start` for `seconds`, with a frame at each tick like the clock.
     private func feed(_ trace: SignalTraceModel, _ level: CGFloat, from start: TimeInterval, seconds: Double) -> TimeInterval {
         var t = start
@@ -3455,6 +3466,7 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         t = self.feed(trace, 0.6, from: t, seconds: 1)
         XCTAssertEqual(trace.pushes, 12, accuracy: 1)
         XCTAssertGreaterThan(trace.current.suffix(10).filter { $0 > 2 }.count, 5)
+        XCTAssertNotEqual(SignalMenuBarMark.listeningBars(from: trace, at: t), [4, 6, 4], "the menu bar mark moves with speech")
         trace.advance(to: t + 0.04)
         XCTAssertGreaterThan(trace.scrollFraction, 0, "mid-sample the bars sit part way through the pitch")
 
@@ -3463,6 +3475,7 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         t = self.feed(trace, 0, from: t, seconds: 2)
         XCTAssertEqual(trace.pushes - spoken, 3, accuracy: 1, "the hangover, no more")
         let held = (trace.pushes, trace.scrollFraction, trace.current)
+        XCTAssertEqual(SignalMenuBarMark.listeningBars(from: trace, at: t), [4, 6, 4], "the menu bar mark rests in silence")
         t = self.feed(trace, 0, from: t, seconds: 1)
         XCTAssertEqual(trace.pushes, held.0, "silence holds the trace still")
         XCTAssertEqual(trace.scrollFraction, held.1)

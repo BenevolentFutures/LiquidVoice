@@ -3278,12 +3278,18 @@ enum SignalRenderStage {
 /// chips act when, and the delivered hold (quiet: no window reaches the screen).
 @MainActor
 final class SignalOverlayBehaviorTests: XCTestCase {
+    private var savedOverlayPosition = SettingsStore.OverlayPosition.bottom
+
     override func setUp() {
         super.setUp()
         BottomOverlayWindowController.deliveredHold = 0.2
+        // The pill (and its notice row) is the bottom overlay's.
+        self.savedOverlayPosition = SettingsStore.shared.overlayPosition
+        SettingsStore.shared.overlayPosition = .bottom
     }
 
     override func tearDown() {
+        SettingsStore.shared.overlayPosition = self.savedOverlayPosition
         BottomOverlayWindowController.deliveredHold = SignalTheme.Motion.deliveredHold
         TypingService.dictationOutcomeHandler = { outcome in
             BottomOverlayWindowController.shared.dictationDeliveryFinished(outcome)
@@ -3340,6 +3346,58 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         XCTAssertEqual(reprocesses, 1)
     }
 
+    /// The rail's Reprocess chip and the row's Reprocess are one action on a notice row: chip, then
+    /// the row, reprocesses exactly once (the kept dictation clears only after its transcription).
+    func testTheChipThenTheNoticeReprocessesOnce() async throws {
+        let controller = BottomOverlayWindowController.shared
+        let savedReprocess = NotchContentState.shared.onReprocessLastRequested
+        var reprocesses = 0
+        NotchContentState.shared.onReprocessLastRequested = { reprocesses += 1 }
+        defer { NotchContentState.shared.onReprocessLastRequested = savedReprocess }
+        controller.prepare()
+        await Task.yield()
+        XCTAssertTrue(controller.presentNotice(.recognitionBack, frozenDuration: 41, pointerInside: false))
+        controller.reprocessFromNotice() // the chip, on a notice row
+        controller.reprocessFromNotice() // then the row's own Reprocess, before the cut lands
+        try await Task.sleep(nanoseconds: 100_000_000)
+        controller.reprocessFromNotice() // and after it
+        XCTAssertEqual(reprocesses, 1)
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
+    }
+
+    /// A pointer already resting on the pill when the notice appears pauses its timer.
+    func testAPointerRestingOnThePillPausesTheNotice() async throws {
+        let controller = BottomOverlayWindowController.shared
+        let savedDuration = BottomOverlayWindowController.noticeDuration
+        BottomOverlayWindowController.noticeDuration = 0.2
+        defer { BottomOverlayWindowController.noticeDuration = savedDuration }
+        controller.prepare()
+        await Task.yield()
+        XCTAssertTrue(controller.presentNotice(.recognitionBack, frozenDuration: 41, pointerInside: true))
+        try await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented, "paused from the start")
+        controller.noticeHoverChanged(false)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented, "4 s more once the pointer leaves")
+        _ = await controller.hideAndWait()
+    }
+
+    /// The recognition-back card (the fallback) never takes a held pill's place.
+    func testTheRecognitionBackFallbackCardNeverTakesAHeldPill() async {
+        let controller = BottomOverlayWindowController.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        controller.markRecordingStopped()
+        XCTAssertFalse(controller.presentNotice(.recognitionBack, frozenDuration: 41), "a held pill is not free")
+        DeliveryFailureOverlayController.shared.showTranscriptionTimeout(.recovered)
+        XCTAssertEqual(DeliveryFailureOverlayController.shared.presentedTimeout, .recovered)
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented, "the held pill stays")
+        XCTAssertEqual(SignalOverlayModel.shared.phase, .stopped)
+        DeliveryFailureOverlayController.shared.hide()
+        _ = await controller.hideAndWait()
+    }
+
     /// The notice leaves on its own after its time, paused while the pointer is over the pill.
     func testTheNoticeRowTimesOutUnlessHovered() async throws {
         let controller = BottomOverlayWindowController.shared
@@ -3348,13 +3406,13 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         defer { BottomOverlayWindowController.noticeDuration = savedDuration }
         controller.prepare()
         await Task.yield()
-        XCTAssertTrue(controller.presentNotice(.recognitionBack, frozenDuration: 41))
+        XCTAssertTrue(controller.presentNotice(.recognitionBack, frozenDuration: 41, pointerInside: false))
         controller.noticeHoverChanged(true)
         try await Task.sleep(nanoseconds: 400_000_000)
         XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented, "paused under the pointer")
         _ = await controller.hideAndWait()
 
-        XCTAssertTrue(controller.presentNotice(.recognitionBack, frozenDuration: 41))
+        XCTAssertTrue(controller.presentNotice(.recognitionBack, frozenDuration: 41, pointerInside: false))
         try await Task.sleep(nanoseconds: 500_000_000)
         XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented, "left after its time")
     }

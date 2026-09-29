@@ -211,6 +211,11 @@ struct BottomOverlayView: View {
         ) {
             self.perform {
                 BottomOverlayHistoryMenuController.shared.hide()
+                // On a notice row the chip is the row's Reprocess: once, and the row gives way.
+                if case .noticeRow = self.display {
+                    BottomOverlayWindowController.shared.reprocessFromNotice()
+                    return
+                }
                 self.contentState.clearAIProcessingFailure()
                 self.contentState.onReprocessLastRequested?()
             }

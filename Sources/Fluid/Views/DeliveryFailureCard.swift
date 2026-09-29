@@ -111,7 +111,9 @@ final class DeliveryFailureOverlayController {
         }
         let refusedStart: Bool = if case .recordingRefused = notice { true } else { false }
         self.present(content, yieldOverlay: {
-            BottomOverlayWindowController.shared.yieldToNoticeCard(refusedStart: refusedStart)
+            // Recognition-back reaches a card only when the pill is not free: it never takes a
+            // held or transcribing pill's place.
+            notice == .recovered ? false : BottomOverlayWindowController.shared.yieldToNoticeCard(refusedStart: refusedStart)
         }) { [weak self] in
             // Reprocess: the same path as the overlay's Reprocess chip and hotkey.
             NotchContentState.shared.onReprocessLastRequested?()

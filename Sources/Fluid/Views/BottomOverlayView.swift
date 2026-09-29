@@ -39,6 +39,8 @@ final class BottomOverlayWindowController {
     private var sendCancelHold: DispatchWorkItem?
     /// A notice row's auto-dismiss (10 s, paused while the pointer is over the pill).
     private var noticeWork: DispatchWorkItem?
+    /// The notice's Reprocess already ran (the chip or the row): a second never runs.
+    private var noticeReprocessed = false
     /// The next hide is a cut, not the 120 ms fade (a recovery card takes the overlay's place).
     private var nextHideIsCut = false
     private var pendingResizeWorkItem: DispatchWorkItem?
@@ -609,7 +611,7 @@ final class BottomOverlayWindowController {
     /// nothing, when there is no bottom pill to use (the top overlay is set, or a recording or a
     /// held dictation owns the pill); the caller then shows the notice another way.
     @discardableResult
-    func presentNotice(_ notice: SignalNotice, frozenDuration: TimeInterval?) -> Bool {
+    func presentNotice(_ notice: SignalNotice, frozenDuration: TimeInterval?, pointerInside: Bool? = nil) -> Bool {
         guard SettingsStore.shared.overlayPosition == .bottom else { return false }
         let state = NotchContentState.shared
         let model = SignalOverlayModel.shared
@@ -642,7 +644,15 @@ final class BottomOverlayWindowController {
         self.window?.orderFrontRegardless()
         self.window?.contentView?.displayIfNeeded()
         CATransaction.flush()
-        self.scheduleNoticeDismiss(after: Self.noticeDuration)
+        self.noticeReprocessed = false
+        // A pointer already resting on the pill gets no hover event until it moves: seed the pause.
+        let restingOnPill = pointerInside ?? (self.window?.frame.contains(NSEvent.mouseLocation) ?? false)
+        if restingOnPill {
+            self.noticeWork?.cancel()
+            self.noticeWork = nil
+        } else {
+            self.scheduleNoticeDismiss(after: Self.noticeDuration)
+        }
         return true
     }
 
@@ -658,7 +668,11 @@ final class BottomOverlayWindowController {
 
     /// The notice's Reprocess: the same Reprocess as the chip, the hotkey and the card it replaced.
     /// The notice gives way with a cut, since Reprocess shows the pill again.
+    /// Once per notice, whichever of the row's Reprocess and the rail's Reprocess chip comes first:
+    /// the kept dictation clears only after its transcription, so a second run would paste twice.
     func reprocessFromNotice() {
+        guard SignalOverlayModel.shared.isNotice, !self.noticeReprocessed else { return }
+        self.noticeReprocessed = true
         self.dismissNotice(cut: true)
         NotchContentState.shared.onReprocessLastRequested?()
     }

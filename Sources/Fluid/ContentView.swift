@@ -2861,6 +2861,14 @@ struct ContentView: View {
     /// Reprocess for a dictation whose transcription timed out: transcribe its kept audio, then
     /// finish it like any reprocess (formatting, AI cleanup, typing, history).
     private func reprocessKeptDictationAudio() async {
+        // One at a time: the kept dictation is cleared only once it is transcribed, so a second
+        // request meanwhile (the hotkey, then the notice) would transcribe and paste it twice.
+        guard !Self.isReprocessingKeptDictation else {
+            DebugLogger.shared.info("Actions: kept dictation reprocess already in flight; ignored", source: "ContentView")
+            return
+        }
+        Self.isReprocessingKeptDictation = true
+        defer { Self.isReprocessingKeptDictation = false }
         guard !self.asr.isRecoveringFromStalledTranscription else {
             DebugLogger.shared.info("Actions: kept dictation not reprocessed; the model is still recovering", source: "ContentView")
             ASRService.transcriptionTimeoutHandler(.reprocessUnavailable)
@@ -2975,6 +2983,9 @@ struct ContentView: View {
     /// waiting for the modifier keys to release is ignored rather than queuing a duplicate insert.
     /// Only ever touched on the main actor.
     private static var isPasteLastInProgress = false
+
+    /// A kept dictation's reprocess is running (see reprocessKeptDictationAudio). Main actor only.
+    private static var isReprocessingKeptDictation = false
 
     /// Polls until the keyboard modifier keys are released, returning `true` once they are, or
     /// `false` if the timeout elapses with keys still held. Used before synthesizing a paste so the

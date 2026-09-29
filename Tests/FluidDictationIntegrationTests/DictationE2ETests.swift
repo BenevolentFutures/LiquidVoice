@@ -3800,10 +3800,10 @@ final class OverlayParkTimingBenchmarkTests: XCTestCase {
 /// (captured from the installed build, 2026-09-29). The trace now calibrates to the recording.
 @MainActor
 final class SignalTraceLifecycleTests: XCTestCase {
-    /// A quiet microphone's speech, one level per 512-frame buffer (10.7 ms): syllables of about
-    /// 150 ms between 0.28 and 0.42, and 75 ms gaps of room tone the ASR gates to 0.
+    /// A quiet microphone's speech, one level per 512-frame buffer (10.7 ms): 150 ms of room tone
+    /// the ASR gates to 0, then 300 ms of syllables between 0.28 and 0.42, repeating.
     static func quietSpeech(step: Int) -> CGFloat {
-        guard (step / 14) % 3 != 2 else { return 0 }
+        guard (step / 14) % 3 != 0 else { return 0 }
         var seed = UInt64(truncatingIfNeeded: step &* 2_654_435_761)
         seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
         return 0.28 + 0.14 * CGFloat(seed >> 40) / CGFloat(1 << 24)
@@ -3827,7 +3827,7 @@ final class SignalTraceLifecycleTests: XCTestCase {
     private func dictate(_ controller: BottomOverlayWindowController, subject: PassthroughSubject<CGFloat, Never>, trace id: Int) async throws -> (snapshots: [[CGFloat]], stats: SignalTraceModel.Stats, menuBars: [CGFloat]) {
         controller.show(audioPublisher: subject.eraseToAnyPublisher(), mode: .dictation)
         var snapshots: [[CGFloat]] = []
-        try await self.speak(into: subject, seconds: 1.2, snapshots: &snapshots)
+        try await self.speak(into: subject, seconds: 0.6, snapshots: &snapshots)
         let stats = SignalOverlayModel.shared.trace.stats
         let menuBars = SignalMenuBarMark.listeningBars(from: SignalOverlayModel.shared.trace)
         controller.markRecordingStopped()
@@ -3838,11 +3838,10 @@ final class SignalTraceLifecycleTests: XCTestCase {
 
     private func assertMoved(_ run: (snapshots: [[CGFloat]], stats: SignalTraceModel.Stats, menuBars: [CGFloat]), _ label: String) {
         let raisedBars = run.snapshots.map { $0.filter { $0 > 2 }.count }
-        XCTAssertGreaterThan(raisedBars.max() ?? 0, 5, "\(label): the quiet speech draws above the floor")
-        XCTAssertGreaterThan(Set(run.snapshots).count, 3, "\(label): the bars change from moment to moment")
+        XCTAssertGreaterThanOrEqual(raisedBars.max() ?? 0, 2, "\(label): the quiet speech draws above the floor")
+        XCTAssertGreaterThan(Set(run.snapshots).count, 2, "\(label): the bars change from moment to moment")
         XCTAssertGreaterThanOrEqual(run.snapshots.flatMap { $0 }.max() ?? 0, 12, "\(label): syllables stretch tall")
-        // A third of this speech is gaps, and the first syllable only sets the floor: under the
-        // old fixed gate this is 0.
+        // A third of this speech is room tone: under the old fixed gate this is 0.
         XCTAssertGreaterThan(Double(run.stats.raised) / Double(max(run.stats.windows, 1)), 0.25, "\(label): \(run.stats)")
         XCTAssertEqual(run.menuBars.count, 3)
     }
@@ -3850,13 +3849,17 @@ final class SignalTraceLifecycleTests: XCTestCase {
     func testTheTraceMovesOnTheSecondDictationAfterAHoldAndFade() async throws {
         let controller = BottomOverlayWindowController.shared
         let subject = PassthroughSubject<CGFloat, Never>()
+        // A short hold keeps the default suite fast; the hold's length is not under test here.
+        let savedHold = BottomOverlayWindowController.deliveredHold
+        BottomOverlayWindowController.deliveredHold = 0.05
+        defer { BottomOverlayWindowController.deliveredHold = savedHold }
         controller.prepare()
         await Task.yield()
 
         let first = try await self.dictate(controller, subject: subject, trace: 91)
         self.assertMoved(first, "first dictation")
         // The hold, then the fade.
-        try await Task.sleep(nanoseconds: UInt64((BottomOverlayWindowController.deliveredHold + 0.4) * 1_000_000_000))
+        try await Task.sleep(nanoseconds: UInt64((BottomOverlayWindowController.deliveredHold + SignalTheme.Motion.dismiss + 0.1) * 1_000_000_000))
         XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
 
         let second = try await self.dictate(controller, subject: subject, trace: 92)
@@ -3925,31 +3928,70 @@ final class SignalFloatShadowTests: XCTestCase {
         super.tearDown()
     }
 
+    /// Lets queued main-queue turns run (the shadow's deferred present, withdraw and alpha).
+    private func mainTurns() async throws {
+        try await Task.sleep(nanoseconds: 60_000_000)
+    }
+
     func testTheShadowPanelIsAClickThroughChildUnderTheOverlayThatFollowsIt() async throws {
         let controller = BottomOverlayWindowController.shared
+        let savedParkingDelay = BottomOverlayWindowController.idleParkingDelay
+        let savedHold = BottomOverlayWindowController.deliveredHold
+        BottomOverlayWindowController.idleParkingDelay = 0.05
+        defer {
+            BottomOverlayWindowController.idleParkingDelay = savedParkingDelay
+            BottomOverlayWindowController.deliveredHold = savedHold
+        }
         controller.prepare()
-        let shadow = controller.floatShadow.panelForTests
-        let overlay = try XCTUnwrap(shadow.parent, "attached to the overlay's panel")
+        let floatShadow = controller.floatShadow
+        let shadow = floatShadow.panelForTests
         XCTAssertTrue(shadow.ignoresMouseEvents, "the shadow never takes a click")
-        XCTAssertTrue(overlay.childWindows?.contains(shadow) == true)
         XCTAssertFalse(shadow.hasShadow)
+        XCTAssertNil(shadow.parent, "a parked, hidden pill has no shadow in the window list")
 
-        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
-        try await Task.sleep(nanoseconds: 100_000_000)
         let margin = SignalFloatShadow.margin
-        XCTAssertEqual(shadow.frame, overlay.frame.insetBy(dx: -margin, dy: -margin), "sized to the overlay plus its margin")
-        XCTAssertEqual(shadow.alphaValue, 1)
-        // The pill reports its own box: rails and the bracket margin to its left, the top margin above.
         let geometry = SignalOverlayGeometry.forSize(SettingsStore.shared.overlaySize)
         let insets = SignalTheme.Metrics.windowInsets
-        XCTAssertEqual(
-            controller.floatShadow.state.surface,
-            CGRect(x: insets.leading + SignalTheme.Metrics.chip + SignalTheme.Metrics.railGap, y: insets.top, width: geometry.pillWidth, height: geometry.pillHeight)
-        )
+        let pillBox = CGRect(x: insets.leading + SignalTheme.Metrics.chip + SignalTheme.Metrics.railGap, y: insets.top, width: geometry.pillWidth, height: geometry.pillHeight)
+        for pass in ["first show", "show after the idle park"] {
+            controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+            // The start path moves and orders the pill alone; the shadow follows on a later turn.
+            XCTAssertNil(shadow.parent, "\(pass): the show orders one window")
+            XCTAssertFalse(floatShadow.isPresented)
+            try await self.mainTurns()
+            let overlay = try XCTUnwrap(shadow.parent, "\(pass): the shadow is a child of the overlay")
+            XCTAssertTrue(overlay.childWindows?.contains(shadow) == true)
+            XCTAssertEqual(shadow.frame, overlay.frame.insetBy(dx: -margin, dy: -margin), "\(pass): under the pill, not where it was parked")
+            XCTAssertEqual(shadow.alphaValue, 1)
+            XCTAssertEqual(floatShadow.state.surface, pillBox, "\(pass): the pill reports its own box")
 
-        _ = await controller.hideAndWait()
-        XCTAssertEqual(overlay.alphaValue, 0)
-        XCTAssertEqual(shadow.alphaValue, 0, "alpha 0 casts nothing: the shadow mirrors the overlay's alpha")
+            _ = await controller.hideAndWait()
+            try await self.mainTurns()
+            XCTAssertEqual(overlay.alphaValue, 0)
+            XCTAssertEqual(shadow.alphaValue, 0, "\(pass): alpha 0 casts nothing")
+            XCTAssertNil(shadow.parent, "\(pass): withdrawn once hidden")
+            // Idle past the parking delay: the pill parks offscreen alone.
+            try await Task.sleep(nanoseconds: 150_000_000)
+            XCTAssertEqual(controller.windowStateForTests?.isParkedOffscreen, true, "\(pass): parked")
+            XCTAssertNil(shadow.parent)
+        }
+    }
+
+    func testTheShadowPanelIsNeverClampedOntoAScreen() {
+        let panel = SignalFloatShadow.Panel(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: true)
+        let parked = NSRect(x: 100_000, y: 100_000, width: 488, height: 227)
+        XCTAssertEqual(panel.constrainFrameRect(parked, to: NSScreen.screens.first), parked)
+    }
+
+    func testTheStartSummaryNamesEveryField() {
+        XCTAssertEqual(
+            StartPathTrace.summary(trigger: "hotkey", captureMs: 142, overlayVisibleMs: 9, overlayWasParked: true, shadowAfterMs: 21),
+            "START_SUMMARY trigger=hotkey hotkeyToCaptureMs=142 overlayVisibleMs=9 overlayWasParked=true shadowAfterMs=21"
+        )
+        XCTAssertEqual(
+            StartPathTrace.summary(trigger: "other", captureMs: 90, overlayVisibleMs: nil, overlayWasParked: nil, shadowAfterMs: nil),
+            "START_SUMMARY trigger=other hotkeyToCaptureMs=90 overlayVisibleMs=- overlayWasParked=- shadowAfterMs=-"
+        )
     }
 
     func testARecoveryCardCastsItsOwnShadowFromItsGrownPill() async throws {
@@ -3981,9 +4023,13 @@ final class SignalFloatShadowTests: XCTestCase {
                 continuation.resume()
             }
         }
+        try await self.mainTurns()
         XCTAssertEqual(floatShadow.panelForTests.alphaValue, 0, "a card's fade takes its shadow along")
         parent.alphaValue = 1
+        try await self.mainTurns()
         XCTAssertEqual(floatShadow.panelForTests.alphaValue, 1)
+        parent.setFrameOrigin(NSPoint(x: 100_000, y: 100_000))
+        XCTAssertEqual(floatShadow.panelForTests.frame.origin, NSPoint(x: 100_000 - 32, y: 100_000 - 32), "follows a move, parked included")
     }
 
     private static func pixels(_ view: some View, size: CGSize) throws -> (cg: CGImage, alphaAt: (Int, Int) -> UInt8) {

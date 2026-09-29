@@ -3371,6 +3371,7 @@ struct ContentView: View {
             return nil
         }
 
+        StartPathTrace.begin()
         self.advanceOverlayLifecycle()
         self.setActiveRecordingMode(.dictate)
         let shouldShowDictationOverlay = !self.isRecordingForCommand
@@ -3402,6 +3403,7 @@ struct ContentView: View {
                     message: "overlay_phase phase=recording trigger=first_pcm",
                     source: "AppBenchmark"
                 )
+                StartPathTrace.captureStarted()
             })
             if startOutcome == .failed {
                 self.menuBarManager.hideRecordingOverlayImmediately(reason: "asr_start_failed")

@@ -301,7 +301,7 @@ enum SignalTheme {
         static let copyFeedbackChip: TimeInterval = 0.9
         static let copyFeedbackButton: TimeInterval = 1.4
         /// Delivered stays this long after the paste, then dismisses.
-        static let deliveredHold: TimeInterval = 1.2
+        static let deliveredHold: TimeInterval = 0.6
         /// The menu bar mark's bars follow the level at 8 Hz while listening.
         static let menuBarBars: TimeInterval = 1.0 / 8.0
 

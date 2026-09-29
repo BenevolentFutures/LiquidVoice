@@ -108,7 +108,7 @@ Rules: stroke 1.5 pt in `bracket` over a 1 pt `halo` in the surface colour (with
 | Transcribing sweep | 1050 ms, repeating | linear | Solid 24 × 4 accent block stepped on the 4 pt pitch |
 | Chip press | ≥ 60 ms | 60 ms linear colour | Inverts to a solid square with a 1 pt surface keyline. No scale |
 | Copy feedback | 900 ms (chip), 1400 ms (card button) | none | Orange fill and check, same size |
-| Delivered hold | 1200 ms | none | Then dismiss |
+| Pasted / Sent hold | 600 ms | none | Then dismiss (shortened from 1200 ms by Atin, 2026-09-28) |
 | Menu bar bars | 8 Hz | none | 2 pt steps while listening |
 | Reduced motion | | | Bars jump without morph; the sweep holds 4 positions per cycle; dismiss and bracket fades are cuts |
 
@@ -130,7 +130,7 @@ No springs. Nothing eases softly. Everything is deliberate.
 1. **Idle.** Hidden. The menu bar mark shows three bars.
 2. **Listening.** Live preview above. Trace live, the newest 6 bars orange (the write head). Solid orange square and a running timer at the right end of the trace row, opposite the target-app icon. Mic label bottom-centre. Chips at rest (solid squares, no edge). Menu bar: bars plus a solid square.
 3. **Transcribing.** Preview frozen and dimmed. Bars flat at 2 pt with the orange sweep crossing every 1.05 s. The square goes hollow, the timer freezes at the final duration. Copy and Reprocess dim. **No status word.** Menu bar: bars plus an outlined square.
-4. **Pasted** (was "Delivered"). The preview area swaps to the orange stamp, "Pasted into c11" and "118 WORDS" in mono. Trace flat, timer frozen (the duration appears once, here). Held 1.2 s, then dismissed. The paste was posted, not verified, hence the word.
+4. **Pasted** (was "Delivered"). The preview area swaps to the orange stamp, "Pasted into c11" and "118 WORDS" in mono. Trace flat, timer frozen (the duration appears once, here). Held 0.6 s, then dismissed. The paste was posted, not verified, hence the word.
 5. **Failed → Copy.** The pill grows upward (82 pt, 99 with a two-line reason): an orange 2 pt top rule, "Couldn't paste into c11", one reason line ("No text field focused" / "The text is on your clipboard" / "Your newer clipboard was left alone, the text is in History"), the transcript clamped to 3 lines, a solid orange **Copy** (becomes "✓ Copied" at the same width for 1.4 s), **Dismiss**, and "118 WORDS". Trace row, mic row, rails and chips do not move. Stays until dismissed, the next dictation, or 10 s (the countdown pauses while the pointer is over the card and resumes with 4 s when it leaves); it then fades out over 120 ms linear like the pill (a cut under reduced motion).
 6. **History.** The card opens 6 pt above the History chip, anchored to its leading edge, with the listening state live underneath. An engineering table: mono index column ("01" over the time), day rows, 1 px rules, transcripts clamped to 4 lines, mono meta with the orange NOT DELIVERED marker where the paste failed, and a title-block footer ("HISTORY · 12 OF 247 · NEWEST FIRST" | "LIQUID VOICE"). Rows invert on hover; click inserts. The History chip stays inverted (latched) while the card is open. Closes on outside click, re-tap, or a row pick.
 
@@ -209,7 +209,7 @@ The trace row becomes `[icon 20] [trace 39 bars] [placard 7 ch] [■ 6] [timer 5
 
 The rule for Esc is one gate: it drops the Return (and is consumed) only while a Return is genuinely pending (the recording is live, or its stop has begun and the send is not decided) and the bottom pill visibly shows `SEND`. Everywhere else, including the top overlay, which shows no placard, Esc does what it always did. A held Esc that dropped the Return consumes its own auto-repeats and does nothing else. A second press after a cancel: while recording, Esc or Cancel cancels the dictation, as it always did. After the stop it only dismisses the pill; the text still pastes (it is already on its way), and that Esc is not consumed, since it cancels nothing and may be meant for the app. Once the stop decides, the placard follows the decision: `SEND` only when the Return will follow; `NO SEND` in ink after a cancel; `NO SEND` dim when no Return goes there (a terminal that never gets one), since ink is reserved for a cancel.
 
-Outcomes: a completed countdown goes to **Sent** (the stamp layout, "Sent to c11", `118 WORDS · RETURN`, 1.2 s, then dismiss). A canceled send holds 700 ms, then the text lands as **Pasted** with the placard still reading `NO SEND`. Menu bar during the countdown: the listening mark with the bars still. Today's paper-plane chip in the rail's middle slot is retired; it remains in the prototype behind `?send=chip` as the unreviewed alternative.
+Outcomes: a completed countdown goes to **Sent** (the stamp layout, "Sent to c11", `118 WORDS · RETURN`, 0.6 s, then dismiss). A canceled send holds 700 ms, then the text lands as **Pasted** with the placard still reading `NO SEND`. Menu bar during the countdown: the listening mark with the bars still. Today's paper-plane chip in the rail's middle slot is retired; it remains in the prototype behind `?send=chip` as the unreviewed alternative.
 
 ### Recovery card family
 

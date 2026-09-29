@@ -225,7 +225,7 @@ The Reprocess in a card and the Reprocess chip do the same thing; the chip stays
 
 ### Notice row (lighter than a card)
 
-For news that needs no rescue, the pill does not grow and there is no top rule. **Speech recognition is back** is the one notice today (Atin, round 5: "sure, great"). It swaps into the reserved 3-line preview area the way Pasted does: line 1 "Speech recognition is back" (Pro 13.5 semibold), line 2 "A kept dictation is waiting" (Pro 13, `text-2`), line 3 an inline **Reprocess** text action (Pro 13 semibold in `accent`, arrow.clockwise glyph, no fill; hover draws its outside bracket, press inverts) then `·` **Dismiss** (Pro 13 medium, `text-2`). The Cancel chip also dismisses it. Trace row, mic row, rails and chips do not move.
+For news that needs no rescue, the pill does not grow and there is no top rule. **Speech recognition is back** is the one notice today (Atin, round 5: "sure, great"). It swaps into the reserved 3-line preview area the way Pasted does: line 1 "Speech recognition is back" (Pro 13.5 semibold), line 2 "A kept dictation is waiting" (Pro 13, `text-2`), line 3 an inline **Reprocess** text action (Pro 13 semibold in `accent`, arrow.clockwise glyph, no fill; hover draws its outside bracket, press inverts) then `·` **Dismiss** (Pro 13 medium, `text-2`). The Cancel chip also dismisses it. Trace row, mic row, rails and chips do not move. Like the card it replaced, it leaves after 10 s unless used (paused while the pointer is over the pill), with the pill's 120 ms fade. It appears on the bottom pill only when nothing else owns it; with the top overlay, or while a recording owns the pill, the notice falls back to the card.
 
 ### Wording
 

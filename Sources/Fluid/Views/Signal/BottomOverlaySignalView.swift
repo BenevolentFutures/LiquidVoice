@@ -38,6 +38,8 @@ struct BottomOverlayView: View {
         case delivered(SignalDelivery)
         /// The AI-enhancement failure row (provisional).
         case notice
+        /// A notice row (DESIGN.md §15): "Speech recognition is back".
+        case noticeRow(SignalNotice)
         case idle
     }
 
@@ -54,6 +56,7 @@ struct BottomOverlayView: View {
         case .stopped: return .stopped
         case .transcribing: return .transcribing
         case let .delivered(delivery): return .delivered(delivery)
+        case let .notice(notice): return .noticeRow(notice)
         }
     }
 
@@ -92,7 +95,7 @@ struct BottomOverlayView: View {
         case .delivered, .idle: return true
         case .stopped: return role == .historyAction || (role == .cancel && !cancelHasWork)
         case .transcribing: return role == .cancel && !cancelHasWork
-        case .listening, .notice: return false
+        case .listening, .notice, .noticeRow: return false
         }
     }
 
@@ -184,6 +187,11 @@ struct BottomOverlayView: View {
         ) {
             self.perform {
                 BottomOverlayHistoryMenuController.shared.hide()
+                // On a notice row the Cancel chip dismisses it (DESIGN.md §15).
+                if case .noticeRow = self.display {
+                    BottomOverlayWindowController.shared.dismissNotice()
+                    return
+                }
                 if self.display == .notice {
                     self.contentState.clearAIProcessingFailure()
                 }
@@ -203,6 +211,11 @@ struct BottomOverlayView: View {
         ) {
             self.perform {
                 BottomOverlayHistoryMenuController.shared.hide()
+                // On a notice row the chip is the row's Reprocess: once, and the row gives way.
+                if case .noticeRow = self.display {
+                    BottomOverlayWindowController.shared.reprocessFromNotice()
+                    return
+                }
                 self.contentState.clearAIProcessingFailure()
                 self.contentState.onReprocessLastRequested?()
             }
@@ -243,7 +256,11 @@ struct BottomOverlayView: View {
         }
         // The pill's bracket shows over the pill and the rails' gutter, but only one bracket at a
         // time: over a chip, that chip's own bracket draws instead.
-        .onHover { self.isHoveringOverlay = $0 }
+        .onHover { hovering in
+            self.isHoveringOverlay = hovering
+            // A notice row's timer waits while the pointer is over the pill.
+            BottomOverlayWindowController.shared.noticeHoverChanged(hovering)
+        }
         .padding(SignalTheme.Metrics.windowInsets)
         // Whole-surface drag with position memory; double-click returns to the default anchor.
         // Both sit on the parent so the chips' own taps win where they overlap.
@@ -269,7 +286,7 @@ struct BottomOverlayView: View {
             switch display {
             case .delivered, .idle:
                 BottomOverlayHistoryMenuController.shared.hide()
-            case .listening, .stopped, .transcribing, .notice:
+            case .listening, .stopped, .transcribing, .notice, .noticeRow:
                 break
             }
         }
@@ -341,6 +358,18 @@ struct BottomOverlayView: View {
                     }
                 }
             )
+        case let .noticeRow(notice):
+            SignalInlineNotice(
+                notice: notice,
+                isHoverForced: self.model.inspectionHover,
+                onHoverChanged: { id, hovering in self.chipHover(id)(hovering) },
+                onReprocess: {
+                    self.perform { BottomOverlayWindowController.shared.reprocessFromNotice() }
+                },
+                onDismiss: {
+                    self.perform { BottomOverlayWindowController.shared.dismissNotice() }
+                }
+            )
         case .listening, .stopped, .transcribing, .idle:
             SignalPreview(
                 text: SignalTextFitting.newestWords(
@@ -397,7 +426,7 @@ struct BottomOverlayView: View {
             return SignalOverlayModel.placard(indicator: spokenSend.indicator, sendsInApp: spokenSend.sendsInRecordingApp)
         case .stopped, .transcribing, .delivered:
             return model.stopPlacard
-        case .notice, .idle:
+        case .notice, .noticeRow, .idle:
             return .none
         }
     }
@@ -408,7 +437,7 @@ struct BottomOverlayView: View {
         switch display {
         case .listening: mark = drain == nil ? .recording : .closed
         case .stopped, .transcribing: mark = .closed
-        case .delivered, .notice, .idle: mark = .none
+        case .delivered, .notice, .noticeRow, .idle: mark = .none
         }
         let timer: SignalTimerReadout
         if let drain {
@@ -450,7 +479,7 @@ struct BottomOverlayView: View {
             // A streamed AI answer replaces the frozen dictation while it refines.
             let live = self.livePreview
             return live.isEmpty || live == self.model.frozenPreview ? self.model.frozenPreview : live
-        case .delivered, .notice, .idle:
+        case .delivered, .notice, .noticeRow, .idle:
             return ""
         }
     }

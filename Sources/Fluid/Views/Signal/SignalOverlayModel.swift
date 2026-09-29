@@ -18,8 +18,11 @@ final class SignalOverlayModel: ObservableObject {
         case stopped
         /// The final pass is slow: the preview dims, the sweep crosses, Copy and Reprocess dim.
         case transcribing
-        /// The text was handed to the target app; held 1.2 s, then dismissed.
+        /// The text was handed to the target app; held briefly, then dismissed.
         case delivered(SignalDelivery)
+        /// A notice row in the preview slot (DESIGN.md §15): news that needs no rescue. No growth,
+        /// no top rule; the rest of the pill as at rest.
+        case notice(SignalNotice)
     }
 
     @Published private(set) var phase: Phase = .idle
@@ -55,8 +58,25 @@ final class SignalOverlayModel: ObservableObject {
     var isPostStop: Bool {
         switch self.phase {
         case .stopped, .transcribing, .delivered: true
-        case .idle, .listening: false
+        case .idle, .listening, .notice: false
         }
+    }
+
+    var isNotice: Bool {
+        if case .notice = self.phase { return true }
+        return false
+    }
+
+    /// A notice row on a pill with no recording: flat trace, the kept recording's frozen length.
+    func showNotice(_ notice: SignalNotice, frozenDuration: TimeInterval?) {
+        self.trace.flatten()
+        self.recordingStartedAt = nil
+        self.frozenDuration = frozenDuration ?? 0
+        self.frozenPreview = ""
+        self.sendDrain = nil
+        self.stopPlacard = .none
+        self.isFading = false
+        self.phase = .notice(notice)
     }
 
     var isDelivered: Bool {
@@ -107,7 +127,7 @@ final class SignalOverlayModel: ObservableObject {
             if self.frozenDuration == nil { self.frozenDuration = 0 }
             self.trace.flatten()
             self.phase = .transcribing
-        case .transcribing, .delivered:
+        case .transcribing, .delivered, .notice:
             break
         }
     }
@@ -303,6 +323,25 @@ extension DictationDeliveryOutcome.Method {
         case .paste: .paste
         case .keystrokes: .keystrokes
         case .accessibility: .accessibility
+        }
+    }
+}
+
+/// A notice row (DESIGN.md §15): a headline, a reason, and inline text actions, in the pill's
+/// reserved preview slot. "Speech recognition is back" is the one notice today.
+enum SignalNotice: Equatable {
+    /// The model recovered while a timed-out recording is kept: Reprocess it, or dismiss.
+    case recognitionBack
+
+    var headline: String {
+        switch self {
+        case .recognitionBack: "Speech recognition is back"
+        }
+    }
+
+    var reason: String {
+        switch self {
+        case .recognitionBack: "A kept dictation is waiting"
         }
     }
 }

@@ -2980,7 +2980,6 @@ final class SignalOverlayRenderTests: XCTestCase {
             ("07-failed", SignalCardContent(headline: "Couldn\u{2019}t paste into c11", reason: "No text field focused", transcript: transcript, primary: .copy, meta: "118 words"), 231),
             ("17-failed-clipboardkept", SignalCardContent(headline: "Couldn\u{2019}t paste into c11", reason: DeliveryFailureOverlayController.reasonText(failure: .pasteNotLanded, clipboard: .newerClipboardCopy, inHistory: true), transcript: transcript, primary: .copy, meta: "118 words"), 248),
             ("18-timedout", SignalCardContent(headline: "Transcription timed out", reason: "Your audio is kept", primary: .reprocess), 174),
-            ("19-asrback", SignalCardContent(headline: "Speech recognition is back", reason: "A kept dictation is waiting", primary: .reprocess), 174),
             ("20-micoff", SignalCardContent(headline: "Microphone access is off", reason: "Allow Liquid Voice in Privacy & Security", primary: .openSystemSettings, isMicrophoneOff: true), 174),
         ]
         for appearance in [NSAppearance.Name.darkAqua, .aqua] {
@@ -3179,6 +3178,13 @@ enum SignalRenderStage {
             SignalOverlayModel.shared.freezeSendCountdown()
         }),
         ("15-sent", { SignalRenderStage.listening(); SignalRenderStage.stop(placard: .send); SignalOverlayModel.shared.showDelivered(SignalDelivery(appName: "c11", words: 118, method: .paste, sentReturn: true)) }),
+        ("19-asrback", { SignalRenderStage.listening(); SignalRenderStage.stop(); SignalOverlayModel.shared.showNotice(.recognitionBack, frozenDuration: 41) }),
+        ("19-asrback-hover-reprocess", {
+            SignalRenderStage.listening()
+            SignalRenderStage.stop()
+            SignalOverlayModel.shared.showNotice(.recognitionBack, frozenDuration: 41)
+            SignalOverlayModel.shared.inspectionHover = "notice-reprocess"
+        }),
         ("16-noreturn", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionPlacard = .noReturn }),
     ]
 
@@ -3272,18 +3278,157 @@ enum SignalRenderStage {
 /// chips act when, and the delivered hold (quiet: no window reaches the screen).
 @MainActor
 final class SignalOverlayBehaviorTests: XCTestCase {
+    private var savedOverlayPosition = SettingsStore.OverlayPosition.bottom
+
     override func setUp() {
         super.setUp()
         BottomOverlayWindowController.deliveredHold = 0.2
+        // The pill (and its notice row) is the bottom overlay's.
+        self.savedOverlayPosition = SettingsStore.shared.overlayPosition
+        SettingsStore.shared.overlayPosition = .bottom
     }
 
     override func tearDown() {
+        SettingsStore.shared.overlayPosition = self.savedOverlayPosition
         BottomOverlayWindowController.deliveredHold = SignalTheme.Motion.deliveredHold
         TypingService.dictationOutcomeHandler = { outcome in
             BottomOverlayWindowController.shared.dictationDeliveryFinished(outcome)
         }
         SignalRenderStage.reset()
         super.tearDown()
+    }
+
+    /// "Speech recognition is back" is a notice row in the pill (DESIGN.md §15), not a card: no
+    /// growth, the same Reprocess, and it leaves like the pill does (fade, alpha 0, nothing painted,
+    /// never ignoresMouseEvents, parked after the idle delay).
+    func testRecognitionBackIsANoticeRowWithTheSameReprocess() async throws {
+        let controller = BottomOverlayWindowController.shared
+        let model = SignalOverlayModel.shared
+        let cards = DeliveryFailureOverlayController.shared
+        let savedReprocess = NotchContentState.shared.onReprocessLastRequested
+        let savedParkDelay = BottomOverlayWindowController.idleParkingDelay
+        var reprocesses = 0
+        NotchContentState.shared.onReprocessLastRequested = { reprocesses += 1 }
+        BottomOverlayWindowController.idleParkingDelay = 0
+        defer {
+            NotchContentState.shared.onReprocessLastRequested = savedReprocess
+            BottomOverlayWindowController.idleParkingDelay = savedParkDelay
+        }
+        controller.prepare()
+        await Task.yield()
+
+        cards.showTranscriptionTimeout(.recovered)
+        XCTAssertEqual(model.phase, .notice(.recognitionBack))
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented)
+        XCTAssertFalse(cards.isVisible, "no card")
+        XCTAssertNil(cards.presentedTimeout)
+        XCTAssertEqual(controller.windowStateForTests?.alpha, 1)
+        XCTAssertEqual(BottomOverlayView.display(contentState: .shared, model: model), .noticeRow(.recognitionBack))
+        XCTAssertFalse(BottomOverlayView.isChipInert(.cancel, display: .noticeRow(.recognitionBack)), "Cancel dismisses it")
+
+        // Reprocess: the same call as the chip and the card, once; the notice gives way.
+        controller.reprocessFromNotice()
+        XCTAssertEqual(reprocesses, 1)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
+
+        // Dismiss: the pill's fade, then nothing painted and parked.
+        cards.showTranscriptionTimeout(.recovered)
+        controller.dismissNotice()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        let hidden = try XCTUnwrap(controller.windowStateForTests)
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
+        XCTAssertEqual(hidden.alpha, 0)
+        XCTAssertFalse(hidden.ignoresMouse)
+        XCTAssertFalse(controller.contentPaintsPixelsForTests())
+        XCTAssertTrue(hidden.isParkedOffscreen)
+        XCTAssertEqual(model.phase, .idle)
+        XCTAssertEqual(reprocesses, 1)
+    }
+
+    /// The rail's Reprocess chip and the row's Reprocess are one action on a notice row: chip, then
+    /// the row, reprocesses exactly once (the kept dictation clears only after its transcription).
+    func testTheChipThenTheNoticeReprocessesOnce() async throws {
+        let controller = BottomOverlayWindowController.shared
+        let savedReprocess = NotchContentState.shared.onReprocessLastRequested
+        var reprocesses = 0
+        NotchContentState.shared.onReprocessLastRequested = { reprocesses += 1 }
+        defer { NotchContentState.shared.onReprocessLastRequested = savedReprocess }
+        controller.prepare()
+        await Task.yield()
+        XCTAssertTrue(controller.presentNotice(.recognitionBack, frozenDuration: 41, pointerInside: false))
+        controller.reprocessFromNotice() // the chip, on a notice row
+        controller.reprocessFromNotice() // then the row's own Reprocess, before the cut lands
+        try await Task.sleep(nanoseconds: 100_000_000)
+        controller.reprocessFromNotice() // and after it
+        XCTAssertEqual(reprocesses, 1)
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
+    }
+
+    /// A pointer already resting on the pill when the notice appears pauses its timer.
+    func testAPointerRestingOnThePillPausesTheNotice() async throws {
+        let controller = BottomOverlayWindowController.shared
+        let savedDuration = BottomOverlayWindowController.noticeDuration
+        BottomOverlayWindowController.noticeDuration = 0.2
+        defer { BottomOverlayWindowController.noticeDuration = savedDuration }
+        controller.prepare()
+        await Task.yield()
+        XCTAssertTrue(controller.presentNotice(.recognitionBack, frozenDuration: 41, pointerInside: true))
+        try await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented, "paused from the start")
+        controller.noticeHoverChanged(false)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented, "4 s more once the pointer leaves")
+        _ = await controller.hideAndWait()
+    }
+
+    /// The recognition-back card (the fallback) never takes a held pill's place.
+    func testTheRecognitionBackFallbackCardNeverTakesAHeldPill() async {
+        let controller = BottomOverlayWindowController.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        controller.markRecordingStopped()
+        XCTAssertFalse(controller.presentNotice(.recognitionBack, frozenDuration: 41), "a held pill is not free")
+        DeliveryFailureOverlayController.shared.showTranscriptionTimeout(.recovered)
+        XCTAssertEqual(DeliveryFailureOverlayController.shared.presentedTimeout, .recovered)
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented, "the held pill stays")
+        XCTAssertEqual(SignalOverlayModel.shared.phase, .stopped)
+        DeliveryFailureOverlayController.shared.hide()
+        _ = await controller.hideAndWait()
+    }
+
+    /// The notice leaves on its own after its time, paused while the pointer is over the pill.
+    func testTheNoticeRowTimesOutUnlessHovered() async throws {
+        let controller = BottomOverlayWindowController.shared
+        let savedDuration = BottomOverlayWindowController.noticeDuration
+        BottomOverlayWindowController.noticeDuration = 0.2
+        defer { BottomOverlayWindowController.noticeDuration = savedDuration }
+        controller.prepare()
+        await Task.yield()
+        XCTAssertTrue(controller.presentNotice(.recognitionBack, frozenDuration: 41, pointerInside: false))
+        controller.noticeHoverChanged(true)
+        try await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented, "paused under the pointer")
+        _ = await controller.hideAndWait()
+
+        XCTAssertTrue(controller.presentNotice(.recognitionBack, frozenDuration: 41, pointerInside: false))
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented, "left after its time")
+    }
+
+    /// A recording owns the pill: the notice falls back to the card rather than take it over.
+    func testANoticeNeverTakesOverALiveRecording() async {
+        let controller = BottomOverlayWindowController.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        XCTAssertFalse(controller.presentNotice(.recognitionBack, frozenDuration: 41))
+        XCTAssertEqual(SignalOverlayModel.shared.phase, .listening)
+        DeliveryFailureOverlayController.shared.showTranscriptionTimeout(.recovered)
+        XCTAssertEqual(DeliveryFailureOverlayController.shared.presentedTimeout, .recovered, "the card, as before")
+        DeliveryFailureOverlayController.shared.hide()
+        _ = await controller.hideAndWait()
     }
 
     func testTheTraceTakesTwelveSamplesASecondAndScrollsThroughSilence() {

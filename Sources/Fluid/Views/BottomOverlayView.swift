@@ -390,8 +390,29 @@ final class BottomOverlayWindowController {
                 ? .noSend
                 : SignalOverlayModel.placard(indicator: spokenSend.indicator, sendsInApp: spokenSend.sendsInRecordingApp)
         }
+        Self.logTraceSummary(model.trace)
         model.stopRecording(preview: Self.previewAtStop(), placard: placard)
         Self.overlayBench("bottom_recording_stopped placard=\(placard)")
+    }
+
+    /// What the trace drew for the recording that just stopped, so a flat or lively trace can be
+    /// read from the log: windows pushed, windows drawn above the floor, the loudest window, and the
+    /// calibration it ended on (levels are linear in dB: 0 is -55 dBFS, 1 is 0 dBFS).
+    static func logTraceSummary(_ trace: SignalTraceModel) {
+        let stats = trace.stats
+        DebugLogger.shared.info(
+            String(
+                format: "TRACE_SUMMARY windows=%d raised=%d loudest=%.3f floor=%.3f gate=%.3f peak=%.3f sensitivity=%.2f",
+                stats.windows,
+                stats.raised,
+                stats.loudest,
+                trace.quietFloor ?? 0,
+                trace.gate,
+                trace.loudPeak,
+                trace.noiseThreshold
+            ),
+            source: "BottomOverlay"
+        )
     }
 
     /// The dictation's text was handed to the typing service: hold the overlay for its outcome.

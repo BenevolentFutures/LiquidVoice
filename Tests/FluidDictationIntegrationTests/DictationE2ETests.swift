@@ -3793,29 +3793,56 @@ final class OverlayParkTimingBenchmarkTests: XCTestCase {
 /// The voice trace keeps moving on every dictation: levels go through the same path a real
 /// capture uses (the ASR's level publisher, delivered on main, into the window controller's
 /// subscription), across two dictations with the outcome hold and the fade between them.
+///
+/// The levels are a quiet microphone's: Atin's fifine USB microphone kept every window of a
+/// 62 s dictation under about 0.43 (-31 dBFS). With the old fixed gate at 0.4 its trace sat at the
+/// 2 pt floor, one 4 pt bar in four seconds of speech, while the frame clock and the feed ran
+/// (captured from the installed build, 2026-09-29). The trace now calibrates to the recording.
 @MainActor
 final class SignalTraceLifecycleTests: XCTestCase {
-    private func speak(into subject: PassthroughSubject<CGFloat, Never>, seconds: Double) async throws {
+    /// A quiet microphone's speech, one level per 512-frame buffer (10.7 ms): syllables of about
+    /// 150 ms between 0.28 and 0.42, and 75 ms gaps of room tone the ASR gates to 0.
+    static func quietSpeech(step: Int) -> CGFloat {
+        guard (step / 14) % 3 != 2 else { return 0 }
+        var seed = UInt64(truncatingIfNeeded: step &* 2_654_435_761)
+        seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+        return 0.28 + 0.14 * CGFloat(seed >> 40) / CGFloat(1 << 24)
+    }
+
+    private func speak(into subject: PassthroughSubject<CGFloat, Never>, seconds: Double, snapshots: inout [[CGFloat]]) async throws {
         let end = Date().addingTimeInterval(seconds)
         var step = 0
         while Date() < end {
             // Like AudioCapturePipeline.onLevel: hopped to main, one level per 512-frame buffer.
-            let level: CGFloat = step % 6 < 3 ? 0.95 : 0.55
+            let level = Self.quietSpeech(step: step)
             DispatchQueue.main.async { subject.send(level) }
             step += 1
+            if step % 14 == 0 { snapshots.append(SignalOverlayModel.shared.trace.current) }
             try await Task.sleep(nanoseconds: 10_700_000)
         }
         try await Task.sleep(nanoseconds: 30_000_000)
+        snapshots.append(SignalOverlayModel.shared.trace.current)
     }
 
-    private func dictate(_ controller: BottomOverlayWindowController, subject: PassthroughSubject<CGFloat, Never>, trace id: Int) async throws -> [CGFloat] {
+    private func dictate(_ controller: BottomOverlayWindowController, subject: PassthroughSubject<CGFloat, Never>, trace id: Int) async throws -> (snapshots: [[CGFloat]], stats: SignalTraceModel.Stats, menuBars: [CGFloat]) {
         controller.show(audioPublisher: subject.eraseToAnyPublisher(), mode: .dictation)
-        try await self.speak(into: subject, seconds: 0.8)
-        let heights = SignalOverlayModel.shared.trace.current
+        var snapshots: [[CGFloat]] = []
+        try await self.speak(into: subject, seconds: 1.2, snapshots: &snapshots)
+        let stats = SignalOverlayModel.shared.trace.stats
+        let menuBars = SignalMenuBarMark.listeningBars(from: SignalOverlayModel.shared.trace)
         controller.markRecordingStopped()
         controller.awaitDelivery(traceID: id, appName: "c11", words: 3, failureReported: false)
         controller.dictationDeliveryFinished(DictationDeliveryOutcome(traceID: id, result: .dispatched, method: .paste, sentReturn: false))
-        return heights
+        return (snapshots, stats, menuBars)
+    }
+
+    private func assertMoved(_ run: (snapshots: [[CGFloat]], stats: SignalTraceModel.Stats, menuBars: [CGFloat]), _ label: String) {
+        let raisedBars = run.snapshots.map { $0.filter { $0 > 2 }.count }
+        XCTAssertGreaterThan(raisedBars.max() ?? 0, 5, "\(label): the quiet speech draws above the floor")
+        XCTAssertGreaterThan(Set(run.snapshots).count, 3, "\(label): the bars change from moment to moment")
+        XCTAssertGreaterThanOrEqual(run.snapshots.flatMap { $0 }.max() ?? 0, 12, "\(label): syllables stretch tall")
+        XCTAssertGreaterThan(Double(run.stats.raised) / Double(max(run.stats.windows, 1)), 0.4, "\(label): \(run.stats)")
+        XCTAssertEqual(run.menuBars.count, 3)
     }
 
     func testTheTraceMovesOnTheSecondDictationAfterAHoldAndFade() async throws {
@@ -3825,15 +3852,60 @@ final class SignalTraceLifecycleTests: XCTestCase {
         await Task.yield()
 
         let first = try await self.dictate(controller, subject: subject, trace: 91)
-        XCTAssertGreaterThan(first.filter { $0 > 2 }.count, 3, "the first dictation's trace moved")
+        self.assertMoved(first, "first dictation")
         // The hold, then the fade.
         try await Task.sleep(nanoseconds: UInt64((BottomOverlayWindowController.deliveredHold + 0.4) * 1_000_000_000))
         XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
 
         let second = try await self.dictate(controller, subject: subject, trace: 92)
-        XCTAssertGreaterThan(second.filter { $0 > 2 }.count, 3, "the second dictation's trace moved")
-        let bars = SignalMenuBarMark.listeningBars(from: SignalOverlayModel.shared.trace)
-        XCTAssertEqual(bars.count, 3)
+        self.assertMoved(second, "second dictation")
         _ = await controller.hideAndWait()
+    }
+
+    /// Feeds `seconds` of levels, one per 10.7 ms, and returns every bar pushed meanwhile.
+    private func pushedHeights(_ trace: SignalTraceModel, seconds: Double, from start: TimeInterval, level: (Int) -> CGFloat) -> [CGFloat] {
+        var pushed: [CGFloat] = []
+        var lastPush = trace.lastPush
+        for step in 0..<Int(seconds / 0.0107) {
+            trace.ingest(level: level(step), at: start + Double(step) * 0.0107)
+            if trace.lastPush != lastPush {
+                lastPush = trace.lastPush
+                pushed.append(trace.current.last ?? 0)
+            }
+        }
+        return pushed
+    }
+
+    func testTheTraceCalibratesToTheRecordingNotAFixedGate() {
+        // A quiet microphone: its speech stretches tall, its gaps stay on the floor.
+        let quiet = SignalTraceModel(barCount: 39, noiseThreshold: 0.4)
+        quiet.begin(at: 0)
+        let quietBars = self.pushedHeights(quiet, seconds: 4, from: 0, level: Self.quietSpeech)
+        XCTAssertGreaterThan(quietBars.filter { $0 > 2 }.count, quietBars.count / 2, "\(quietBars)")
+        XCTAssertGreaterThanOrEqual(quietBars.max() ?? 0, 16)
+        XCTAssertEqual(quiet.quietFloor ?? -1, 0, accuracy: 0.05, "the gaps set the floor")
+
+        // A loud microphone in a noisy room: speech tall, the room (0.3) under the gate.
+        let loud = SignalTraceModel(barCount: 39, noiseThreshold: 0.4)
+        loud.begin(at: 0)
+        let loudBars = self.pushedHeights(loud, seconds: 4, from: 0) { step in
+            (step / 14) % 3 == 2 ? 0.3 : 0.62 + 0.3 * Self.quietSpeech(step: step) / 0.42
+        }
+        XCTAssertGreaterThanOrEqual(loudBars.max() ?? 0, 20)
+        XCTAssertGreaterThan(loudBars.filter { $0 > 2 }.count, loudBars.count / 2)
+
+        // A steady background settles under the gate within a few seconds and stays flat.
+        let steady = SignalTraceModel(barCount: 39, noiseThreshold: 0.4)
+        steady.begin(at: 0)
+        _ = self.pushedHeights(steady, seconds: 1, from: 0) { _ in 0.1 }
+        let settled = self.pushedHeights(steady, seconds: 12, from: 1) { _ in 0.5 }
+        XCTAssertTrue(settled.suffix(24).allSatisfy { $0 == 2 }, "\(settled.suffix(24))")
+
+        // Sensitivity "Less" asks for more above the floor than the default.
+        let less = SignalTraceModel(barCount: 39, noiseThreshold: 0.8)
+        less.begin(at: 0)
+        let lessBars = self.pushedHeights(less, seconds: 4, from: 0, level: Self.quietSpeech)
+        XCTAssertLessThan(lessBars.reduce(0, +), quietBars.reduce(0, +))
+        XCTAssertGreaterThan(less.gate, quiet.gate)
     }
 }

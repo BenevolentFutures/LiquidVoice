@@ -2,9 +2,14 @@ import CoreGraphics
 import Foundation
 
 /// The voice trace's samples (DESIGN.md §4, §8). Levels arrive about 94 times a second; the trace
-/// keeps the peak of each 83.3 ms window and pushes one bar per window, 12 a second, so 52 bars
-/// hold 4.3 s. It keeps scrolling through silence at 2 pt. Each push morphs every slot to its
+/// keeps the peak of each 83.3 ms window and pushes one bar per window, 12 a second, so 39 bars
+/// hold 3.25 s. It keeps scrolling through silence at 2 pt. Each push morphs every slot to its
 /// right neighbour's height over 60 ms, snapped to 2 pt steps.
+///
+/// Heights are calibrated to the recording itself: a level draws by how far it rises above this
+/// recording's quiet floor, scaled to its loud peak. A fixed gate (level 0.4, about -33 dBFS)
+/// left a quiet microphone's speech at the 2 pt floor for whole dictations (Atin's fifine USB
+/// microphone, 2026-09-29), while the frame clock, sampler and feed all ran.
 ///
 /// A plain reference type, not observed by SwiftUI: a level tick costs no view invalidation. The
 /// trace's Canvas reads it from a `TimelineView` and drives `advance(to:)` from its frame clock.
@@ -12,7 +17,8 @@ import Foundation
 @MainActor
 final class SignalTraceModel {
     let barCount: Int
-    /// Lower bound of the level that draws above the floor (Settings > visualizer sensitivity).
+    /// Settings > Visualizer > Sensitivity (0.01 "More" to 0.8 "Less", 0.4 by default): how far
+    /// above the recording's quiet floor a level must rise to draw, `sensitivitySpan` at 1.0.
     var noiseThreshold: CGFloat
 
     private(set) var previous: [CGFloat]
@@ -24,6 +30,32 @@ final class SignalTraceModel {
     private var windowPeak: CGFloat = 0
     private var grainTick = 0
     var reducesMotion = false
+
+    /// The recording's quiet floor: the quietest recent window, falling at once and rising slowly,
+    /// so a steady background settles under the gate. Levels are linear in dB, 55 dB per unit.
+    private(set) var quietFloor: CGFloat?
+    /// The recording's loud peak: the loudest recent window, rising at once and falling slowly.
+    private(set) var loudPeak: CGFloat = 0
+    /// What this recording drew, for the stop's TRACE_SUMMARY log line.
+    private(set) var stats = Stats()
+
+    struct Stats: Equatable {
+        /// Windows pushed while live.
+        var windows = 0
+        /// Windows drawn above the 2 pt floor.
+        var raised = 0
+        /// The loudest window peak.
+        var loudest: CGFloat = 0
+    }
+
+    /// The gate at Sensitivity 1.0: 15 dB, so the default 0.4 asks for 6 dB above the floor.
+    static let sensitivitySpan: CGFloat = 15.0 / 55.0
+    /// The loud peak stays at least this far above the gate (11 dB): room noise never fills the trace.
+    static let minimumSpan: CGFloat = 0.2
+    /// How fast the floor rises toward a louder steady background: 1.65 dB a second.
+    static let floorRise: CGFloat = 0.03
+    /// How fast the peak falls after loud speech: 1.1 dB a second.
+    static let peakFall: CGFloat = 0.02
 
     static let floor = SignalTheme.Metrics.minBarHeight
     static let ceiling = SignalTheme.Metrics.maxBarHeight
@@ -43,6 +75,9 @@ final class SignalTraceModel {
         self.windowStart = now
         self.windowPeak = 0
         self.grainTick = 0
+        self.quietFloor = nil
+        self.loudPeak = 0
+        self.stats = Stats()
         self.isLive = true
     }
 
@@ -61,7 +96,12 @@ final class SignalTraceModel {
         let sample = SignalTheme.Motion.traceSample
         var pushes = 0
         while now - self.windowStart >= sample, pushes < self.barCount {
-            self.push(self.height(for: self.windowPeak), at: now)
+            self.calibrate(with: self.windowPeak)
+            let height = self.height(for: self.windowPeak)
+            self.stats.windows += 1
+            self.stats.loudest = max(self.stats.loudest, self.windowPeak)
+            if Self.snapped(height) > Self.floor { self.stats.raised += 1 }
+            self.push(height, at: now)
             self.windowPeak = 0
             self.windowStart += sample
             pushes += 1
@@ -106,12 +146,32 @@ final class SignalTraceModel {
         max(self.floor, (height / 2).rounded() * 2)
     }
 
-    /// The prototype's level curve: the noise threshold, a slightly super-linear rise (speech
-    /// stretches tall while a steady background stays low), and the grain of two incommensurate
-    /// cosines so neighbouring samples differ without looking periodic.
+    /// The level that draws above the floor: the quiet floor plus the Sensitivity setting's share.
+    var gate: CGFloat {
+        (self.quietFloor ?? 0) + max(self.noiseThreshold, 0) * Self.sensitivitySpan
+    }
+
+    /// Follows one window's peak: the floor falls to a quieter window at once and rises 1.65 dB/s;
+    /// the peak rises to a louder window at once, falls 1.1 dB/s, and keeps 11 dB above the gate.
+    func calibrate(with level: CGFloat) {
+        let sample = CGFloat(SignalTheme.Motion.traceSample)
+        let level = min(max(level, 0), 1)
+        if let floor = self.quietFloor {
+            self.quietFloor = level < floor ? level : min(level, floor + Self.floorRise * sample)
+        } else {
+            self.quietFloor = level
+        }
+        self.loudPeak = max(level, self.loudPeak - Self.peakFall * sample, self.gate + Self.minimumSpan)
+    }
+
+    /// The prototype's level curve on the calibrated range: above the gate, scaled to the loud
+    /// peak, a slightly super-linear rise (speech stretches tall while a steady background stays
+    /// low), and the grain of two incommensurate cosines so neighbouring samples differ without
+    /// looking periodic.
     func height(for level: CGFloat) -> CGFloat {
-        let denominator = max(1 - self.noiseThreshold, 0.001)
-        let adjusted = min(max((level - self.noiseThreshold) / denominator, 0), 1)
+        let gate = self.gate
+        let denominator = max(self.loudPeak - gate, 0.001)
+        let adjusted = min(max((level - gate) / denominator, 0), 1)
         let amplitude = pow(adjusted, 1.15)
         let phase = CGFloat(self.grainTick)
         let grain = 0.6 + 0.25 * cos(1.7 * phase) + 0.15 * cos(4.3 * phase)

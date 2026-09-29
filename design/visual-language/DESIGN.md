@@ -151,6 +151,7 @@ A 22 × 16 template mark: three square-ended bars at rest; bars plus a solid squ
 | Chip | a `ButtonStyle`: `Rectangle` fill `chip`; `Bracket(len: 6)` at gap 2 on hover; `isPressed` or latched swaps to `inv-bg` with an outer 1 pt `surface` stroke |
 | Trace row | `HStack(alignment: .center)`: the target icon, the `Canvas`, `Spacer`, a 6 pt `Rectangle` (filled or 1.5 pt outline), then the timer `.system(size: 15, weight: .semibold, design: .monospaced)` in a fixed-width trailing frame |
 | Trace and ruler | one `Canvas` in `TimelineView(.animation)`: `fill(Path(rect))` per bar, then the static ruler ticks; the write head is the newest 6 bars in `accent`; the sweep is one accent rect stepped on the pitch |
+| Trace heights | calibrated per recording, not a fixed gate: a window's peak draws by how far it rises above the recording's quiet floor (falls at once, rises 1.65 dB/s), scaled to its loud peak (rises at once, falls 1.1 dB/s, kept at least 11 dB above the gate). Settings > Sensitivity sets the gate: 6 dB above the floor at the default 0.4, 15 dB at 1.0. The fixed gate at -33 dBFS left a quiet microphone's speech on the 2 pt floor for whole dictations (2026-09-29). Each stop logs `TRACE_SUMMARY` |
 | Mic row | mono 10.5 medium, `.textCase(.uppercase)`, `.tracking(0.63)`, centred |
 | Failed top rule | `Rectangle().frame(height: 2)` aligned `.top` |
 | Menu bar mark | `NSStatusItem` with a square-cornered template `NSImage` per state |

@@ -2167,11 +2167,16 @@ struct ContentView: View {
         self.clearActiveRecordingMode()
 
         var deferredTranscribingStatus: (@MainActor () -> Void)?
-        if shouldHideOverlayOnStop {
+        // The Signal overlay stays up through the stop for the outcome (Pasted / Sent, held 1.2 s,
+        // or a recovery card), so a plain dictation no longer hides it here.
+        let holdsOverlayForOutcome = shouldHideOverlayOnStop && self.overlayHoldsForOutcome
+        if shouldHideOverlayOnStop, !holdsOverlayForOutcome {
             didRequestOverlayHideOnStop = true
             DebugLogger.shared.debug("Hiding dictation overlay at stop path", source: "ContentView")
             self.hideOverlayAsync(reason: "stop_path")
         } else {
+            // Input closed: the trace flattens, the square goes hollow, the timer freezes.
+            BottomOverlayWindowController.shared.markRecordingStopped()
             // The overlay stays for prompt, command, rewrite, or AI feedback. For AI dictation
             // with the model loaded, a fast final pass (the usual case) finishes before a
             // "Transcribing" render could queue ahead of its result, so that status waits.
@@ -2204,15 +2209,20 @@ struct ContentView: View {
             source: "ContentView"
         )
 
-        // Reset the transcription text display after transcription completes
-        NotchOverlayManager.shared.updateTranscriptionText("")
+        // Reset the transcription text display after transcription completes. A held overlay
+        // keeps its frozen preview and clears on the next recording; clearing now would only
+        // re-render it on the stop path.
+        if !holdsOverlayForOutcome {
+            NotchOverlayManager.shared.updateTranscriptionText("")
+        }
 
         guard transcribedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
             traceOutcome = "empty"
             DebugLogger.shared.debug("Transcription returned empty text", source: "ContentView")
-            // Finish the same short exit transition even when no text is emitted.
+            // Finish the same short exit transition even when no text is emitted. Not awaited: the
+            // 120 ms fade must not hold the stop pipeline (and with it the next start).
             if !didRequestOverlayHideOnStop {
-                await self.menuBarManager.finishProcessingAndHideOverlay()
+                self.hideOverlayAsync(reason: "empty_transcript")
             }
             return
         }
@@ -2254,7 +2264,9 @@ struct ContentView: View {
             return
         }
 
-        if NotchOverlayManager.shared.isBottomOverlayVisible {
+        // A held Signal overlay is already frozen (markRecordingStopped); the release transition's
+        // flag would only re-render it on the stop path.
+        if NotchOverlayManager.shared.isBottomOverlayVisible, !holdsOverlayForOutcome {
             BottomOverlayWindowController.shared.beginReleaseTransition()
         }
 
@@ -2302,6 +2314,12 @@ struct ContentView: View {
             stop: spokenSendStop,
             target: spokenSendTarget,
             isNormalRoute: route == .normal
+        )
+        // The held pill's placard follows the decision from here (no longer cancelable).
+        BottomOverlayWindowController.shared.spokenSendDecided(
+            spokenSend.shouldSend
+                ? (SpokenSendController.shared.sendsInRecordingApp ? .returnFollows : .noReturn)
+                : (spokenSend.phraseDetected ? .canceled : .noPhrase)
         )
         if spokenSend.isPhraseOnly {
             traceOutcome = "spoken_send_phrase_only"
@@ -2569,6 +2587,10 @@ struct ContentView: View {
                     stopTrace: trace
                 )
             } else if isTargetReady {
+                if spokenSend.shouldSend {
+                    // The phrase was said but no Return goes here (a blocked target, AI fallback).
+                    BottomOverlayWindowController.shared.spokenSendDecided(.noReturn)
+                }
                 // The typing service finishes the trace once the paste is posted.
                 trace.expectDelivery()
                 self.asr.typeOutputPlanToActiveField(
@@ -2583,11 +2605,16 @@ struct ContentView: View {
                 // The field chosen at stop could not be brought back. Typing into whatever
                 // has focus now could land the text in the wrong place, so keep it instead.
                 traceOutcome = "target_restore_failed"
-                TypingService.reportDeliveryFailure(.targetRestoreFailed, transcript: finalText, inHistory: isInHistory)
+                TypingService.reportDeliveryFailure(.targetRestoreFailed, transcript: finalText, inHistory: isInHistory, traceID: trace.id)
             }
             didTypeExternally = true
             if !shouldShowAIProcessingFailure, !didRequestOverlayHideOnStop {
-                self.hideOverlayAfterOutput()
+                self.holdOverlayForOutcome(
+                    traceID: trace.id,
+                    appName: stopTarget.flatMap { NSRunningApplication(processIdentifier: $0.pid)?.localizedName } ?? appInfo.name,
+                    text: finalText,
+                    failureReported: !isTargetReady
+                )
             }
         }
 
@@ -2621,6 +2648,29 @@ struct ContentView: View {
         self.hideOverlayAsync(reason: "after_output")
     }
 
+    /// Whether the recording overlay holds a stopped dictation on screen for its outcome: the
+    /// bottom (Signal) overlay, while it is up.
+    private var overlayHoldsForOutcome: Bool {
+        SettingsStore.shared.overlayPosition == .bottom && NotchOverlayManager.shared.isBottomOverlayVisible
+    }
+
+    /// After the handoff: the overlay waits for the typing worker's outcome, then shows Pasted or
+    /// Sent for 1.2 s (or gives way to a recovery card). It never delays the paste: the outcome
+    /// comes from the worker once the paste is posted. Without the bottom overlay, hide as before.
+    private func holdOverlayForOutcome(traceID: Int, appName: String?, text: String, failureReported: Bool) {
+        guard self.overlayHoldsForOutcome else {
+            self.hideOverlayAfterOutput()
+            return
+        }
+        self.menuBarManager.releaseOverlayForOutcomeHold()
+        BottomOverlayWindowController.shared.awaitDelivery(
+            traceID: traceID,
+            appName: appName,
+            words: SignalOverlayModel.wordCount(text),
+            failureReported: failureReported
+        )
+    }
+
     private func advanceOverlayLifecycle() {
         self.overlayLifecycleID &+= 1
         NotchContentState.shared.clearAIProcessingFailure()
@@ -2636,6 +2686,7 @@ struct ContentView: View {
         SpokenSendController.shared.attach(
             partials: self.asr.$partialTranscription.eraseToAnyPublisher(),
             audioLevels: self.asr.audioLevelPublisher,
+            recording: self.asr.$isRunning.eraseToAnyPublisher(),
             hooks: SpokenSendController.Hooks(
                 isDictating: {
                     (self.activeRecordingMode == .dictate || self.activeRecordingMode == .promptMode)
@@ -2683,7 +2734,7 @@ struct ContentView: View {
             }
         }
         if !didRequestOverlayHideOnStop {
-            await self.menuBarManager.finishProcessingAndHideOverlay()
+            self.hideOverlayAsync(reason: "phrase_only")
         }
     }
 
@@ -3500,6 +3551,10 @@ struct ContentView: View {
             self.applyDictationShortcutSelectionContext(for: slot)
         }
 
+        self.menuBarManager.onToggleDictationRequested = {
+            self.hotkeyManager?.toggleRecordingFromMenu()
+        }
+
         guard self.hotkeyManager == nil else { return }
 
         self.hotkeyManager = GlobalHotkeyManager(
@@ -3636,6 +3691,11 @@ struct ContentView: View {
 
         self.hotkeyManager?.setHotkeyMode(self.hotkeyMode)
 
+        // Esc first drops a pending Spoken Send Return (the dictation goes on).
+        self.hotkeyManager?.setSpokenSendCancelCallback {
+            BottomOverlayWindowController.shared.cancelSpokenSendIfArmed()
+        }
+
         // Set cancel callback for Escape key handling (closes transient UI, resets recording state)
         // Returns true if it handled something (so GlobalHotkeyManager knows to consume the event)
         self.hotkeyManager?.setCancelCallback {
@@ -3711,6 +3771,14 @@ struct ContentView: View {
     @discardableResult
     private func handleCancelShortcut() -> Bool {
         var handled = false
+
+        // While SEND shows (armed, counting down, or stopped and transcribing), cancel means
+        // "don't press Return" and the dictation goes on; a second cancel then cancels it. A stray
+        // Esc never throws away a long dictation (DESIGN.md §15).
+        if BottomOverlayWindowController.shared.cancelSpokenSendIfArmed() {
+            DebugLogger.shared.debug("Cancel shortcut: canceled the Spoken Send Return", source: "ContentView")
+            return true
+        }
 
         if DictionaryCorrectionOverlayController.shared.isPresented {
             DebugLogger.shared.debug("Cancel shortcut: closing dictionary suggestion", source: "ContentView")

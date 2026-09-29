@@ -473,13 +473,15 @@ final class HotkeyShortcutTests: XCTestCase {
     }
 
     /// Hiding sets alpha 0 at once (no WindowServer fence on the stop path) and parks the panel
-    /// offscreen right after the stop pipeline hands its text off, so it cannot take clicks meant
-    /// for the app beneath. ignoresMouseEvents is never set: once set, the pill's transparent
-    /// margin would take clicks for good.
+    /// offscreen later, never while a stop pipeline runs (the idle delay is 8 s in the app, 0 here).
+    /// Hidden already takes no clicks: nothing is painted. ignoresMouseEvents is never set: once
+    /// set, the pill's transparent margin would take clicks for good.
     @MainActor
     func testBottomOverlayHidesByAlphaThenParksAfterTheHandoff() async throws {
         let audioPublisher = Just(CGFloat.zero).eraseToAnyPublisher()
         let controller = BottomOverlayWindowController.shared
+        BottomOverlayWindowController.idleParkingDelay = 0
+        defer { BottomOverlayWindowController.idleParkingDelay = 8 }
 
         controller.prepare()
         await Task.yield()
@@ -502,7 +504,9 @@ final class HotkeyShortcutTests: XCTestCase {
         XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented, "controls are inert while hidden")
 
         // The text was handed off: parked offscreen, where no click can reach it.
+        try await Task.sleep(nanoseconds: 30_000_000)
         StopPipelineWindowWork.release()
+        try await Task.sleep(nanoseconds: 30_000_000)
         let parked = try XCTUnwrap(controller.windowStateForTests)
         XCTAssertTrue(parked.isParkedOffscreen)
         XCTAssertFalse(parked.ignoresMouse, "ignoresMouseEvents is never touched")
@@ -2475,3 +2479,222 @@ private final class ModifierOnlyFlagsReplay {
         self.keyDown()
     }
 }
+
+/// Esc through the event tap (DESIGN.md §15). The one gate: consume Esc to drop the Return only
+/// when a Return is genuinely pending (the recording is live, or its stop has begun and the send is
+/// not decided) and the bottom pill visibly shows SEND. Every other state behaves as before
+/// PR #17: while recording Esc cancels the dictation, otherwise it passes through to the app.
+/// Each case runs the cancel key through the tap's own key handling.
+@MainActor
+final class EscapeCancelGateTests: XCTestCase {
+    private var asr: ASRService!
+    private var spokenSend: SpokenSendController!
+    private var manager: GlobalHotkeyManager!
+    private var otherCancels = 0
+    private var savedSpokenSendEnabled = false
+
+    override func setUp() async throws {
+        try await super.setUp()
+        self.savedSpokenSendEnabled = SettingsStore.shared.spokenSendEnabled
+        SettingsStore.shared.spokenSendEnabled = true
+        let asr = ASRService()
+        let spokenSend = SpokenSendController()
+        spokenSend.configuration = {
+            SpokenSendController.Configuration(enabled: true, phrase: "send it", stopsAfterPause: false, key: .enter, allowsC11: true)
+        }
+        spokenSend.attach(
+            partials: Empty().eraseToAnyPublisher(),
+            audioLevels: Empty().eraseToAnyPublisher(),
+            recording: asr.$isRunning.eraseToAnyPublisher(),
+            hooks: SpokenSendController.Hooks(
+                isDictating: { true },
+                recordingApp: { ("com.stage11.c11", "c11") },
+                isHoldingShortcut: { false },
+                stopAndProcess: {}
+            )
+        )
+        spokenSend.beginRecording()
+        let manager = GlobalHotkeyManager(
+            asrService: asr,
+            primaryShortcuts: [HotkeyShortcut(keyCode: 61, modifierFlags: [], modifierKeyCodes: [61])],
+            promptModeShortcut: HotkeyShortcut(keyCode: 60, modifierFlags: []),
+            commandModeShortcut: nil,
+            rewriteModeShortcut: HotkeyShortcut(keyCode: 59, modifierFlags: []),
+            promptModeShortcutEnabled: false,
+            commandModeShortcutEnabled: false,
+            rewriteModeShortcutEnabled: false
+        )
+        // As the app wires it: the gate first, then the old cancel handling (nothing else to close).
+        manager.setSpokenSendCancelCallback { BottomOverlayWindowController.shared.cancelSpokenSendIfArmed(spokenSend) }
+        manager.setCancelCallback { [unowned self] in
+            self.otherCancels += 1
+            return false
+        }
+        self.asr = asr
+        self.spokenSend = spokenSend
+        self.manager = manager
+        BottomOverlayWindowController.shared.prepare()
+        await Task.yield()
+    }
+
+    override func tearDown() async throws {
+        _ = await BottomOverlayWindowController.shared.hideAndWait()
+        SettingsStore.shared.spokenSendEnabled = self.savedSpokenSendEnabled
+        NotchContentState.shared.mode = .dictation
+        self.manager = nil
+        self.spokenSend = nil
+        self.asr = nil
+        try await super.tearDown()
+    }
+
+    // MARK: Helpers
+
+    private func press(autorepeat: Bool = false) throws -> Bool {
+        let cancel = SettingsStore.shared.cancelRecordingHotkeyShortcut
+        let event = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: cancel.keyCode, keyDown: true))
+        event.flags = CGEventFlags(rawValue: UInt64(cancel.modifierFlags.rawValue))
+        if autorepeat { event.setIntegerValueField(.keyboardEventAutorepeat, value: 1) }
+        return self.manager.handleKeyEventForTests(event, type: .keyDown)
+    }
+
+    private func release() throws {
+        let cancel = SettingsStore.shared.cancelRecordingHotkeyShortcut
+        let event = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: cancel.keyCode, keyDown: false))
+        _ = self.manager.handleKeyEventForTests(event, type: .keyUp)
+    }
+
+    /// A live recording with the pill up, listening; `armed` says the phrase was heard.
+    private func startRecording(armed: Bool) {
+        BottomOverlayWindowController.shared.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        self.asr.isRunning = true
+        if armed { self.spokenSend.handlePartial("Fix the typo in the README, send it") }
+    }
+
+    private func waitForTheRecordingToStop() async throws {
+        for _ in 0..<50 where self.asr.isRunning {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+    }
+
+    // MARK: Consumed: a pending Return, SEND on the pill
+
+    func testTheFirstEscDropsOnlyTheReturnAndTheSecondCancelsTheDictation() async throws {
+        self.startRecording(armed: true)
+        XCTAssertTrue(BottomOverlayWindowController.shared.isShowingSendPlacard(spokenSend: self.spokenSend))
+        XCTAssertTrue(try self.press(), "consumed: Esc never reaches the app")
+        XCTAssertTrue(self.asr.isRunning, "the dictation keeps recording")
+        XCTAssertEqual(self.otherCancels, 0)
+        XCTAssertEqual(self.spokenSend.indicator, .canceled)
+        XCTAssertEqual(SignalOverlayModel.placard(indicator: self.spokenSend.indicator, sendsInApp: true), .noSend)
+        try self.release()
+
+        XCTAssertTrue(try self.press(), "as before PR #17: Esc while recording cancels it")
+        XCTAssertEqual(self.otherCancels, 1)
+        try await self.waitForTheRecordingToStop()
+        XCTAssertFalse(self.asr.isRunning)
+    }
+
+    func testAHeldEscThatDroppedTheReturnSwallowsItsOwnRepeats() async throws {
+        self.startRecording(armed: true)
+        XCTAssertTrue(try self.press())
+        for _ in 0..<5 {
+            XCTAssertTrue(try self.press(autorepeat: true), "repeats are consumed")
+        }
+        XCTAssertTrue(self.asr.isRunning, "no repeat cancels the dictation")
+        XCTAssertEqual(self.otherCancels, 0)
+        try self.release()
+    }
+
+    func testAfterTheStopTheRepeatsNeverLeakToTheApp() async throws {
+        self.startRecording(armed: true)
+        _ = self.spokenSend.beginStop()
+        BottomOverlayWindowController.shared.markRecordingStopped()
+        SignalOverlayModel.shared.setStopPlacard(.send)
+        self.asr.isRunning = false
+        XCTAssertTrue(self.spokenSend.hasPendingReturn)
+        XCTAssertTrue(try self.press(), "drops the Return, consumed")
+        for _ in 0..<5 {
+            XCTAssertTrue(try self.press(autorepeat: true), "repeats never reach the app")
+        }
+        XCTAssertEqual(self.otherCancels, 0)
+        XCTAssertEqual(SignalOverlayModel.shared.stopPlacard, .noSend)
+        try self.release()
+        XCTAssertFalse(try self.press(), "a new press after the Return was dropped passes through")
+    }
+
+    // MARK: Pass-through: behaves as before PR #17
+
+    func testIdle() throws {
+        XCTAssertFalse(try self.press(), "no recording, no pill: Esc reaches the app")
+        XCTAssertEqual(self.otherCancels, 1)
+    }
+
+    func testRecordingWithoutSend() async throws {
+        self.startRecording(armed: false)
+        XCTAssertTrue(try self.press(), "cancels the dictation, as before")
+        XCTAssertEqual(self.otherCancels, 1)
+        try await self.waitForTheRecordingToStop()
+        XCTAssertFalse(self.asr.isRunning)
+    }
+
+    func testNoSendAlreadyShowing() async throws {
+        self.startRecording(armed: true)
+        XCTAssertTrue(self.spokenSend.cancelSend())
+        XCTAssertTrue(try self.press(), "nothing left to drop: cancels the dictation, as before")
+        XCTAssertEqual(self.otherCancels, 1)
+        try await self.waitForTheRecordingToStop()
+    }
+
+    func testAfterTheDecision() throws {
+        self.startRecording(armed: true)
+        let stop = self.spokenSend.beginStop()
+        BottomOverlayWindowController.shared.markRecordingStopped()
+        self.asr.isRunning = false
+        _ = self.spokenSend.finishDictation("Fix the typo in the README, send it.", stop: stop, target: nil, isNormalRoute: true)
+        BottomOverlayWindowController.shared.spokenSendDecided(.returnFollows)
+        XCTAssertFalse(try self.press(), "decided: Esc reaches the app")
+        XCTAssertNotEqual(self.spokenSend.indicator, .canceled)
+    }
+
+    func testDuringTheHold() throws {
+        self.startRecording(armed: false)
+        BottomOverlayWindowController.shared.markRecordingStopped()
+        self.asr.isRunning = false
+        SignalOverlayModel.shared.showDelivered(SignalDelivery(appName: "c11", words: 3, method: .paste, sentReturn: false))
+        XCTAssertFalse(try self.press(), "Pasted on screen: Esc reaches the app")
+    }
+
+    func testTheTopOverlayShowsNoSend() async throws {
+        // A live recording with the send armed, but no bottom pill (the notch overlay).
+        self.asr.isRunning = true
+        self.spokenSend.handlePartial("Fix the typo in the README, send it")
+        XCTAssertTrue(self.spokenSend.hasPendingReturn)
+        XCTAssertFalse(BottomOverlayWindowController.shared.isShowingSendPlacard(spokenSend: self.spokenSend))
+        XCTAssertTrue(try self.press(), "cancels the dictation, as before")
+        XCTAssertEqual(self.spokenSend.indicator, .armed, "the Return was not what Esc canceled")
+        XCTAssertEqual(self.otherCancels, 1)
+        try await self.waitForTheRecordingToStop()
+    }
+
+    /// Reprocess or a History pick while listening, or a microphone dropout, end the recording with
+    /// stopWithoutTranscription, outside the stop pipeline: nothing stays armed.
+    func testAStaleIndicatorAfterARecordingEndedOutsideTheStopPipeline() throws {
+        self.startRecording(armed: true)
+        XCTAssertTrue(self.spokenSend.hasPendingReturn)
+        self.asr.isRunning = false
+        XCTAssertEqual(self.spokenSend.indicator, .hidden)
+        XCTAssertFalse(try self.press(), "idle again: Esc reaches the app")
+        XCTAssertEqual(self.otherCancels, 1)
+    }
+
+    func testAfterAModeSwitch() async throws {
+        self.startRecording(armed: true)
+        NotchContentState.shared.mode = .command
+        self.spokenSend.leftDictationMode()
+        XCTAssertFalse(BottomOverlayWindowController.shared.isShowingSendPlacard(spokenSend: self.spokenSend))
+        XCTAssertTrue(try self.press(), "cancels the dictation, as before")
+        XCTAssertEqual(self.otherCancels, 1)
+        try await self.waitForTheRecordingToStop()
+    }
+}
+

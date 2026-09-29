@@ -62,7 +62,7 @@ Nothing inside the overlay is smaller than 10 pt mono uppercase; prose never dro
 | Pill | 340 × 149 pt, square |
 | Pill rows, top to bottom | padding 12 · preview 54 · gap 6 · trace row 50 (44 trace + 6 ruler) · gap 4 · mic 13 · padding 10 |
 | Pill padding, horizontal | 18 |
-| Failed card | the pill grown **upward** to 210 (+61); its bottom rows, rails and chips do not move |
+| Recovery cards | the pill grown **upward** to 174 (+25, one-line card), 231 (+82, failed with its transcript) or 248 (+99, failed with a two-line reason); its bottom rows, rails and chips do not move |
 | Rails | 149 tall, bottom-aligned, 6 pt out from the pill; chips at the pill's top and bottom corners |
 | Chip | 30 × 30, square, no edge at rest |
 | Trace | 39 bars, 2 pt wide on a 4 pt pitch, 154 × 44, min 2 / max 40 tall, mirrored about a 1 px midline; 12 samples per second, so 3.25 s of history (52 bars before the Spoken Send placard was reserved) |
@@ -93,7 +93,7 @@ The one flourish. Four L marks sit **outside** a box's corners, a gap clear of t
 | History card | 3 pt | 10 pt | pointer over the card |
 | Menu bar mark | inside its 22 × 16 box | 4 pt | pointer over the item, or menu open |
 
-Rules: stroke 1.5 pt in `bracket` over a 1 pt `halo` in the surface colour (without the halo, ink marks vanish over a dark terminal in light mode). Never drawn at rest, never orange, never animated except a 60 ms linear fade in and out. One bracket at a time: over a chip or the card, the pill's hides, because the 6 pt gutter cannot hold two. Brackets never change layout or hit-testing. The window must be sized 6 pt larger than the visible content on every side so they are not clipped.
+Rules: stroke 1.5 pt in `bracket` over a 1 pt `halo` in the surface colour (without the halo, ink marks vanish over a dark terminal in light mode). Never drawn at rest, never orange, never animated except a 60 ms linear fade in and out. One bracket at a time: over a chip or the card, the pill's hides, because the 6 pt gutter cannot hold two. Brackets never change layout or hit-testing. The window keeps a transparent margin around the visible content so they are not clipped: 6 pt on the top and sides (gap 3 + stroke 1.5 + halo 1 = 5.5) and 8 pt at the bottom, where the bracket also clears the 2 pt drop rule (7.5). The margin paints nothing, so clicks there reach the app beneath.
 
 ## 8. Motion
 
@@ -131,7 +131,7 @@ No springs. Nothing eases softly. Everything is deliberate.
 2. **Listening.** Live preview above. Trace live, the newest 6 bars orange (the write head). Solid orange square and a running timer at the right end of the trace row, opposite the target-app icon. Mic label bottom-centre. Chips at rest (solid squares, no edge). Menu bar: bars plus a solid square.
 3. **Transcribing.** Preview frozen and dimmed. Bars flat at 2 pt with the orange sweep crossing every 1.05 s. The square goes hollow, the timer freezes at the final duration. Copy and Reprocess dim. **No status word.** Menu bar: bars plus an outlined square.
 4. **Pasted** (was "Delivered"). The preview area swaps to the orange stamp, "Pasted into c11" and "118 WORDS" in mono. Trace flat, timer frozen (the duration appears once, here). Held 1.2 s, then dismissed. The paste was posted, not verified, hence the word.
-5. **Failed → Copy.** The pill grows upward (82 pt, 99 with a two-line reason): an orange 2 pt top rule, "Couldn't paste into c11", one reason line ("No text field focused" / "The text is on your clipboard" / "Your newer clipboard was left alone, the text is in History"), the transcript clamped to 3 lines, a solid orange **Copy** (becomes "✓ Copied" at the same width for 1.4 s), **Dismiss**, and "118 WORDS". Trace row, mic row, rails and chips do not move. Stays until dismissed or the next dictation.
+5. **Failed → Copy.** The pill grows upward (82 pt, 99 with a two-line reason): an orange 2 pt top rule, "Couldn't paste into c11", one reason line ("No text field focused" / "The text is on your clipboard" / "Your newer clipboard was left alone, the text is in History"), the transcript clamped to 3 lines, a solid orange **Copy** (becomes "✓ Copied" at the same width for 1.4 s), **Dismiss**, and "118 WORDS". Trace row, mic row, rails and chips do not move. Stays until dismissed, the next dictation, or 10 s (the countdown pauses while the pointer is over the card and resumes with 4 s when it leaves); it then fades out over 120 ms linear like the pill (a cut under reduced motion).
 6. **History.** The card opens 6 pt above the History chip, anchored to its leading edge, with the listening state live underneath. An engineering table: mono index column ("01" over the time), day rows, 1 px rules, transcripts clamped to 4 lines, mono meta with the orange NOT DELIVERED marker where the paste failed, and a title-block footer ("HISTORY · 12 OF 247 · NEWEST FIRST" | "LIQUID VOICE"). Rows invert on hover; click inserts. The History chip stays inverted (latched) while the card is open. Closes on outside click, re-tap, or a row pick.
 
 7. **Send countdown**, 8. **Sent**, 9. **Transcription timed out**, 10. **Speech recognition is back**, 11. **Microphone access is off**: added in round 5, see section 15.
@@ -140,7 +140,7 @@ Chip glyphs and SF Symbols: History `clock.arrow.circlepath`, Copy `doc.on.doc`,
 
 ## 10. Menu bar
 
-A 22 × 16 template mark: three square-ended bars at rest; bars plus a solid square while listening (the bars follow the level at 8 Hz) and during the Spoken Send countdown (bars still); bars plus an outlined square while transcribing. The width never changes. Hover draws the bracket inside the box. The menu is a plain `NSMenu` with a mono uppercase header: Start Dictation ⌥Space, the current microphone (submenu), History…, Settings…, Quit Liquid Voice.
+A 22 × 16 template mark: three square-ended bars at rest; bars plus a solid square while listening (the bars follow the level at 8 Hz) and during the Spoken Send countdown (bars still); bars plus an outlined square while transcribing. The width never changes. The mark never changes while a dictation's stop pipeline runs (a status item image change is a WindowServer round trip on the paste's path): a slow final pass keeps the listening mark until the text is handed off, and the outlined square shows for work outside that pipeline (a reprocess, AI refinement). Hover draws the bracket inside the box. The menu is a plain `NSMenu` with a mono uppercase header: Start Dictation ⌥Space, the current microphone (submenu), History…, Settings…, Quit Liquid Voice.
 
 ## 11. Native mapping (the load-bearing parts)
 
@@ -204,8 +204,10 @@ The trace row becomes `[icon 20] [trace 39 bars] [placard 7 ch] [■ 6] [timer 5
 |---|---|---|---|
 | Armed (the send phrase was heard) | `SEND` orange | as usual | as usual |
 | **Send countdown** (1.5 s of quiet after you stop) | `SEND` orange | flat trace plus a **drain bar**: solid orange, 4 pt tall, full trace width on the midline, shrinking from the right over 1.5 s, linear, stepped on the 4 pt pitch. No easing, no ring | `1.5` → `0.0`, orange mono, one decimal; square hollow |
-| Canceled (click anywhere on the pill, the Cancel chip, or Esc) | `NO SEND` ink | drain bar ink, stopped | frozen |
+| Canceled (click anywhere on the pill, the Cancel chip, or Esc, whenever `SEND` shows and the stop has not yet decided: armed, counting down, stopped or transcribing; that Esc is consumed and never reaches the app) | `NO SEND` ink | drain bar ink, stopped | frozen |
 | No Return will follow (a terminal that never gets one) | `NO SEND` dim, from the moment the phrase is heard | as usual | as usual |
+
+The rule for Esc is one gate: it drops the Return (and is consumed) only while a Return is genuinely pending (the recording is live, or its stop has begun and the send is not decided) and the bottom pill visibly shows `SEND`. Everywhere else, including the top overlay, which shows no placard, Esc does what it always did. A held Esc that dropped the Return consumes its own auto-repeats and does nothing else. A second press after a cancel: while recording, Esc or Cancel cancels the dictation, as it always did. After the stop it only dismisses the pill; the text still pastes (it is already on its way), and that Esc is not consumed, since it cancels nothing and may be meant for the app. Once the stop decides, the placard follows the decision: `SEND` only when the Return will follow; `NO SEND` in ink after a cancel; `NO SEND` dim when no Return goes there (a terminal that never gets one), since ink is reserved for a cancel.
 
 Outcomes: a completed countdown goes to **Sent** (the stamp layout, "Sent to c11", `118 WORDS · RETURN`, 1.2 s, then dismiss). A canceled send holds 700 ms, then the text lands as **Pasted** with the placard still reading `NO SEND`. Menu bar during the countdown: the listening mark with the bars still. Today's paper-plane chip in the rail's middle slot is retired; it remains in the prototype behind `?send=chip` as the unreviewed alternative.
 
@@ -220,7 +222,7 @@ One anatomy for every problem: the failed card grown upward from the pill with t
 | Speech recognition is back | Speech recognition is back | A kept dictation is waiting | **Reprocess** | none | flat, frozen timer / mic |
 | Microphone access is off | Microphone access is off | Allow Liquid Voice in Privacy & Security | **Open System Settings** (gear; opens Privacy & Security → Microphone) | none | flat, hollow square, `0:00` dim / `NO MICROPHONE` |
 
-The Reprocess in a card and the Reprocess chip do the same thing; the chip stays. Card heights: 174 pt for a one-line card, 231 for failed, 248 with the two-line clipboard reason.
+The Reprocess in a card and the Reprocess chip do the same thing; the chip stays. Card heights: 174 pt for a one-line card, 231 for failed, 248 with the two-line clipboard reason. Every card leaves after 10 s unless dismissed first (paused while the pointer is over it), fading over 120 ms linear. A card about the dictation the pill is holding takes the pill's place at once, so the pill reads as growing; a card about anything else, while a newer recording is live, sits above the pill.
 
 ### Wording
 

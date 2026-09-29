@@ -92,6 +92,12 @@ final class SpokenSendController: ObservableObject {
     private var hooks: Hooks?
     private var audioLevels: AnyPublisher<CGFloat, Never>?
     private var partialsSubscription: AnyCancellable?
+    private var recordingSubscription: AnyCancellable?
+
+    /// A recording is capturing now (the ASR's own running state, not the indicator).
+    private(set) var isRecordingLive = false
+    /// A stop has begun (`beginStop`) and the send is not decided yet (`finishDictation`, `endStop`).
+    private(set) var isAwaitingSendDecision = false
     private var voiceActivitySubscription: AnyCancellable?
     private let typingService = TypingService()
 
@@ -107,7 +113,15 @@ final class SpokenSendController: ObservableObject {
 
     init() {}
 
-    func attach(partials: AnyPublisher<String, Never>, audioLevels: AnyPublisher<CGFloat, Never>, hooks: Hooks) {
+    /// - Parameter recording: the ASR's running state. A recording that ends without the stop
+    ///   pipeline (a cancel, a microphone dropout, Reprocess or a History pick while listening)
+    ///   then leaves no send armed.
+    func attach(
+        partials: AnyPublisher<String, Never>,
+        audioLevels: AnyPublisher<CGFloat, Never>,
+        recording: AnyPublisher<Bool, Never>? = nil,
+        hooks: Hooks
+    ) {
         self.hooks = hooks
         self.audioLevels = audioLevels
         self.partialsSubscription = partials
@@ -115,6 +129,38 @@ final class SpokenSendController: ObservableObject {
             .sink { [weak self] text in
                 self?.handlePartial(text)
             }
+        self.recordingSubscription = recording?
+            .removeDuplicates()
+            .sink { [weak self] isRunning in
+                self?.recordingStateChanged(isRunning: isRunning)
+            }
+    }
+
+    // MARK: - Is a Return pending?
+
+    /// Whether a Return is genuinely pending: the phrase armed a send that is not canceled, in an
+    /// app that gets one, and either the recording is live or its stop has begun and the send is
+    /// not decided yet. The one input to "should Esc drop only the Return?" besides the pill
+    /// visibly showing SEND (BottomOverlayWindowController.cancelSpokenSendIfArmed).
+    var hasPendingReturn: Bool {
+        (self.isRecordingLive || self.isAwaitingSendDecision)
+            && (self.indicator == .armed || self.indicator == .countingDown)
+            && self.sendsInRecordingApp
+    }
+
+    /// The ASR's running state changed. Ended outside the stop pipeline: nothing is pending.
+    func recordingStateChanged(isRunning: Bool) {
+        self.isRecordingLive = isRunning
+        guard !isRunning, !self.isAwaitingSendDecision else { return }
+        self.cancelCountdown()
+        self.setIndicator(.hidden)
+    }
+
+    /// The mode left dictation (a command or edit switch mid-recording): no send applies.
+    func leftDictationMode() {
+        self.cancelCountdown()
+        self.arming.reset()
+        self.setIndicator(.hidden)
     }
 
     // MARK: - During a recording
@@ -122,6 +168,7 @@ final class SpokenSendController: ObservableObject {
     /// A new recording starts (any mode). Forgets everything about the previous one.
     func beginRecording() {
         self.session &+= 1
+        self.isAwaitingSendDecision = false
         self.cancelCountdown()
         self.arming.reset()
         self.lastPartial = ""
@@ -160,14 +207,17 @@ final class SpokenSendController: ObservableObject {
         self.startCountdown()
     }
 
-    /// Cancels the send for the rest of this dictation (the overlay's send chip). The phrase is
-    /// still left out of the text; only the key is dropped.
-    func cancelSend() {
-        guard self.indicator == .armed || self.indicator == .countingDown else { return }
+    /// Cancels the send for the rest of this dictation. The phrase is still left out of the text;
+    /// only the key is dropped. Returns false when there was nothing to cancel (the send was
+    /// already decided, canceled, or never armed).
+    @discardableResult
+    func cancelSend() -> Bool {
+        guard self.indicator == .armed || self.indicator == .countingDown else { return false }
         self.isCanceled = true
         self.cancelCountdown()
         self.setIndicator(.canceled)
         DebugLogger.shared.info("SPOKEN_SEND canceled from overlay session=\(self.session)", source: "SpokenSend")
+        return true
     }
 
     private func startCountdown() {
@@ -289,6 +339,7 @@ final class SpokenSendController: ObservableObject {
     /// Called as dictation stops, before anything awaits. Ends the countdown; a stop that is
     /// already under way needs no second one.
     func beginStop() -> StopSnapshot {
+        self.isAwaitingSendDecision = true
         self.cancelCountdown()
         if self.indicator == .countingDown {
             self.setIndicator(.armed)
@@ -308,6 +359,7 @@ final class SpokenSendController: ObservableObject {
     /// recording, a delivered one): the chip never outlives the dictation it belongs to.
     func endStop(_ stop: StopSnapshot) {
         guard stop.session == self.session else { return }
+        self.isAwaitingSendDecision = false
         self.cancelCountdown()
         self.setIndicator(.hidden)
     }
@@ -328,6 +380,7 @@ final class SpokenSendController: ObservableObject {
         let wasArmed = isCurrent ? self.arming.wasArmed : stop.wasArmed
         let isCanceled = isCurrent ? self.isCanceled : stop.isCanceled
         if isCurrent {
+            self.isAwaitingSendDecision = false
             self.setIndicator(.hidden)
         }
         guard config.enabled, isNormalRoute else { return .unchanged(text) }

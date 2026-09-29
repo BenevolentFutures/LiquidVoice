@@ -1,15 +1,14 @@
 import AppKit
 import SwiftUI
 
-// Delivery failure card. Behavior ported from altic-dev/FluidVoice by altic-dev:
+// Recovery cards (DESIGN.md §9.5, §15). Behavior ported from altic-dev/FluidVoice by altic-dev:
 //   @d5cc5090 friendlier wording, @ff92b4b8 shorter title, @8a820022 one Copy action and a
 //   10 s auto-dismiss, @088efe13 its own transient panel instead of an overlay state, and
 //   @9c25e758 a card for every failure, with Open Settings for Accessibility.
-// The look is Liquid Voice's own and follows the recording overlay (BottomOverlayView): a
-// pure-black pill with the same inner border, framed by icon-only chips on two three-slot
-// rails (Copy at the bottom-left like the overlay's Copy chip, Dismiss at the top-right like
-// its Cancel chip). It appears where the overlay sits, including a dragged position, and its
-// size never changes with the transcript length.
+// The look is Signal's recovery-card family: the pill grown upward from where the overlay sits
+// (a dragged position included), with the orange 2 pt top rule, a headline, one reason line, the
+// transcript for a failed paste, one orange primary action, Dismiss and mono meta, between the
+// overlay's own rails. Its trace row, mic row, rails and chips sit exactly where the overlay's do.
 
 @MainActor
 final class DeliveryFailureOverlayController {
@@ -31,6 +30,8 @@ final class DeliveryFailureOverlayController {
     private(set) var presentedTranscript: String?
     private(set) var presentedTimeout: TranscriptionTimeoutNotice?
     private(set) var presentedMicrophoneAccessNeeded = false
+    /// Transcripts whose paste failed this session, for the history card's NOT PASTED marker.
+    private(set) var notPastedTranscripts: Set<String> = []
 
     private init() {}
 
@@ -41,74 +42,66 @@ final class DeliveryFailureOverlayController {
     func show(_ report: DeliveryFailureReport) {
         let failure = report.failure
         let transcript = report.transcript
-        guard let title = failure.userFacingTitle else { return }
-        self.present(DeliveryFailureCardView(
-            title: title,
-            transcript: transcript,
-            detail: Self.detailText(clipboard: report.clipboard, inHistory: report.inHistory),
-            offersAccessibilitySettings: failure == .accessibilityNotTrusted,
-            onCopy: { [weak self] in
-                ClipboardService.copyToClipboard(transcript)
-                self?.hide(after: 0.9)
-            },
-            onOpenSettings: { [weak self] in
+        guard failure.isUserVisible else { return }
+        let reason = Self.reasonText(failure: failure, clipboard: report.clipboard, inHistory: report.inHistory)
+        let appName = BottomOverlayWindowController.shared.heldDictationAppName(forDictation: report.traceID)
+        let isAccessibility = failure == .accessibilityNotTrusted
+        let words = SignalOverlayModel.wordCount(transcript)
+        let content = SignalCardContent(
+            headline: isAccessibility
+                ? "Accessibility is off"
+                : appName.map { "Couldn\u{2019}t paste into \($0)" } ?? "Couldn\u{2019}t paste the text",
+            reason: reason,
+            transcript: transcript.trimmingCharacters(in: .whitespacesAndNewlines),
+            // Without Accessibility nothing can paste: the way out is the setting (the text is
+            // already on the clipboard). Otherwise, Copy.
+            primary: isAccessibility ? .openSystemSettings : .copy,
+            meta: "\(words) \(words == 1 ? "word" : "words")"
+        )
+        self.present(content, yieldOverlay: {
+            BottomOverlayWindowController.shared.yieldToCard(forDictation: report.traceID)
+        }) { [weak self] in
+            if isAccessibility {
                 if let url = Self.accessibilitySettingsURL { NSWorkspace.shared.open(url) }
                 self?.hide()
-            },
-            onDismiss: { [weak self] in self?.hide() },
-            onHoverChanged: { [weak self] hovering in self?.hoverChanged(hovering) }
-        ))
+            } else {
+                ClipboardService.copyToClipboard(transcript)
+                // Close once the "✓ Copied" confirmation has shown.
+                self?.hide(after: SignalTheme.Motion.copyFeedbackButton)
+            }
+        }
         self.presentedFailure = failure
         self.presentedTranscript = transcript
+        if self.notPastedTranscripts.count > 200 { self.notPastedTranscripts.removeAll() }
+        self.notPastedTranscripts.insert(transcript.trimmingCharacters(in: .whitespacesAndNewlines))
         DebugLogger.shared.info("Delivery failure card shown failure=\(failure.rawValue) chars=\(transcript.count)", source: "DeliveryFailureCard")
     }
 
-    /// A dictation whose transcription timed out (its audio is kept), or a recording refused
-    /// while the model recovers. Same card; Reprocess takes Copy's place.
+    /// A dictation whose transcription timed out (its audio is kept), a recovered model, or a
+    /// recording refused while the model recovers. Reprocess is the primary action.
     func showTranscriptionTimeout(_ notice: TranscriptionTimeoutNotice) {
-        let title: String
-        let message: String
-        let detail: String
-        let offersReprocess: Bool
-        switch notice {
+        let content: SignalCardContent = switch notice {
         case .timedOut:
-            title = "Transcription timed out"
-            message = "The speech model didn't finish in time. Your recording is kept, even across a restart."
-            detail = "Reprocess it once the model is back. Your next dictation replaces it."
-            offersReprocess = true
+            SignalCardContent(headline: "Transcription timed out", reason: "Your audio is kept", primary: .reprocess)
         case .recovered:
-            title = "Speech recognition is back"
-            message = "Your timed-out recording is ready to transcribe."
-            detail = "Reprocess it now. Your next dictation replaces it."
-            offersReprocess = true
+            SignalCardContent(headline: "Speech recognition is back", reason: "A kept dictation is waiting", primary: .reprocess)
         case let .recordingRefused(hasKeptAudio):
-            title = "Speech recognition is recovering"
-            message = "The speech model is still busy with an earlier recording, so this one didn't start."
-            detail = hasKeptAudio ? "The timed-out recording is kept for Reprocess." : "Try again in a moment."
-            offersReprocess = hasKeptAudio
+            SignalCardContent(
+                headline: "Speech recognition is recovering",
+                reason: hasKeptAudio ? "This recording didn\u{2019}t start. Your earlier audio is kept" : "This recording didn\u{2019}t start. Try again in a moment",
+                primary: hasKeptAudio ? .reprocess : .none
+            )
         case .reprocessUnavailable:
-            title = "Speech recognition is recovering"
-            message = "The model can't transcribe the kept recording yet."
-            detail = "It stays kept. Reprocess again in a moment."
-            offersReprocess = true
+            SignalCardContent(headline: "Speech recognition is recovering", reason: "Your audio is kept. Reprocess again in a moment", primary: .reprocess)
         }
-        self.present(DeliveryFailureCardView(
-            title: title,
-            transcript: "",
-            message: message,
-            detail: detail,
-            offersAccessibilitySettings: false,
-            primaryAction: offersReprocess ? .reprocess : .none,
-            iconName: "hourglass",
-            onCopy: { [weak self] in
-                // Reprocess: the same path as the overlay's Reprocess chip and hotkey.
-                NotchContentState.shared.onReprocessLastRequested?()
-                self?.hide()
-            },
-            onOpenSettings: {},
-            onDismiss: { [weak self] in self?.hide() },
-            onHoverChanged: { [weak self] hovering in self?.hoverChanged(hovering) }
-        ))
+        let refusedStart: Bool = if case .recordingRefused = notice { true } else { false }
+        self.present(content, yieldOverlay: {
+            BottomOverlayWindowController.shared.yieldToNoticeCard(refusedStart: refusedStart)
+        }) { [weak self] in
+            // Reprocess: the same path as the overlay's Reprocess chip and hotkey.
+            NotchContentState.shared.onReprocessLastRequested?()
+            self?.hide()
+        }
         self.presentedTimeout = notice
         DebugLogger.shared.info("Transcription timeout card shown notice=\(notice)", source: "DeliveryFailureCard")
     }
@@ -116,28 +109,38 @@ final class DeliveryFailureOverlayController {
     /// A dictation hotkey pressed while macOS denies the microphone: recording cannot start, so
     /// say so where the overlay would have appeared, with a way to the Microphone settings.
     func showMicrophoneAccessNeeded() {
-        self.present(DeliveryFailureCardView(
-            title: "Microphone access is off",
-            transcript: "",
-            message: "macOS doesn't let \(Bundle.main.fluidAppDisplayName) use the microphone, so recording didn't start.",
-            detail: "Turn it on in Privacy & Security > Microphone.",
-            offersAccessibilitySettings: true,
-            settingsHelp: "Open Microphone Settings",
-            primaryAction: .none,
-            iconName: "mic.slash.fill",
-            onCopy: {},
-            onOpenSettings: { [weak self] in
-                if let url = Self.microphoneSettingsURL { NSWorkspace.shared.open(url) }
-                self?.hide()
-            },
-            onDismiss: { [weak self] in self?.hide() },
-            onHoverChanged: { [weak self] hovering in self?.hoverChanged(hovering) }
-        ))
+        let content = SignalCardContent(
+            headline: "Microphone access is off",
+            reason: "Allow \(Bundle.main.fluidAppDisplayName) in Privacy & Security",
+            primary: .openSystemSettings,
+            isMicrophoneOff: true
+        )
+        self.present(content, yieldOverlay: { BottomOverlayWindowController.shared.yieldToNoticeCard() }) { [weak self] in
+            if let url = Self.microphoneSettingsURL { NSWorkspace.shared.open(url) }
+            self?.hide()
+        }
         self.presentedMicrophoneAccessNeeded = true
         DebugLogger.shared.info("Microphone access card shown", source: "DeliveryFailureCard")
     }
 
-    private func present(_ rootView: DeliveryFailureCardView) {
+    /// `yieldOverlay`: asks the overlay to give way (a cut) when the card is about the dictation it
+    /// is holding, so the card reads as the pill growing upward; otherwise the card sits above it.
+    private func present(_ content: SignalCardContent, yieldOverlay: () -> Bool, primary: @escaping () -> Void) {
+        let overlayYielded = yieldOverlay()
+        let model = SignalOverlayModel.shared
+        let view = DeliveryFailureCardView(
+            content: content,
+            icon: NotchContentState.shared.targetAppIcon ?? ActiveAppMonitor.shared.activeAppIcon,
+            timerText: model.lastRecording.map { SignalOverlayModel.formatDuration($0.duration) } ?? "0:00",
+            microphoneName: BottomOverlayWindowController.cachedMicrophoneName(current: SignalOverlayModel.shared.microphoneName),
+            onPrimary: primary,
+            onDismiss: { [weak self] in self?.hide() },
+            onHoverChanged: { [weak self] hovering in self?.hoverChanged(hovering) }
+        )
+        self.present(view, avoidingOverlay: !overlayYielded)
+    }
+
+    private func present(_ rootView: DeliveryFailureCardView, avoidingOverlay: Bool) {
         self.generation &+= 1
         self.dismissTask?.cancel()
         self.isClosing = false
@@ -156,7 +159,13 @@ final class DeliveryFailureOverlayController {
         hostingView.layer?.backgroundColor = .clear
         panel.contentView = hostingView
         self.hostingView = hostingView
-        self.positionPanel()
+        // A card replacing one that was fading out starts opaque: a zero-length animation group
+        // supersedes the fade still running on the animator.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            panel.animator().alphaValue = 1
+        }
+        self.positionPanel(avoidingOverlay: avoidingOverlay)
         panel.orderFrontRegardless()
         self.scheduleDismiss(after: Self.displayDuration)
     }
@@ -179,11 +188,30 @@ final class DeliveryFailureOverlayController {
 
     private func performHide() {
         self.generation &+= 1
+        // A history card opened from this card's History chip goes with it.
+        BottomOverlayHistoryMenuController.shared.hide()
         self.presentedFailure = nil
         self.presentedTranscript = nil
         self.presentedTimeout = nil
         self.presentedMicrophoneAccessNeeded = false
-        self.panel?.orderOut(nil)
+        guard let panel = self.panel, panel.isVisible, !SignalTheme.Motion.isReduced else {
+            self.panel?.orderOut(nil)
+            return
+        }
+        // Dismiss like the overlay: 120 ms linear to transparent, then out of the window list
+        // (a cut under reduced motion). A card presented meanwhile keeps the panel.
+        let generation = self.generation
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = SignalTheme.Motion.dismiss
+            context.timingFunction = CAMediaTimingFunction(name: .linear)
+            panel.animator().alphaValue = 0
+        } completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.generation == generation else { return }
+                panel.orderOut(nil)
+                panel.alphaValue = 1
+            }
+        }
     }
 
     private func hoverChanged(_ hovering: Bool) {
@@ -207,17 +235,20 @@ final class DeliveryFailureOverlayController {
         }
     }
 
-    /// The card's third line: where the transcript is now, and why it is not on the clipboard
-    /// when it is not (a newer copy of the user's is never replaced).
-    static func detailText(clipboard: TranscriptBackupOutcome, inHistory: Bool) -> String {
-        switch (clipboard, inHistory) {
-        case (.copied, true), (.alreadyOnClipboard, true): "Kept on your clipboard and in history."
-        case (.copied, false), (.alreadyOnClipboard, false): "Kept on your clipboard."
-        case (.newerClipboardCopy, true): "In history. Your newer clipboard was left alone."
-        case (.newerClipboardCopy, false): "Your newer clipboard was left alone. Use Copy."
-        case (.writeFailed, true): "In history. The clipboard couldn't be written."
-        case (.writeFailed, false): "The clipboard couldn't be written. Use Copy."
-        case (.emptyText, _): "Nothing was captured."
+    /// The failed card's reason line (DESIGN.md §15): why nothing was pasted, or where the text
+    /// is now. Never claims History for text that is not in it, and a newer copy of the user's is
+    /// never replaced.
+    static func reasonText(failure: TextDeliveryFailure, clipboard: TranscriptBackupOutcome, inHistory: Bool) -> String {
+        if failure == .noEditableTarget { return "No text field focused" }
+        switch clipboard {
+        case .copied, .alreadyOnClipboard:
+            return "The text is on your clipboard"
+        case .newerClipboardCopy:
+            return inHistory ? "Your newer clipboard was left alone, the text is in History" : "Your newer clipboard was left alone. Use Copy"
+        case .writeFailed:
+            return inHistory ? "The clipboard couldn\u{2019}t be written, the text is in History" : "The clipboard couldn\u{2019}t be written. Use Copy"
+        case .emptyText:
+            return "Nothing was captured"
         }
     }
 
@@ -233,14 +264,14 @@ final class DeliveryFailureOverlayController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = false // SwiftUI draws the pill; same as the recording overlay.
+        panel.hasShadow = false // Flat: the pill's 1 px edge and 2 pt drop rule, as in the overlay.
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none
         panel.isMovableByWindowBackground = false
         self.panel = panel
     }
 
-    private func positionPanel() {
+    private func positionPanel(avoidingOverlay: Bool) {
         guard let panel, let hostingView,
               let screen = OverlayScreenResolver.screenForCurrentPointer() ?? NSScreen.main
         else { return }
@@ -257,8 +288,8 @@ final class DeliveryFailureOverlayController {
         } else {
             origin = NSPoint(x: screen.frame.midX - size.width / 2, y: visibleFrame.maxY - size.height - 12)
         }
-        // Never cover a recording overlay that is on screen: sit just above it instead.
-        if let overlayFrame = BottomOverlayWindowController.shared.presentedFrame,
+        // Never cover a live recording overlay: sit just above it instead.
+        if avoidingOverlay, let overlayFrame = BottomOverlayWindowController.shared.presentedFrame,
            overlayFrame.intersects(NSRect(origin: origin, size: size))
         {
             origin.y = min(overlayFrame.maxY + 8, visibleFrame.maxY - size.height - 12)
@@ -267,203 +298,146 @@ final class DeliveryFailureOverlayController {
     }
 }
 
-/// The card itself: medium-overlay metrics, pure black, icon-only chips.
+/// The recovery card: the overlay's rails, and its pill grown upward by the card. The trace row
+/// (flat, the frozen length), the mic row, the rails and the chips sit exactly where the overlay's
+/// were, so the card reads as the same object; only the top moves.
 struct DeliveryFailureCardView: View {
-    /// The bottom-left chip: Copy for an undelivered transcript, Reprocess for a timed-out one.
-    enum PrimaryAction {
-        case copy
-        case reprocess
-        case none
-    }
-
-    let title: String
-    let transcript: String
-    /// Shown instead of the quoted transcript when set (a card with no transcript).
-    var message: String? = nil
-    let detail: String
-    let offersAccessibilitySettings: Bool
-    /// The settings chip's tooltip (the chip opens whatever `onOpenSettings` opens).
-    var settingsHelp: String = "Open Accessibility Settings"
-    var primaryAction: PrimaryAction = .copy
-    var iconName: String? = nil
-    /// The primary chip's action (Copy or Reprocess).
-    let onCopy: () -> Void
-    let onOpenSettings: () -> Void
+    let content: SignalCardContent
+    let icon: NSImage?
+    /// The dictation's frozen length ("0:41"); the microphone card shows a dim "0:00".
+    let timerText: String
+    let microphoneName: String
+    let onPrimary: () -> Void
     let onDismiss: () -> Void
     let onHoverChanged: (Bool) -> Void
 
-    // Medium overlay geometry (BottomOverlayView.LayoutConstants.get(.medium)).
-    static let pillWidth: CGFloat = 340
-    private static let hPadding: CGFloat = 18
-    private static let vPadding: CGFloat = 12
-    private static let cornerRadius: CGFloat = 18
-    private static let transcriptFontSize: CGFloat = 13
-    private static let chipIconSize: CGFloat = 12
-    private static let chipCornerRadius: CGFloat = 8
+    @ObservedObject private var historyStore = TranscriptionHistoryStore.shared
+    @ObservedObject private var historyCard = BottomOverlayHistoryMenuController.shared
+    @State private var isHovered = false
+    @State private var hoveredChips: Set<String> = []
+    @State private var isCopyConfirming = false
+    @State private var historyChipAnchor = SignalChipAnchor()
+    @State private var trace = SignalTraceModel()
 
-    @State private var didCopy = false
-    @State private var hoveredChip: String?
+    private var geometry: SignalOverlayGeometry {
+        SignalOverlayGeometry.forSize(SettingsStore.shared.overlaySize)
+    }
+
+    private var hasHistory: Bool {
+        !self.historyStore.entries.isEmpty
+    }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 6) {
-            VStack(spacing: 6) {
-                if self.offersAccessibilitySettings {
-                    self.chip("settings", systemName: "gearshape", help: self.settingsHelp, action: self.onOpenSettings)
-                } else {
-                    self.chipSpacer
-                }
-                self.chipSpacer
-                switch self.primaryAction {
-                case .copy:
-                    self.chip(
-                        "copy",
-                        systemName: self.didCopy ? "checkmark" : "doc.on.doc",
-                        help: self.didCopy ? "Copied" : "Copy Transcript",
-                        action: self.copy
+        let geometry = self.geometry
+        let cardHeight = self.content.height(width: geometry.innerWidth)
+        HStack(alignment: .bottom, spacing: SignalTheme.Metrics.railGap) {
+            SignalRail(height: geometry.railHeight) {
+                self.chip("history", "clock.arrow.circlepath", self.hasHistory ? "Recent Dictations" : "No saved dictation history available", enabled: self.hasHistory, latched: self.historyCard.isOpen) {
+                    // The history card clears the grown pill: 6 pt above it, not above the chip.
+                    let growth = self.pillHeight(geometry, cardHeight) - geometry.railHeight
+                    BottomOverlayHistoryMenuController.shared.updateAnchor(
+                        selectorFrameInScreen: self.historyChipAnchor.frameInScreen,
+                        parentWindow: self.historyChipAnchor.window,
+                        maxWidth: SignalTheme.Metrics.historyWidth,
+                        menuGap: SignalTheme.Metrics.historyGapAboveChip + max(0, growth)
                     )
-                case .reprocess:
-                    self.chip("reprocess", systemName: "arrow.clockwise", help: "Reprocess", action: self.onCopy)
-                case .none:
-                    self.chipSpacer
+                    BottomOverlayHistoryMenuController.shared.toggleFromTap()
                 }
-            }
-
-            self.pill
-
-            VStack(spacing: 6) {
-                self.chip("dismiss", systemName: "xmark", help: "Dismiss", action: self.onDismiss)
-                self.chipSpacer
-                self.chipSpacer
-            }
-        }
-        .padding(8)
-        .onHover { self.onHoverChanged($0) }
-        .preferredColorScheme(.dark)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(self.title)
-    }
-
-    private var pill: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 6) {
-                Image(systemName: self.iconName ?? (self.offersAccessibilitySettings ? "lock.fill" : "text.cursor"))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.orange.opacity(0.9))
-                    .frame(width: 14, height: 14)
-                    .accessibilityHidden(true)
-                Text(self.title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-
-            // Two lines are always reserved, so a short and a long transcript give the same card.
-            Text(self.message ?? self.transcriptPreview)
-                .font(.system(size: Self.transcriptFontSize, weight: .medium))
-                .foregroundStyle(.white.opacity(self.message == nil ? 0.9 : 0.75))
-                .lineLimit(2)
-                .truncationMode(.tail)
-                .frame(
-                    maxWidth: .infinity,
-                    minHeight: Self.transcriptLineHeight * 2,
-                    maxHeight: Self.transcriptLineHeight * 2,
-                    alignment: .topLeading
+                .background(
+                    PromptSelectorAnchorReader { [historyChipAnchor] frame, window in
+                        historyChipAnchor.frameInScreen = frame
+                        historyChipAnchor.window = window
+                    }
+                    .allowsHitTesting(false)
                 )
-
-            Text(self.detail)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.45))
-                .lineLimit(1)
-        }
-        .padding(.horizontal, Self.hPadding)
-        .padding(.vertical, Self.vPadding)
-        .frame(width: Self.pillWidth, alignment: .leading)
-        .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: Self.cornerRadius)
-                    .fill(Color.black)
-                RoundedRectangle(cornerRadius: Self.cornerRadius)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.15), Color.white.opacity(0.08)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        lineWidth: 1
-                    )
-            }
-        )
-    }
-
-    private static var transcriptLineHeight: CGFloat {
-        max(self.transcriptFontSize * 1.25, self.transcriptFontSize + 2)
-    }
-
-    private var transcriptPreview: String {
-        let trimmed = self.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Nothing was captured" : "\u{201C}\(trimmed)\u{201D}"
-    }
-
-    private func copy() {
-        guard !self.didCopy else { return }
-        self.didCopy = true
-        self.onCopy()
-    }
-
-    /// An icon-only chip matching the overlay's rail chips (`BottomOverlayView.chipBackground`).
-    private func chip(_ id: String, systemName: String, help: String, action: @escaping () -> Void) -> some View {
-        let isHovered = self.hoveredChip == id
-        return Image(systemName: systemName)
-            .font(.system(size: Self.chipIconSize, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.72))
-            // Fixed glyph box: swapping doc.on.doc for checkmark must not resize the chip.
-            .frame(width: 16, height: 16)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
-            .background(Self.chipBackground(isHovered: isHovered))
-            .contentShape(Rectangle())
-            .onHover { hovering in
-                if hovering {
-                    self.hoveredChip = id
-                } else if self.hoveredChip == id {
-                    self.hoveredChip = nil
+            } middle: {
+                Color.clear
+            } bottom: {
+                self.chip("copy", "doc.on.doc", "Copy Last Transcription", enabled: self.hasHistory, confirming: self.isCopyConfirming) {
+                    NotchContentState.shared.onCopyLastRequested?()
+                    self.isCopyConfirming = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + SignalTheme.Motion.copyFeedbackChip) {
+                        self.isCopyConfirming = false
+                    }
                 }
             }
-            .onTapGesture(perform: action)
-            .help(help)
-            .accessibilityElement()
-            .accessibilityLabel(help)
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAction { action() }
+
+            SignalPill(
+                geometry: geometry,
+                topHeight: cardHeight,
+                traceRow: SignalTraceRow(
+                    geometry: geometry,
+                    icon: self.icon,
+                    trace: self.trace,
+                    isLive: false,
+                    isSweeping: false,
+                    mark: self.content.isMicrophoneOff ? .closed : .none,
+                    timer: .frozen(self.content.isMicrophoneOff ? "0:00" : self.timerText, dim: self.content.isMicrophoneOff)
+                ),
+                micText: self.content.isMicrophoneOff ? "No microphone" : (self.microphoneName.isEmpty ? "Microphone" : self.microphoneName),
+                micEmphasized: self.content.isMicrophoneOff,
+                marksFailure: true,
+                isBracketVisible: self.isHovered && self.hoveredChips.isEmpty && !self.historyCard.isHovered
+            ) {
+                SignalCardBody(
+                    content: self.content,
+                    width: geometry.innerWidth,
+                    onPrimary: self.onPrimary,
+                    onDismiss: self.onDismiss
+                )
+            }
+
+            SignalRail(height: geometry.railHeight) {
+                self.chip("cancel", "xmark", "Dismiss", enabled: true, action: self.onDismiss)
+            } middle: {
+                Color.clear
+            } bottom: {
+                self.chip("reprocess", "arrow.clockwise", "Reprocess Last Dictation", enabled: self.hasHistory) {
+                    NotchContentState.shared.onReprocessLastRequested?()
+                    self.onDismiss()
+                }
+            }
+        }
+        .onHover { hovering in
+            self.isHovered = hovering
+            self.onHoverChanged(hovering)
+        }
+        .padding(SignalTheme.Metrics.windowInsets)
+        .signalPalette()
+        .onAppear {
+            if self.trace.barCount != geometry.traceBars {
+                self.trace = SignalTraceModel(barCount: geometry.traceBars)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(self.content.headline)
     }
 
-    /// A chip-sized transparent slot, so both rails stay three slots tall.
-    private var chipSpacer: some View {
-        Color.clear
-            .frame(width: 16, height: 16)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
-            .accessibilityHidden(true)
+    private func pillHeight(_ geometry: SignalOverlayGeometry, _ cardHeight: CGFloat) -> CGFloat {
+        let metrics = SignalTheme.Metrics.self
+        return metrics.pillPaddingTop + cardHeight + metrics.previewGap + metrics.traceRowHeight + metrics.micGap
+            + metrics.micRowHeight + metrics.pillPaddingBottom
     }
 
-    private static func chipBackground(isHovered: Bool) -> some View {
-        RoundedRectangle(cornerRadius: self.chipCornerRadius)
-            .fill(isHovered ? Color(red: 0.13, green: 0.13, blue: 0.16) : Color.black)
-            .overlay(
-                RoundedRectangle(cornerRadius: self.chipCornerRadius)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(isHovered ? 0.36 : 0.14),
-                                Color.white.opacity(isHovered ? 0.22 : 0.08),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        lineWidth: 1
-                    )
-            )
-            .shadow(color: isHovered ? Color.white.opacity(0.16) : .clear, radius: 6, x: 0, y: 1)
+    private func chip(
+        _ id: String,
+        _ systemName: String,
+        _ help: String,
+        enabled: Bool,
+        latched: Bool = false,
+        confirming: Bool = false,
+        action: @escaping () -> Void
+    ) -> SignalChip {
+        SignalChip(
+            systemName: systemName,
+            help: help,
+            isEnabled: enabled,
+            isLatched: latched,
+            isConfirming: confirming,
+            onHoverChanged: { hovering in
+                if hovering { self.hoveredChips.insert(id) } else { self.hoveredChips.remove(id) }
+            },
+            action: action
+        )
     }
 }

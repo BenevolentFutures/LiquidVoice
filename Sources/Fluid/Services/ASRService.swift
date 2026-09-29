@@ -2809,9 +2809,10 @@ final class ASRService: ObservableObject {
     ///   final transcription pass. Use this for immediate stop cues that
     ///   shouldn't wait on finalization. Only invoked when capture was actually
     ///   running (i.e. not when `stop()` early-returns because `isRunning` is false).
-    /// - Parameter onFinalTranscriptionStarted: called only if the final pass is still running
-    ///   `finalTranscriptionStatusDelay` after it began. A fast pass (short audio takes ~40-110 ms)
-    ///   then finishes without a "Transcribing" overlay render queuing ahead of its result.
+    /// - Parameter onFinalTranscriptionStarted: called only if the stop is still waiting on the
+    ///   model `finalTranscriptionStatusDelay` after capture stopped (a streaming chunk still in
+    ///   flight, then the final pass). A fast pass (short audio takes ~40-110 ms) then finishes
+    ///   without a "Transcribing" overlay render queuing ahead of its result.
     /// - Parameter trace: the dictation's stop-path trace, marked at capture stop and around
     ///   the final transcription.
     func stop(
@@ -2909,6 +2910,18 @@ final class ASRService: ObservableObject {
         // returns instead of hanging (and every hotkey behind it), the audio is kept for
         // Reprocess, and the overlay says so.
         let streamingStopStartedAt = Date().timeIntervalSince1970
+        // The "Transcribing" status (if the caller asked for one) is due 250 ms from here, not from
+        // the final pass: a chunk still in flight can hold the stop for seconds, and the overlay
+        // should say it is working meanwhile instead of sitting frozen. A fast stop cancels it
+        // before it shows (see the final pass below).
+        let delayedStatus = useDictionaryTrainingPath ? nil : onFinalTranscriptionStarted.map { showStatus in
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: Self.finalTranscriptionStatusDelayNanoseconds)
+                guard !Task.isCancelled else { return }
+                showStatus()
+            }
+        }
+        defer { delayedStatus?.cancel() }
         if streamingChunkInFlight, self.isProcessingChunk {
             let timeout = Self.streamingChunkDrainTimeoutNanoseconds(forSampleCount: self.audioBuffer.count)
             guard await self.waitForInFlightStreamingChunk(timeoutNanoseconds: timeout) else {
@@ -3034,14 +3047,6 @@ final class ASRService: ObservableObject {
                 finalSource = "dictionaryTraining"
             } else {
                 trace?.mark(.asrBegin)
-                let delayedStatus = onFinalTranscriptionStarted.map { showStatus in
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: Self.finalTranscriptionStatusDelayNanoseconds)
-                        guard !Task.isCancelled else { return }
-                        showStatus()
-                    }
-                }
-                defer { delayedStatus?.cancel() }
                 result = try await self.transcriptionExecutor.run { [provider] in
                     let result = try await provider.transcribeFinal(pcm)
                     // Cancel as soon as inference ends, not after the result's hop back here:

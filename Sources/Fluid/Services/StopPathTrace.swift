@@ -224,7 +224,8 @@ nonisolated final class StopPathTrace: @unchecked Sendable {
 /// `ASRService.holdStopUIRefresh` / `releaseStopUIRefresh`.
 @MainActor
 enum StopPipelineWindowWork {
-    private static var isHeld = false
+    /// A dictation's stop pipeline is running and has not handed its text off yet.
+    private(set) static var isHeld = false
     private static var pending: [@MainActor () -> Void] = []
 
     static func hold() {

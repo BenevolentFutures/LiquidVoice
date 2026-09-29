@@ -1,6 +1,7 @@
 @testable import Liquid_Voice_Debug
 import Combine
 import Foundation
+import SwiftUI
 import XCTest
 
 @MainActor
@@ -2943,5 +2944,703 @@ final class KeptDictationStorageTests: XCTestCase {
         self.store.discardKeptDictation()
         wait(for: [discarded], timeout: 2)
         XCTAssertNil(self.store.keptDictationStoppedAt())
+    }
+}
+
+/// Offscreen renders of the Signal overlay's states, for comparison with the binding prototype
+/// (design/visual-language/native-renders). Nothing reaches the screen: the views are hosted in
+/// no window and drawn into bitmaps. Set TEST_RUNNER_LIQUID_VOICE_RENDER_DIR=<folder> to write
+/// the PNGs; without it the test only checks that every state renders at the designed size.
+@MainActor
+final class SignalOverlayRenderTests: XCTestCase {
+    private var outputFolder: URL? {
+        ProcessInfo.processInfo.environment["LIQUID_VOICE_RENDER_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
+
+    private var savedHistory: [TranscriptionHistoryEntry] = []
+
+    override func setUp() {
+        super.setUp()
+        // The Debug test host's own history (never the installed app's), put back in tearDown.
+        self.savedHistory = TranscriptionHistoryStore.shared.makeBackupPayload()
+        TranscriptionHistoryStore.shared.restore(from: SignalRenderStage.sampleHistory)
+    }
+
+    override func tearDown() {
+        SignalRenderStage.reset()
+        TranscriptionHistoryStore.shared.restore(from: self.savedHistory)
+        super.tearDown()
+    }
+
+    /// Recovery cards (DESIGN.md §15): the pill grows upward to 174 (one-line card), 231 (failed)
+    /// or 248 (two-line reason); the rails and the rows below the card stay where the overlay's are.
+    func testRecoveryCardsGrowThePillUpward() throws {
+        let transcript = "Okay, take a look at the retry admission path in the queue worker. When the same job ID lands twice inside the lease window we are admitting both and the second one clobbers the first one's checkpoint so I think the fix is to key the admission set."
+        let cards: [(String, SignalCardContent, CGFloat)] = [
+            ("07-failed", SignalCardContent(headline: "Couldn\u{2019}t paste into c11", reason: "No text field focused", transcript: transcript, primary: .copy, meta: "118 words"), 231),
+            ("17-failed-clipboardkept", SignalCardContent(headline: "Couldn\u{2019}t paste into c11", reason: DeliveryFailureOverlayController.reasonText(failure: .pasteNotLanded, clipboard: .newerClipboardCopy, inHistory: true), transcript: transcript, primary: .copy, meta: "118 words"), 248),
+            ("18-timedout", SignalCardContent(headline: "Transcription timed out", reason: "Your audio is kept", primary: .reprocess), 174),
+            ("19-asrback", SignalCardContent(headline: "Speech recognition is back", reason: "A kept dictation is waiting", primary: .reprocess), 174),
+            ("20-micoff", SignalCardContent(headline: "Microphone access is off", reason: "Allow Liquid Voice in Privacy & Security", primary: .openSystemSettings, isMicrophoneOff: true), 174),
+        ]
+        for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+            let theme = appearance == .darkAqua ? "dark" : "light"
+            for (name, content, pillHeight) in cards {
+                let card = DeliveryFailureCardView(
+                    content: content,
+                    icon: NSWorkspace.shared.icon(forFile: "/Applications/c11.app"),
+                    timerText: "0:41",
+                    microphoneName: "MacBook Pro Microphone",
+                    onPrimary: {},
+                    onDismiss: {},
+                    onHoverChanged: { _ in }
+                )
+                XCTAssertEqual(content.height(width: 304) + 12 + 6 + 50 + 4 + 13 + 10, pillHeight, "\(name)")
+                let rep = try SignalRenderStage.render(card, appearance: appearance)
+                XCTAssertEqual(rep.size.height, pillHeight + 14 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
+                if let folder = self.outputFolder {
+                    try SignalRenderStage.write(rep, to: folder.appendingPathComponent("\(theme)-\(name).png"))
+                }
+            }
+        }
+    }
+
+    /// The menu bar mark (DESIGN.md §10): 22 x 16 template images, one per state, the same width
+    /// in every state; and the menu's mono header row.
+    func testMenuBarMarkStatesAndHeader() throws {
+        let trace = SignalTraceModel(barCount: 39)
+        trace.begin(at: 0)
+        for step in 0..<60 {
+            trace.ingest(level: step % 3 == 0 ? 0.95 : 0.6, at: Double(step) / 12)
+        }
+        let listeningBars = SignalMenuBarMark.listeningBars(from: trace)
+        XCTAssertEqual(listeningBars.count, 3)
+        XCTAssertTrue(listeningBars.allSatisfy { $0 >= 4 && $0 <= 12 && $0.truncatingRemainder(dividingBy: 2) == 0 })
+
+        let marks: [(String, NSImage)] = [
+            ("idle", SignalMenuBarMark.image(kind: .idle, bracket: false)),
+            ("idle-hover", SignalMenuBarMark.image(kind: .idle, bracket: true)),
+            ("listening", SignalMenuBarMark.image(kind: .listening, bars: listeningBars, bracket: false)),
+            ("listening-open", SignalMenuBarMark.image(kind: .listening, bars: listeningBars, bracket: true)),
+            ("transcribing", SignalMenuBarMark.image(kind: .transcribing, bracket: false)),
+        ]
+        for (_, image) in marks {
+            XCTAssertEqual(image.size, NSSize(width: 22, height: 16))
+            XCTAssertTrue(image.isTemplate)
+        }
+
+        guard let folder = self.outputFolder else { return }
+        for (theme, background, ink) in [("dark", NSColor(white: 0.16, alpha: 1), NSColor.white), ("light", NSColor(white: 0.93, alpha: 1), NSColor.black)] {
+            // The marks side by side at 4x, tinted as the menu bar tints a template image.
+            let scale: CGFloat = 4
+            let size = NSSize(width: CGFloat(marks.count) * 34 + 6, height: 28)
+            let rep = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+            rep.size = size
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            background.setFill()
+            NSRect(origin: .zero, size: size).fill()
+            for (index, entry) in marks.enumerated() {
+                let tinted = NSImage(size: entry.1.size, flipped: false) { rect in
+                    entry.1.draw(in: rect)
+                    ink.set()
+                    rect.fill(using: .sourceAtop)
+                    return true
+                }
+                tinted.draw(in: NSRect(x: 6 + CGFloat(index) * 34, y: 6, width: 22, height: 16))
+            }
+            NSGraphicsContext.restoreGraphicsState()
+            try SignalRenderStage.write(rep, to: folder.appendingPathComponent("\(theme)-21-menubar-marks.png"))
+
+            let header = SignalMenuHeaderView(frame: NSRect(x: 0, y: 0, width: 262, height: 24))
+            header.stateText = "Listening 0:37"
+            header.isLive = true
+            let headerRep = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 262 * 2, pixelsHigh: 24 * 2, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+            headerRep.size = header.bounds.size
+            NSGraphicsContext.saveGraphicsState()
+            let headerContext = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: headerRep))
+            NSGraphicsContext.current = headerContext
+            // The menu's own background stands behind the row in a real menu.
+            NSAppearance(named: theme == "dark" ? .darkAqua : .aqua)?.performAsCurrentDrawingAppearance {
+                background.setFill()
+                header.bounds.fill()
+                headerContext.cgContext.translateBy(x: 0, y: header.bounds.height)
+                headerContext.cgContext.scaleBy(x: 1, y: -1)
+                NSGraphicsContext.current = NSGraphicsContext(cgContext: headerContext.cgContext, flipped: true)
+                header.draw(header.bounds)
+            }
+            NSGraphicsContext.restoreGraphicsState()
+            try SignalRenderStage.write(headerRep, to: folder.appendingPathComponent("\(theme)-22-menu-header.png"))
+        }
+    }
+
+    func testHistoryCardRendersAboveTheHistoryChip() throws {
+        for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+            let theme = appearance == .darkAqua ? "dark" : "light"
+            for (name, hoverRow) in [("09-history", nil), ("10-history-hover-row", 2)] as [(String, Int?)] {
+                SignalRenderStage.reset()
+                SignalRenderStage.listening()
+                // The History chip stays inverted while its card is open.
+                BottomOverlayHistoryMenuController.shared.holdLatchedForInspection(true)
+                defer { BottomOverlayHistoryMenuController.shared.holdLatchedForInspection(false) }
+                let card = SignalHistoryCard(
+                    entries: SignalRenderStage.sampleHistory,
+                    totalCount: 247,
+                    notPasted: [SignalRenderStage.sampleHistory[2].processedText],
+                    now: SignalRenderStage.sampleNow,
+                    inspectionHoverRow: hoverRow,
+                    isStatic: true,
+                    onPick: { _ in }
+                )
+                // The card's box sits 6 pt above the History chip, on its leading edge. The card
+                // view's bottom margin (8) and the overlay's top margin (6) overlap by 8.
+                let insets = SignalTheme.Metrics.windowInsets
+                let composite = VStack(alignment: .leading, spacing: -insets.bottom) {
+                    card.padding(insets).signalPalette()
+                    BottomOverlayView()
+                }
+                let rep = try SignalRenderStage.render(composite, appearance: appearance)
+                XCTAssertEqual(rep.size.width, 480 + 12 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
+                // The card at its 480 maximum over the overlay (161), overlapping by the 6 pt margin.
+                XCTAssertLessThanOrEqual(rep.size.height, 480 + 14 + 163 - 8 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
+                if let folder = self.outputFolder {
+                    try SignalRenderStage.write(rep, to: folder.appendingPathComponent("\(theme)-\(name).png"))
+                }
+            }
+        }
+    }
+
+    func testOverlayStatesRenderAtTheDesignedSize() throws {
+        for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+            let theme = appearance == .darkAqua ? "dark" : "light"
+            for (name, setUp) in SignalRenderStage.overlayStates {
+                SignalRenderStage.reset()
+                setUp()
+                let rep = try SignalRenderStage.render(BottomOverlayView(), appearance: appearance)
+                // Rails (30 + 6) either side of the 340 pill, plus the 6 pt bracket margin.
+                XCTAssertEqual(rep.size.width, 6 + 30 + 6 + 340 + 6 + 30 + 6 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
+                XCTAssertEqual(rep.size.height, 149 + 14 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
+                if let folder = self.outputFolder {
+                    try SignalRenderStage.write(rep, to: folder.appendingPathComponent("\(theme)-\(name).png"))
+                }
+            }
+        }
+    }
+}
+
+/// Drives the shared overlay state into each design state, and draws hosted views to bitmaps.
+@MainActor
+enum SignalRenderStage {
+    static let backdropMargin: CGFloat = 18
+    static let sampleNow = Date()
+
+    /// Twelve dictations like the prototype's mock history: today and yesterday, c11 mostly.
+    static let sampleHistory: [TranscriptionHistoryEntry] = {
+        let texts: [(String, String, Int)] = [
+            ("Okay, take a look at the retry admission path in the queue worker. When the same job ID lands twice inside the lease window we are admitting both and the second one clobbers the first one's checkpoint.", "c11", 41),
+            ("Yes, go ahead and merge it. Then close the worktree.", "c11", 5),
+            ("Draft a reply to Marcus: the settings window gets four panes, general, microphone, hotkeys and dictionary, and the stats page goes.", "Mail", 22),
+            ("Run the full suite once more and paste the summary line into the PR description.", "c11", 7),
+            ("Looks good to me. One nit: the error message on line 42 says microphone unavailable but the actual cause is the permission being denied, so say that instead.", "Safari", 15),
+            ("New task. A small command line tool that reads the Aranet4 over Bluetooth and prints CO2, temperature, humidity and pressure as one line, with a JSON flag for agents.", "c11", 88),
+            ("Remind me to check the overnight benchmark on Atlas before standup.", "Notes", 4),
+            ("Rename the lane branch to port restyle and push it.", "c11", 6),
+            ("The trace should keep scrolling through silence at two points, not stop.", "c11", 9),
+            ("Thanks, that works. Ship it.", "Messages", 3),
+            ("Open the prototype, press three, then T, and compare the sweep with the native render.", "c11", 12),
+            ("Summarize what changed in round five in three bullets.", "c11", 8),
+        ]
+        return texts.enumerated().map { index, item in
+            let minutesAgo = index < 7 ? Double(index * 23 + 4) : Double(24 * 60 + index * 40)
+            return TranscriptionHistoryEntry(
+                timestamp: sampleNow.addingTimeInterval(-minutesAgo * 60),
+                rawText: item.0,
+                processedText: item.0,
+                appName: item.1,
+                windowTitle: "",
+                wasAIProcessed: false,
+                audio: DictationAudioMetadata(fileName: "sample-\(index).wav", durationMilliseconds: item.2 * 1000, byteCount: 0, sampleRate: 16000, channels: 1, model: nil)
+            )
+        }
+    }()
+    static let transcript = "worker sees the same job id land twice so key the admission set on job id plus lease epoch and do not touch the scheduler when you are done give me a one line summary and the diff stat and if the suite takes longer than a minute tell me which tests are"
+
+    static let overlayStates: [(String, () -> Void)] = [
+        ("01-listening", { SignalRenderStage.listening() }),
+        ("02-listening-hover", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionHover = "pill" }),
+        ("03-listening-hover-cancel", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionHover = "cancel" }),
+        ("04-listening-armed", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionPlacard = .send }),
+        ("05-transcribing", { SignalRenderStage.listening(); SignalRenderStage.stop(); NotchContentState.shared.setProcessing(true); SignalOverlayModel.shared.beginTranscribing(); SignalOverlayModel.shared.inspectionSweepProgress = 0.45 }),
+        ("06-pasted", { SignalRenderStage.listening(); SignalRenderStage.stop(); SignalOverlayModel.shared.showDelivered(SignalDelivery(appName: "c11", words: 118, method: .paste, sentReturn: false)) }),
+        ("13-countdown", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionPlacard = .send; SignalOverlayModel.shared.startSendCountdown(duration: 1.5, at: Date().addingTimeInterval(-0.55)) }),
+        ("14-countdown-canceled", {
+            SignalRenderStage.listening()
+            SignalOverlayModel.shared.startSendCountdown(duration: 1.5, at: Date().addingTimeInterval(-0.6))
+            SignalOverlayModel.shared.freezeSendCountdown()
+        }),
+        ("15-sent", { SignalRenderStage.listening(); SignalRenderStage.stop(placard: .send); SignalOverlayModel.shared.showDelivered(SignalDelivery(appName: "c11", words: 118, method: .paste, sentReturn: true)) }),
+        ("16-noreturn", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionPlacard = .noReturn }),
+    ]
+
+    static func listening() {
+        let state = NotchContentState.shared
+        let model = SignalOverlayModel.shared
+        state.setBottomOverlayPresented(true)
+        state.mode = .dictation
+        state.targetAppIcon = NSWorkspace.shared.icon(forFile: "/Applications/c11.app")
+        state.updateTranscription(self.transcript)
+        model.ensureTraceBars(SignalOverlayGeometry.forSize(.medium).traceBars)
+        model.microphoneName = "MacBook Pro Microphone"
+        let now = Date()
+        model.beginRecording(at: now.addingTimeInterval(-38.4), noiseThreshold: 0.4)
+        // A seeded voice envelope over the last few seconds, one level per 10.7 ms like a real tap.
+        var seed: UInt64 = 7
+        let start = now.timeIntervalSinceReferenceDate - 4
+        model.trace.begin(at: start)
+        for step in 0..<Int(4 / 0.0107) {
+            seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            let noise = CGFloat(seed >> 33) / CGFloat(1 << 31)
+            let t = Double(step) * 0.0107
+            let speech = max(0, sin(t * 2.1) * 0.5 + 0.5) * (t.truncatingRemainder(dividingBy: 1.3) < 0.9 ? 1 : 0.2)
+            model.trace.ingest(level: 0.35 + 0.65 * speech * (0.6 + 0.4 * noise), at: start + t)
+        }
+        model.trace.advance(to: now.timeIntervalSinceReferenceDate - 0.1)
+    }
+
+    static func stop(placard: SignalPlacard = .none) {
+        SignalOverlayModel.shared.stopRecording(at: Date().addingTimeInterval(-1), preview: self.transcript, placard: placard)
+    }
+
+    static func reset() {
+        let state = NotchContentState.shared
+        state.setProcessing(false)
+        state.setBottomOverlayPresented(false)
+        state.updateTranscription("")
+        state.targetAppIcon = nil
+        let model = SignalOverlayModel.shared
+        model.inspectionHover = nil
+        model.inspectionPlacard = nil
+        model.inspectionSweepProgress = nil
+        model.reset()
+    }
+
+    /// Draws `view` at 2x over a split backdrop like the prototype's stage (a dark terminal above,
+    /// the desktop below), so the brackets' knockout halo is exercised. SwiftUI's ImageRenderer
+    /// keeps the transparent margin transparent (NSView.cacheDisplay paints it white).
+    static func render(_ view: some View, appearance: NSAppearance.Name) throws -> NSBitmapImageRep {
+        let scheme: ColorScheme = appearance == .darkAqua ? .dark : .light
+        let renderer = ImageRenderer(content: view.environment(\.colorScheme, scheme))
+        renderer.scale = 2
+        let image = try XCTUnwrap(renderer.cgImage)
+        let content = NSSize(width: CGFloat(image.width) / 2, height: CGFloat(image.height) / 2)
+        let size = NSSize(width: content.width + 2 * self.backdropMargin, height: content.height + 2 * self.backdropMargin)
+        let rep = try XCTUnwrap(NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(size.width * 2),
+            pixelsHigh: Int(size.height * 2),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ))
+        rep.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSColor(srgbRed: 0.24, green: 0.29, blue: 0.40, alpha: 1).setFill()
+        NSRect(origin: .zero, size: size).fill()
+        NSColor(srgbRed: 0.06, green: 0.07, blue: 0.09, alpha: 1).setFill()
+        NSRect(x: 0, y: size.height * 0.45, width: size.width, height: size.height * 0.55).fill()
+        NSGraphicsContext.current?.cgContext.draw(
+            image,
+            in: CGRect(x: self.backdropMargin, y: self.backdropMargin, width: content.width, height: content.height)
+        )
+        NSGraphicsContext.restoreGraphicsState()
+        return rep
+    }
+
+    static func write(_ rep: NSBitmapImageRep, to url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let data = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
+        try data.write(to: url)
+    }
+}
+
+/// The Signal overlay's behavior: the trace sampler, the geometry, the truthful wording, which
+/// chips act when, and the delivered hold (quiet: no window reaches the screen).
+@MainActor
+final class SignalOverlayBehaviorTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        BottomOverlayWindowController.deliveredHold = 0.2
+    }
+
+    override func tearDown() {
+        BottomOverlayWindowController.deliveredHold = SignalTheme.Motion.deliveredHold
+        TypingService.dictationOutcomeHandler = { outcome in
+            BottomOverlayWindowController.shared.dictationDeliveryFinished(outcome)
+        }
+        SignalRenderStage.reset()
+        super.tearDown()
+    }
+
+    func testTheTraceTakesTwelveSamplesASecondAndScrollsThroughSilence() {
+        let trace = SignalTraceModel(barCount: 39, noiseThreshold: 0.4)
+        trace.begin(at: 100)
+        // One second of silence: twelve pushes, every bar at the 2 pt floor, still scrolling.
+        trace.advance(to: 101)
+        XCTAssertEqual(trace.lastPush, 101, accuracy: 0.0001)
+        XCTAssertTrue(trace.current.allSatisfy { $0 == 2 })
+        // A loud level inside the next window becomes the newest bar once the window closes.
+        trace.ingest(level: 1, at: 101.02)
+        XCTAssertEqual(trace.current.last, 2, "no push before the window closes")
+        trace.advance(to: 101 + 1.0 / 12 + 0.001)
+        XCTAssertGreaterThan(trace.current.last ?? 0, 2)
+        // Heights snap to even points; the morph runs 60 ms, then the frame clock may pause.
+        let shown = trace.shownHeight(at: 38, now: trace.lastPush + 0.03)
+        XCTAssertEqual(shown.truncatingRemainder(dividingBy: 2), 0)
+        XCTAssertTrue(trace.isMorphing(at: trace.lastPush + 0.03))
+        XCTAssertFalse(trace.isMorphing(at: trace.lastPush + 0.07))
+        // Stop: every bar to the floor within 60 ms, and nothing pushes after.
+        trace.stop(at: 102)
+        XCTAssertEqual(trace.shownHeight(at: 38, now: 102.07), 2)
+        let pushed = trace.lastPush
+        trace.advance(to: 110)
+        XCTAssertEqual(trace.lastPush, pushed)
+        XCTAssertEqual(SignalTraceModel.snapped(3.1), 4)
+        XCTAssertEqual(SignalTraceModel.snapped(0.4), 2)
+    }
+
+    func testTheMediumPillIsTheDesignedGeometry() {
+        let medium = SignalOverlayGeometry.forSize(.medium)
+        XCTAssertEqual(medium.pillWidth, 340)
+        XCTAssertEqual(medium.pillHeight, 149)
+        XCTAssertEqual(medium.railHeight, 149)
+        XCTAssertEqual(medium.traceBars, 39, "round 5: 39 bars beside the Spoken Send placard")
+        XCTAssertEqual(SignalTraceModel.width(forBars: 39), 154)
+        // Every other size keeps the rows and only reserves fewer or more preview lines.
+        XCTAssertEqual(SignalOverlayGeometry.forSize(.small).pillHeight, 149 - 36)
+        XCTAssertTrue(SignalOverlayGeometry.forSize(.small).isCompactTop)
+        XCTAssertFalse(medium.isCompactTop)
+        XCTAssertGreaterThanOrEqual(SignalOverlayGeometry.forSize(.pill).railHeight, 90)
+    }
+
+    func testTheOutcomeNamesOnlyWhatWasDone() {
+        XCTAssertEqual(SignalDelivery(appName: "c11", words: 118, method: .paste, sentReturn: false).headline, "Pasted into c11")
+        XCTAssertEqual(SignalDelivery(appName: "TextEdit", words: 3, method: .keystrokes, sentReturn: false).headline, "Typed into TextEdit")
+        XCTAssertEqual(SignalDelivery(appName: "Notes", words: 3, method: .accessibility, sentReturn: false).headline, "Inserted into Notes")
+        let sent = SignalDelivery(appName: "c11", words: 118, method: .paste, sentReturn: true)
+        XCTAssertEqual(sent.headline, "Sent to c11")
+        XCTAssertEqual(sent.meta, "118 words · Return")
+        XCTAssertEqual(SignalDelivery(appName: nil, words: 1, method: .paste, sentReturn: false).headline, "Pasted")
+        XCTAssertEqual(TypingService.deliveryMethod(for: .clipboardToPID), .paste)
+        XCTAssertEqual(TypingService.deliveryMethod(for: .characterByCharacter), .keystrokes)
+        XCTAssertEqual(TypingService.deliveryMethod(for: .accessibility), .accessibility)
+    }
+
+    func testChipsNeverActDuringTheDeliveredHold() {
+        let delivered = BottomOverlayView.Display.delivered(SignalDelivery(appName: "c11", words: 2, method: .paste, sentReturn: false))
+        for role in [BottomOverlayView.ChipRole.history, .cancel, .historyAction] {
+            XCTAssertTrue(BottomOverlayView.isChipInert(role, display: delivered))
+            XCTAssertFalse(BottomOverlayView.isChipInert(role, display: .listening))
+        }
+        // After the stop only History acts: Copy and Reprocess wait for the final pass, and Cancel
+        // could no longer stop the paste.
+        XCTAssertTrue(BottomOverlayView.isChipInert(.historyAction, display: .stopped))
+        XCTAssertTrue(BottomOverlayView.isChipInert(.cancel, display: .stopped))
+        XCTAssertTrue(BottomOverlayView.isChipInert(.cancel, display: .transcribing))
+        XCTAssertFalse(BottomOverlayView.isChipInert(.history, display: .stopped))
+        // While SEND shows, Cancel still has a Return to drop after the stop.
+        XCTAssertFalse(BottomOverlayView.isChipInert(.cancel, display: .stopped, cancelHasWork: true))
+        XCTAssertFalse(BottomOverlayView.isChipInert(.cancel, display: .transcribing, cancelHasWork: true))
+        XCTAssertTrue(BottomOverlayView.isChipInert(.cancel, display: delivered, cancelHasWork: true))
+        // Transcribing: they dim instead.
+        XCTAssertFalse(BottomOverlayView.isChipEnabled(.historyAction, display: .transcribing, hasHistory: true))
+        XCTAssertTrue(BottomOverlayView.isChipEnabled(.historyAction, display: .listening, hasHistory: true))
+        XCTAssertFalse(BottomOverlayView.isChipEnabled(.historyAction, display: .listening, hasHistory: false))
+    }
+
+    func testSpokenSendPlacardAndSweepSteps() {
+        XCTAssertEqual(SignalOverlayModel.placard(indicator: .hidden, sendsInApp: true), SignalPlacard.none)
+        XCTAssertEqual(SignalOverlayModel.placard(indicator: .armed, sendsInApp: true), .send)
+        XCTAssertEqual(SignalOverlayModel.placard(indicator: .countingDown, sendsInApp: true), .send)
+        XCTAssertEqual(SignalOverlayModel.placard(indicator: .armed, sendsInApp: false), .noReturn)
+        XCTAssertEqual(SignalOverlayModel.placard(indicator: .canceled, sendsInApp: true), .noSend)
+        let drain = SignalDrain(startedAt: Date(timeIntervalSinceReferenceDate: 0), duration: 1.5)
+        XCTAssertEqual(drain.remaining(at: Date(timeIntervalSinceReferenceDate: 0.6)), 0.9, accuracy: 0.0001)
+        var canceled = drain
+        canceled.frozenRemaining = 0.9
+        XCTAssertEqual(canceled.remaining(at: Date(timeIntervalSinceReferenceDate: 5)), 0.9)
+        XCTAssertFalse(canceled.isRunning)
+
+        let steps = SignalSweepView.steps(traceWidth: 154, reducesMotion: false)
+        XCTAssertTrue(steps.allSatisfy { ($0.x - 1).truncatingRemainder(dividingBy: 4) == 0 }, "stepped on the 4 pt pitch")
+        XCTAssertEqual(steps.first?.time, 0)
+        XCTAssertEqual(SignalSweepView.steps(traceWidth: 154, reducesMotion: true).count, 4, "reduced motion holds four positions")
+    }
+
+    func testThePreviewKeepsTheNewestWords() {
+        let font = SignalTheme.Typography.preview.nsFont
+        let text = (1...80).map { "word\($0)" }.joined(separator: " ")
+        let fitted = SignalTextFitting.newestWords(of: text, wasCut: false, font: font, width: 304, lines: 3)
+        XCTAssertTrue(fitted.hasPrefix("…"))
+        XCTAssertTrue(fitted.hasSuffix("word80"))
+        XCTAssertLessThanOrEqual(SignalTextFitting.lineCount(fitted, font: font, width: 304), 3)
+        XCTAssertEqual(SignalTextFitting.newestWords(of: "short", wasCut: false, font: font, width: 304, lines: 3), "short")
+    }
+
+    /// The hold never starts before the outcome, shows it once the paste is posted, then fades and
+    /// parks; the margin still paints nothing once hidden, and ignoresMouseEvents is never set.
+    func testTheDeliveredHoldShowsTheOutcomeThenDismisses() async throws {
+        let controller = BottomOverlayWindowController.shared
+        let model = SignalOverlayModel.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        controller.markRecordingStopped()
+        XCTAssertEqual(model.phase, .stopped)
+
+        controller.awaitDelivery(traceID: 4242, appName: "c11", words: 7, failureReported: false)
+        XCTAssertEqual(model.phase, .stopped, "no outcome yet: the hold has not begun")
+
+        // Another dictation's outcome is ignored.
+        controller.dictationDeliveryFinished(DictationDeliveryOutcome(traceID: 1, result: .dispatched, method: .paste, sentReturn: false))
+        XCTAssertEqual(model.phase, .stopped)
+
+        controller.dictationDeliveryFinished(DictationDeliveryOutcome(traceID: 4242, result: .dispatched, method: .paste, sentReturn: false))
+        XCTAssertEqual(model.phase, .delivered(SignalDelivery(appName: "c11", words: 7, method: .paste, sentReturn: false)))
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented)
+        XCTAssertEqual(controller.windowStateForTests?.alpha, 1)
+
+        // The hold (1.2 s; 0.2 s here), the 120 ms fade, then hidden: alpha 0, nothing painted,
+        // never ignoresMouseEvents.
+        try await Task.sleep(nanoseconds: 600_000_000)
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
+        let hidden = try XCTUnwrap(controller.windowStateForTests)
+        XCTAssertEqual(hidden.alpha, 0)
+        XCTAssertFalse(hidden.ignoresMouse)
+        XCTAssertFalse(controller.contentPaintsPixelsForTests())
+        XCTAssertEqual(model.phase, .idle)
+    }
+
+    /// The live history card sizes to its rows through the panel's fitting size, and scrolls past
+    /// 480 pt, so the panel sits 6 pt above the History chip however many entries there are.
+    func testTheHistoryCardSizesToItsRows() {
+        func height(_ count: Int) -> CGFloat {
+            let card = SignalHistoryCard(
+                entries: Array(SignalRenderStage.sampleHistory.prefix(count)),
+                totalCount: count,
+                notPasted: [],
+                onPick: { _ in }
+            )
+            return NSHostingView(rootView: card.signalPalette()).fittingSize.height
+        }
+        let two = height(2)
+        XCTAssertGreaterThan(two, 36 + 28 + 28 + 2 * 60, "header, footer, a day row and two rows")
+        XCTAssertLessThan(two, 300)
+        XCTAssertEqual(height(12), 480, accuracy: 1, "capped at 480; the list scrolls")
+    }
+
+    /// A card for another dictation never takes over a held outcome, and a failure that is not a
+    /// dictation's (a history paste) never does either.
+    func testALateCardForAnotherDictationDoesNotTakeOverTheHold() async {
+        let controller = BottomOverlayWindowController.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        controller.markRecordingStopped()
+        controller.awaitDelivery(traceID: 9, appName: "c11", words: 2, failureReported: false)
+        XCTAssertNil(controller.heldDictationAppName(forDictation: 8), "another dictation never borrows the name")
+        XCTAssertFalse(controller.yieldToCard(forDictation: 8))
+        XCTAssertFalse(controller.yieldToCard(forDictation: nil))
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented)
+        _ = await controller.hideAndWait()
+    }
+
+    /// A late Paste Check miss for the dictation whose Pasted is on screen replaces it with its
+    /// card, instead of showing Pasted and Couldn't paste at once.
+    func testALatePasteCheckMissReplacesThatDictationsPasted() async throws {
+        let controller = BottomOverlayWindowController.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        controller.markRecordingStopped()
+        controller.awaitDelivery(traceID: 31, appName: "TextEdit", words: 4, failureReported: false)
+        controller.dictationDeliveryFinished(DictationDeliveryOutcome(traceID: 31, result: .dispatched, method: .paste, sentReturn: false))
+        XCTAssertTrue(SignalOverlayModel.shared.isDelivered)
+        XCTAssertEqual(controller.heldDictationAppName(forDictation: 31), "TextEdit")
+        XCTAssertTrue(controller.yieldToCard(forDictation: 31))
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented, "a cut: the card takes the pill's place")
+    }
+
+    /// The transcription timed out while the pill was held after the stop: the timeout card takes
+    /// its place (a cut) instead of sitting above a frozen pill.
+    func testATimeoutCardReplacesTheHeldPill() async throws {
+        let controller = BottomOverlayWindowController.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        XCTAssertFalse(controller.yieldToNoticeCard(), "a live recording stays")
+        controller.markRecordingStopped()
+        DeliveryFailureOverlayController.shared.showTranscriptionTimeout(.timedOut)
+        defer { DeliveryFailureOverlayController.shared.hide() }
+        XCTAssertEqual(DeliveryFailureOverlayController.shared.presentedTimeout, .timedOut)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
+        XCTAssertEqual(controller.windowStateForTests?.alpha, 0)
+        XCTAssertEqual(TestHostQuietModeTests.onScreenWindowCount(), 0)
+    }
+
+    /// A start refused while the model recovers: the pill shown for it gives way to the card; a
+    /// "recognition is back" notice never hides a pill that is not held after a stop.
+    func testARefusedStartCardReplacesItsPillButOtherNoticesDoNot() async throws {
+        let controller = BottomOverlayWindowController.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        XCTAssertFalse(controller.yieldToNoticeCard(refusedStart: false))
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented)
+        XCTAssertTrue(controller.yieldToNoticeCard(refusedStart: true), "no capture ever started")
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
+    }
+
+    /// Once the stop decides, the held pill's placard follows the decision: SEND only when the
+    /// Return will follow, NO SEND in ink for a cancel, dim when no Return goes there.
+    func testThePlacardFollowsTheSendDecision() async {
+        let controller = BottomOverlayWindowController.shared
+        let model = SignalOverlayModel.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        controller.markRecordingStopped()
+        model.setStopPlacard(.send)
+        controller.spokenSendDecided(.canceled)
+        XCTAssertEqual(model.stopPlacard, .noSend, "a cancel reads NO SEND in ink")
+        controller.spokenSendDecided(.returnFollows)
+        XCTAssertEqual(model.stopPlacard, .send)
+        controller.spokenSendDecided(.noReturn)
+        XCTAssertEqual(model.stopPlacard, .noReturn, "a terminal without Return stays dim")
+        controller.spokenSendDecided(.noPhrase)
+        XCTAssertEqual(model.stopPlacard, SignalPlacard.none)
+        _ = await controller.hideAndWait()
+    }
+
+    /// A new recording during the hold or the fade cancels the old timers: nothing from the
+    /// previous dictation hides the new pill.
+    func testShowDuringTheHoldOrFadeCancelsTheOldTimers() async throws {
+        let controller = BottomOverlayWindowController.shared
+        let publisher = Just(CGFloat.zero).eraseToAnyPublisher()
+        controller.prepare()
+        await Task.yield()
+        // During the hold.
+        controller.show(audioPublisher: publisher, mode: .dictation)
+        controller.markRecordingStopped()
+        controller.awaitDelivery(traceID: 51, appName: "c11", words: 1, failureReported: false)
+        controller.dictationDeliveryFinished(DictationDeliveryOutcome(traceID: 51, result: .dispatched, method: .paste, sentReturn: false))
+        controller.show(audioPublisher: publisher, mode: .dictation)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented, "the old hold's end must not hide the new pill")
+        XCTAssertEqual(SignalOverlayModel.shared.phase, .listening)
+        // During the fade.
+        controller.markRecordingStopped()
+        let fade = Task { @MainActor in await controller.hideAndWait() }
+        await Task.yield()
+        controller.show(audioPublisher: publisher, mode: .dictation)
+        let outcome = await fade.value
+        XCTAssertEqual(outcome, .superseded)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented)
+        XCTAssertFalse(SignalOverlayModel.shared.isFading)
+        XCTAssertEqual(controller.windowStateForTests?.alpha, 1)
+        _ = await controller.hideAndWait()
+    }
+
+    /// A failed paste hands the overlay to the recovery card at once (a cut), so the card reads as
+    /// the pill growing; a live recording is never taken over.
+    func testAFailedPasteYieldsToTheCardButALiveRecordingDoesNot() async throws {
+        let controller = BottomOverlayWindowController.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        XCTAssertFalse(controller.yieldToCard(forDictation: 77), "a live recording stays; the card sits above it")
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented)
+
+        controller.markRecordingStopped()
+        controller.awaitDelivery(traceID: 77, appName: "c11", words: 3, failureReported: false)
+        controller.dictationDeliveryFinished(DictationDeliveryOutcome(traceID: 77, result: .recoverableFailure(.pasteNotLanded), method: nil, sentReturn: false))
+        XCTAssertEqual(SignalOverlayModel.shared.phase, .stopped, "waits for the card, never shows an outcome")
+        XCTAssertEqual(controller.heldDictationAppName(forDictation: 77), "c11")
+        XCTAssertTrue(controller.yieldToCard(forDictation: 77))
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented, "a cut, no 120 ms fade")
+        XCTAssertEqual(controller.windowStateForTests?.alpha, 0)
+    }
+}
+
+/// Opt-in: where the offscreen park lands relative to a start about 1.5 s after a paste, and how
+/// long the start and the main thread take around it. TEST_RUNNER_LIQUID_VOICE_PARK_BENCH=<delay>
+/// sets the idle parking delay in seconds (0 reproduces the old park right after the handoff).
+/// The test host's panel is never on screen (quiet mode), so the WindowServer fence itself cannot
+/// occur here; the probe measures the timing and the main-thread cost that can be measured.
+@MainActor
+final class OverlayParkTimingBenchmarkTests: XCTestCase {
+    func testWhereTheParkLandsAroundTheNextStart() async throws {
+        guard let value = ProcessInfo.processInfo.environment["LIQUID_VOICE_PARK_BENCH"], let delay = Double(value) else {
+            throw XCTSkip("Set TEST_RUNNER_LIQUID_VOICE_PARK_BENCH=<idle parking delay> to run.")
+        }
+        let controller = BottomOverlayWindowController.shared
+        let publisher = Just(CGFloat.zero).eraseToAnyPublisher()
+        let savedDelay = BottomOverlayWindowController.idleParkingDelay
+        BottomOverlayWindowController.idleParkingDelay = delay
+        defer { BottomOverlayWindowController.idleParkingDelay = savedDelay }
+        controller.prepare()
+        await Task.yield()
+
+        var showMs: [Double] = []
+        var stallMs: [Double] = []
+        var parkedBeforeStart = 0
+        for run in 0..<5 {
+            controller.show(audioPublisher: publisher, mode: .dictation)
+            controller.markRecordingStopped()
+            controller.awaitDelivery(traceID: 7000 + run, appName: "c11", words: 3, failureReported: false)
+            let pastedAt = ProcessInfo.processInfo.systemUptime
+            controller.dictationDeliveryFinished(DictationDeliveryOutcome(traceID: 7000 + run, result: .dispatched, method: .paste, sentReturn: false))
+
+            // Watch the main thread from 1.2 s to 1.8 s after the paste: a 1 ms timer's lateness.
+            var worstLateness = 0.0
+            var last = ProcessInfo.processInfo.systemUptime
+            let probe = Timer(timeInterval: 0.001, repeats: true) { _ in
+                let now = ProcessInfo.processInfo.systemUptime
+                if now - pastedAt > 1.2, now - pastedAt < 1.8 { worstLateness = max(worstLateness, now - last - 0.001) }
+                last = now
+            }
+            RunLoop.main.add(probe, forMode: .common)
+            while ProcessInfo.processInfo.systemUptime - pastedAt < 1.5 {
+                try await Task.sleep(nanoseconds: 5_000_000)
+            }
+            if controller.windowStateForTests?.isParkedOffscreen == true { parkedBeforeStart += 1 }
+            // The hotkey: the overlay's part of the start path.
+            let started = ProcessInfo.processInfo.systemUptime
+            controller.show(audioPublisher: publisher, mode: .dictation)
+            showMs.append((ProcessInfo.processInfo.systemUptime - started) * 1000)
+            while ProcessInfo.processInfo.systemUptime - pastedAt < 1.8 {
+                try await Task.sleep(nanoseconds: 5_000_000)
+            }
+            probe.invalidate()
+            stallMs.append(worstLateness * 1000)
+            _ = await controller.hideAndWait()
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        func median(_ values: [Double]) -> Double { values.sorted()[values.count / 2] }
+        let line = String(
+            format: "PARK_BENCH idleDelay=%.1fs runs=5 parkedBeforeStartAt1.5s=%d showMedianMs=%.2f showMaxMs=%.2f mainStallMedianMs=%.2f mainStallMaxMs=%.2f",
+            delay, parkedBeforeStart, median(showMs), showMs.max() ?? 0, median(stallMs), stallMs.max() ?? 0
+        )
+        print(line)
+        DebugLogger.shared.info(line, source: "OverlayParkBenchmark")
     }
 }

@@ -89,4 +89,25 @@ nonisolated struct DeliveryFailureReport: Equatable, Sendable {
     /// The transcript is in transcription history (dictation with history on, paste-last).
     /// Rewrite output and debug deliveries are not.
     let inHistory: Bool
+    /// The dictation's stop-path trace, when the failure is a dictation's: its held overlay gives
+    /// way to the card (even after showing Pasted, for a late Paste Check miss).
+    var traceID: Int?
+}
+
+/// How one dictation's delivery ended, for the overlay's outcome state (the delivered hold).
+/// Reported once per dictation, keyed by its stop-path trace.
+nonisolated struct DictationDeliveryOutcome: Equatable, Sendable {
+    /// How the text was handed over. Nothing reads it back: the paste is posted, not verified.
+    enum Method: String, Equatable, Sendable {
+        case paste
+        case keystrokes
+        case accessibility
+    }
+
+    let traceID: Int
+    let result: TextDeliveryResult
+    /// nil when nothing was dispatched.
+    let method: Method?
+    /// Spoken Send pressed Return after the text.
+    let sentReturn: Bool
 }

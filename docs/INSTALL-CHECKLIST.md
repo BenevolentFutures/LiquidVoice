@@ -7,7 +7,7 @@ Install with `./build.sh install` (with Atin, never unattended). It quits the ap
 Tail the log in a c11 pane first:
 
 ```sh
-tail -F ~/Library/Logs/LiquidVoice/Fluid.log | grep -E 'IDENTITY_MIGRATION|STOP_SUMMARY|frontmost_check|send_key|SPOKEN_SEND|stop_target_capture|DELIVERY'
+tail -F ~/Library/Logs/LiquidVoice/Fluid.log | grep -E 'IDENTITY_MIGRATION|STOP_SUMMARY|frontmost_check|send_key|SPOKEN_SEND|stop_target_capture|DELIVERY|OVERLAY_OUTCOME'
 ```
 
 Rollback: run the command `./build.sh install` printed:
@@ -51,7 +51,7 @@ The app is now `com.stage11.liquidvoice`, no longer FluidVoice's `com.FluidApp.a
    Log: `frontmost_check stage=before_paste waitedMs=0 result=in_front`, and one `STOP_SUMMARY` per dictation.
 2. Stop in c11, then Cmd-Tab to Safari while it transcribes. Either c11 comes back and gets the text, or a card appears and the text is on the clipboard. It is never silent.
 3. Copy an image (a screenshot to the clipboard), then dictate into c11. After about 1 s, Preview > File > New from Clipboard shows the image.
-4. Stop, then immediately click where the pill was, over c11. The click reaches c11. Nothing is typed again or copied. Repeat after a long dictation.
+4. The pill now stays up after the paste for 1.2 s ("Pasted into c11"), then fades. During that hold, click the chips and the pill: nothing is typed again or copied. Click the transparent margin just outside the pill (between the chips, or a few points beyond the edge): the click reaches c11. After the fade, click where the pill was: the click reaches c11. Repeat after a long dictation.
 
 ## 2. Other apps
 5. Dictate into TextEdit, then into a Chrome textarea. The text lands.
@@ -79,7 +79,20 @@ The app is now `com.stage11.liquidvoice`, no longer FluidVoice's `com.FluidApp.a
 ## 6. Speed
 19. After about ten dictations: `python3 scripts/stop_path_latency.py --last 10`. The old build's median was 306 ms; the new one should be well under. The old build's log stays readable: `python3 scripts/stop_path_latency.py ~/Library/Logs/Fluid/Fluid.log`.
 
-## 7. Cleanup, once rollback is no longer needed (optional)
+## 7. The Signal overlay and menu bar
+20. Dictate into c11 with the pill in view. Listening: the preview (newest words, "…" in front once it fills three lines), the trace with its orange write head scrolling 12 bars a second and still scrolling in silence, a solid orange square and a running mono timer at the right, the microphone name bottom-centre, square chips.
+21. Stop a short dictation: it goes straight from listening to "Pasted into c11 · N WORDS" (no Transcribing flash), held 1.2 s, then a 120 ms fade. Log: `OVERLAY_OUTCOME … shown=pasted`. A long dictation first shows the hollow square, the dimmed frozen preview and the orange sweep, then Pasted.
+22. Move the pointer over the pill, then over each chip, then away: brackets draw outside the box under the pointer only, one at a time, and fade; nothing moves. Check it over a black terminal in light appearance too (the brackets keep their white halo).
+23. Press a chip quickly: it inverts for a visible moment. Copy turns orange with a check for about a second.
+24. Open History from the chip: the ruled table opens 6 pt above the chip, the chip stays inverted, rows invert on hover, a click inserts, an outside click closes it. Hover the card: only its bracket shows.
+25. Drag the pill somewhere else, dictate again: it appears there. Double-click it: it returns to bottom-centre, 50 pt up.
+26. Switch System Settings > Appearance to Light: the pill, chips, cards and history card turn to print on paper. Back to Dark.
+27. Spoken Send on: say "… send it" and stop talking. SEND (orange) shows in the trace row, then the flat trace with an orange bar draining over 1.5 s and the timer counting 1.5 to 0.0; then "Sent to c11 · N WORDS · RETURN". Again, but press Esc while SEND shows (or click the pill, or the Cancel chip): NO SEND, the bar stops in ink, the dictation keeps recording, and Claude Code does not see the Esc (the turn is not interrupted). Stop: the text lands and the prompt is not submitted. Press Esc twice while SEND shows: the second press cancels the dictation. After a stop, Esc while SEND shows drops the Return; a second Esc only dismisses the pill (the text still lands). In Terminal.app the placard reads NO SEND, dimmed, as soon as the phrase is heard.
+28. Recovery card: focus a button and dictate. The pill grows upward into "Couldn't paste into …" with the reason, the transcript, Copy and Dismiss; the trace row, mic row and chips stay exactly where they were.
+29. Menu bar: three bars at rest; bars plus a solid square while listening (the bars move); an outlined square only when a pass is slow; a bracket inside the mark on hover and while the menu is open. The menu has the mono LIQUID VOICE header with the state, Start Dictation with the hotkey (it starts one), the microphone, History… (opens History), Copy Last Transcript, Custom Dictionary, Open Liquid Voice, Settings…, Quit.
+30. The Dock and Finder show the new icon: an ink tile, white bars and one orange square (three bars in list views).
+
+## 8. Cleanup, once rollback is no longer needed (optional)
 - Remove the old identity's permission rows: `tccutil reset Accessibility com.FluidApp.app` and `tccutil reset Microphone com.FluidApp.app`.
 - Archive, then remove, the old data: `defaults export com.FluidApp.app ~/Backups/com.FluidApp.app.plist && defaults delete com.FluidApp.app`, then `~/Library/Application Support/FluidVoice` and `~/Library/Logs/Fluid/`.
 - Every install keeps a full app copy in `~/Backups/liquid-voice-*`. Delete all but the last one or two now and then.

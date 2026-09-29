@@ -220,11 +220,22 @@ final class MicrophonePreferenceCoordinator: ObservableObject {
         return selectedInput
     }
 
+    /// The microphone capture resolved last, for the overlay's mic row.
+    var lastResolvedMicrophoneName: String? {
+        self.lastResolvedInputName
+    }
+
     func reportResolvedSelection(uid: String?, name: String?) {
         let previousUID = self.lastResolvedInputUID
         let previousName = self.lastResolvedInputName
         self.lastResolvedInputUID = uid
         self.lastResolvedInputName = name
+        // The overlay names the microphone from its first frame; correct it once capture resolves.
+        if let name, !name.isEmpty, NotchContentState.shared.isBottomOverlayPresented,
+           SignalOverlayModel.shared.microphoneName != name
+        {
+            SignalOverlayModel.shared.microphoneName = name
+        }
 
         // Onboarding owns microphone feedback inside its setup panel. A global
         // floating notice here would cover that flow and duplicate the picker.

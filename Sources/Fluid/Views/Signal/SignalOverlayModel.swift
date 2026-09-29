@@ -175,6 +175,13 @@ final class SignalOverlayModel: ObservableObject {
         return "\(total / 60):" + String(format: "%02d", total % 60)
     }
 
+    /// Status words the stop and reprocess paths write into the live text. Signal never shows
+    /// them (DESIGN.md §12): the square, the frozen timer and the sweep carry the state.
+    static let statusWords: Set<String> = [
+        "Transcribing", "Refining", "Thinking", "Working", "Reprocessing",
+        "Transcribing...", "Refining...", "Thinking...", "Working...", "Reprocessing...",
+    ]
+
     static func wordCount(_ text: String) -> Int {
         text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
     }
@@ -224,6 +231,7 @@ struct SignalOverlayGeometry: Equatable {
 
     static func forSize(_ size: SettingsStore.OverlaySize) -> SignalOverlayGeometry {
         switch size {
+        // No preview; the one-line row still carries the outcome and the notice.
         case .pill: SignalOverlayGeometry(pillWidth: SignalTheme.Metrics.pillWidth, previewLines: 0)
         case .small: SignalOverlayGeometry(pillWidth: SignalTheme.Metrics.pillWidth, previewLines: 1)
         case .medium: SignalOverlayGeometry(pillWidth: SignalTheme.Metrics.pillWidth, previewLines: 3)
@@ -241,14 +249,10 @@ struct SignalOverlayGeometry: Equatable {
         CGFloat(self.previewLines) * self.metrics.previewLineHeight
     }
 
-    var showsPreview: Bool {
-        self.previewLines > 0
-    }
-
-    /// The top area: the preview's lines. The outcome statement and the notice take a compact,
-    /// one-line form when it is shorter than 54 (the small size).
+    /// The top area: the preview's lines, and at least one line, which the outcome statement and
+    /// the notice need. They take a compact one-line form when it is shorter than 54.
     var topAreaHeight: CGFloat {
-        self.previewHeight
+        max(self.previewHeight, self.metrics.previewLineHeight)
     }
 
     var isCompactTop: Bool {
@@ -256,7 +260,7 @@ struct SignalOverlayGeometry: Equatable {
     }
 
     var pillHeight: CGFloat {
-        let top = self.showsPreview ? self.topAreaHeight + self.metrics.previewGap : 0
+        let top = self.topAreaHeight + self.metrics.previewGap
         return self.metrics.pillPaddingTop + top + self.metrics.traceRowHeight + self.metrics.micGap
             + self.metrics.micRowHeight + self.metrics.pillPaddingBottom
     }
@@ -281,5 +285,15 @@ struct SignalOverlayGeometry: Equatable {
     /// Rails are the pill's height and hold three 30 pt slots.
     var railHeight: CGFloat {
         max(self.pillHeight, 3 * self.metrics.chip)
+    }
+}
+
+extension DictationDeliveryOutcome.Method {
+    var signalMethod: SignalDelivery.Method {
+        switch self {
+        case .paste: .paste
+        case .keystrokes: .keystrokes
+        case .accessibility: .accessibility
+        }
     }
 }

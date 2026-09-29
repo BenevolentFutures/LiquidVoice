@@ -28,6 +28,10 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
     private var isMenuOpen = false
     private var markTimer: Timer?
     private var markHoverTracker: MenuBarMarkHoverTracker?
+    /// A mark change owed from while a stop pipeline held window work.
+    private var hasDeferredMark = false
+    /// When the current recording started, for the menu header (whichever overlay shows it).
+    private var recordingStartedAt: Date?
 
     /// Start / Stop Dictation from the menu: the same toggle as the dictation hotkey.
     var onToggleDictationRequested: (() -> Void)?
@@ -565,6 +569,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
     /// off (never on the stop path).
     private func recordingStateChanged(isRunning: Bool) {
         if isRunning {
+            self.recordingStartedAt = Date()
             self.startMarkTimer()
         } else {
             self.stopMarkTimer()
@@ -591,8 +596,10 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
     /// 8 Hz while listening: the bars follow the trace in 2 pt steps, and hold still during Spoken
     /// Send's countdown (the dictation is not finished until the send resolves).
     private func markTick() {
-        guard self.isRecording else {
-            self.stopMarkTimer()
+        // The recording flag reaches this manager one main-queue hop after the stop begins: read
+        // the service itself, and never redraw while a stop pipeline runs.
+        guard self.isRecording, self.asrService?.isRunning == true, !StopPipelineWindowWork.isHeld else {
+            if self.asrService?.isRunning != true { self.stopMarkTimer() }
             return
         }
         self.markKind = .listening
@@ -602,7 +609,6 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
             self.markBars = SignalMenuBarMark.listeningBars(from: SignalOverlayModel.shared.trace)
         }
         self.applyMark()
-        if self.isMenuOpen { self.updateMenuItemsText() }
     }
 
     private func refreshMarkKind() {
@@ -617,8 +623,21 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         self.applyMark()
     }
 
+    /// Sets the mark for the current state. Never while a stop pipeline runs: a status item image
+    /// change is a WindowServer round trip, so it waits for the handoff (a slow final pass keeps
+    /// the listening mark until then instead of showing the outlined square).
     private func applyMark() {
         guard let button = self.statusItem?.button else { return }
+        if StopPipelineWindowWork.isHeld {
+            guard !self.hasDeferredMark else { return }
+            self.hasDeferredMark = true
+            StopPipelineWindowWork.afterHandoff { [weak self] in
+                guard let self else { return }
+                self.hasDeferredMark = false
+                self.refreshMarkKind()
+            }
+            return
+        }
         let image = SignalMenuBarMark.image(
             kind: self.markKind,
             bars: self.markKind == .listening ? self.markBars : SignalMenuBarMark.restingBars,
@@ -717,7 +736,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         let live = self.isRecording
         let state: String
         if live {
-            let start = SignalOverlayModel.shared.recordingStartedAt ?? Date()
+            let start = self.recordingStartedAt ?? Date()
             state = SpokenSendController.shared.indicator == .countingDown
                 ? "Sending"
                 : "Listening \(SignalOverlayModel.formatDuration(Date().timeIntervalSince(start)))"
@@ -730,10 +749,14 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
             live ? "Stop Dictation" : "Start Dictation",
             detail: SettingsStore.shared.primaryDictationShortcutDisplayString
         )
-        self.microphoneMenuItem?.attributedTitle = Self.titleWithDetail(
-            "Microphone",
-            detail: BottomOverlayWindowController.currentMicrophoneName()
-        )
+        // The microphone's name only while the menu is open: looking it up can touch Core Audio,
+        // and this runs on every recording change and processing update.
+        if self.isMenuOpen {
+            self.microphoneMenuItem?.attributedTitle = Self.titleWithDetail(
+                "Microphone",
+                detail: BottomOverlayWindowController.currentMicrophoneName()
+            )
+        }
         self.copyLastTranscriptMenuItem?.isEnabled = self.canCopyLastTranscript
         self.microphoneMenuItem?.isEnabled = true
     }
@@ -762,6 +785,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
             self.applyMark()
             self.updateMenuItemsText()
             self.refreshMicrophoneMenu()
+            self.headerRefreshTimer?.invalidate()
             let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.updateMenuItemsText() }
             }

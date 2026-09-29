@@ -108,13 +108,3 @@ nonisolated struct DictationDeliveryOutcome: Equatable, Sendable {
     /// Spoken Send pressed Return after the text.
     let sentReturn: Bool
 }
-
-extension DictationDeliveryOutcome.Method {
-    var signalMethod: SignalDelivery.Method {
-        switch self {
-        case .paste: .paste
-        case .keystrokes: .keystrokes
-        case .accessibility: .accessibility
-        }
-    }
-}

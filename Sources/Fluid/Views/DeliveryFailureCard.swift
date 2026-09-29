@@ -177,6 +177,8 @@ final class DeliveryFailureOverlayController {
 
     private func performHide() {
         self.generation &+= 1
+        // A history card opened from this card's History chip goes with it.
+        BottomOverlayHistoryMenuController.shared.hide()
         self.presentedFailure = nil
         self.presentedTranscript = nil
         self.presentedTimeout = nil
@@ -267,7 +269,6 @@ final class DeliveryFailureOverlayController {
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
     }
 }
-
 
 /// The recovery card: the overlay's rails, and its pill grown upward by the card. The trace row
 /// (flat, the frozen length), the mic row, the rails and the chips sit exactly where the overlay's

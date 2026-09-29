@@ -143,7 +143,7 @@ struct SignalCardBody: View {
         switch self.content.primary {
         case .copy: "Copy the transcription to the clipboard"
         case .reprocess: "Transcribe the kept audio again"
-        case .openSystemSettings: "Privacy & Security › Microphone"
+        case .openSystemSettings: self.content.isMicrophoneOff ? "Privacy & Security › Microphone" : "Privacy & Security › Accessibility"
         case .none: ""
         }
     }

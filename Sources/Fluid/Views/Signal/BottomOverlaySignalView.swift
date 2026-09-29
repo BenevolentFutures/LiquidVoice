@@ -65,8 +65,11 @@ struct BottomOverlayView: View {
     // MARK: Chips
 
     enum ChipRole {
-        /// History and Cancel: live whenever the overlay is (not during the delivered hold).
-        case always
+        /// History: live whenever the overlay is, except during the delivered hold.
+        case history
+        /// Cancel: live while recording or on a notice. After the stop it could only hide the
+        /// overlay while the paste still went out, so it rests there instead of pretending.
+        case cancel
         /// Copy and Reprocess: live only while listening or on a notice; dimmed while transcribing.
         case historyAction
     }
@@ -80,15 +83,16 @@ struct BottomOverlayView: View {
     static func isChipInert(_ role: ChipRole, display: Display) -> Bool {
         switch display {
         case .delivered, .idle: return true
-        case .stopped: return role == .historyAction
-        case .listening, .transcribing, .notice: return false
+        case .stopped: return role != .history
+        case .transcribing: return role == .cancel
+        case .listening, .notice: return false
         }
     }
 
     /// Disabled (dimmed): Copy and Reprocess without history, and while transcribing.
     static func isChipEnabled(_ role: ChipRole, display: Display, hasHistory: Bool) -> Bool {
         switch role {
-        case .always: return true
+        case .history, .cancel: return true
         case .historyAction: return hasHistory && display != .transcribing
         }
     }
@@ -118,7 +122,7 @@ struct BottomOverlayView: View {
             systemName: "clock.arrow.circlepath",
             help: self.hasHistory ? "Recent Dictations" : "No saved dictation history available",
             isEnabled: self.hasHistory,
-            isInert: self.isInert(.always),
+            isInert: self.isInert(.history),
             isLatched: self.historyCard.isOpen,
             isHoverForced: self.model.inspectionHover == "history",
             onHoverChanged: self.chipHover("history")
@@ -164,7 +168,7 @@ struct BottomOverlayView: View {
         SignalChip(
             systemName: "xmark",
             help: "Cancel Dictation (\(self.settings.cancelRecordingHotkeyShortcut.displayString))",
-            isInert: self.isInert(.always),
+            isInert: self.isInert(.cancel),
             isHoverForced: self.model.inspectionHover == "cancel",
             onHoverChanged: self.chipHover("cancel")
         ) {
@@ -293,10 +297,11 @@ struct BottomOverlayView: View {
         ) {
             self.topArea(geometry, display: display)
         }
-        // A click anywhere on the pill during Spoken Send's countdown cancels the Return.
+        // A click anywhere on the pill while SEND shows cancels the Return (DESIGN.md §15).
         // Simultaneous, so the whole surface's double-click (reset position) and drag still work.
         .simultaneousGesture(TapGesture().onEnded {
-            guard self.isInteractive, self.countdownDrain?.isRunning == true else { return }
+            // While SEND shows (armed, or counting down), a click on the pill cancels the Return.
+            guard self.isInteractive, self.display == .listening, self.placard == .send else { return }
             self.spokenSend.cancelSend()
         })
     }
@@ -398,17 +403,12 @@ struct BottomOverlayView: View {
 
     // MARK: Text
 
-    private static let transientStatusTexts: Set<String> = [
-        "Transcribing", "Refining", "Thinking", "Working",
-        "Transcribing...", "Refining...", "Thinking...", "Working...",
-    ]
-
     /// The live preview without the status words the stop path writes into it ("Transcribing"):
     /// the hollow square, the frozen timer and the sweep carry that state.
     private var livePreview: String {
         let text = self.contentState.cachedPreviewText
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return Self.transientStatusTexts.contains(trimmed) ? "" : trimmed
+        return SignalOverlayModel.statusWords.contains(trimmed) ? "" : trimmed
     }
 
     private func previewText(_ display: Display) -> String {

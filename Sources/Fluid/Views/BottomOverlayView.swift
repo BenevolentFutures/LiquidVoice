@@ -170,9 +170,11 @@ final class BottomOverlayWindowController {
         NotchContentState.shared.updateTranscription("")
         NotchContentState.shared.setBottomOverlayDismissing(false)
         self.cancelDeliveryHold()
+        self.nextHideIsCut = false
         let model = SignalOverlayModel.shared
         model.ensureTraceBars(SignalOverlayGeometry.forSize(SettingsStore.shared.overlaySize).traceBars)
-        model.microphoneName = Self.currentMicrophoneName()
+        // No Core Audio lookup on the start path: the last name (capture corrects it once resolved).
+        model.microphoneName = Self.cachedMicrophoneName(current: model.microphoneName)
         model.beginRecording(noiseThreshold: CGFloat(SettingsStore.shared.visualizerNoiseThreshold))
 
         self.targetScreen = OverlayScreenResolver.screenForCurrentPointer()
@@ -429,7 +431,7 @@ final class BottomOverlayWindowController {
                 method: outcome.method?.signalMethod ?? .paste,
                 sentReturn: outcome.sentReturn
             ))
-            self.scheduleHoldEnd(after: SignalTheme.Motion.deliveredHold, reason: "delivered")
+            self.scheduleHoldEnd(after: Self.deliveredHold, reason: "delivered")
             DebugLogger.shared.info(
                 "OVERLAY_OUTCOME trace=\(outcome.traceID) shown=\(outcome.sentReturn ? "sent" : "pasted") method=\(outcome.method?.rawValue ?? "none")",
                 source: "BottomOverlay"
@@ -445,14 +447,19 @@ final class BottomOverlayWindowController {
         }
     }
 
-    /// A recovery card is about to show. If the overlay is only holding a stopped dictation for
-    /// its outcome, it gives way at once (a cut), so the card reads as the pill growing upward.
-    /// A live recording stays; the card then sits above it. Returns whether the overlay gave way.
+    /// A recovery card is about to show. If the overlay is holding the stopped dictation whose
+    /// delivery failed, it gives way at once (a cut), so the card reads as the pill growing upward.
+    /// Anything else stays: a live recording, or another dictation's hold (a late card for an
+    /// earlier dictation, such as a Paste Check miss); the card then sits above it. Returns whether
+    /// the overlay gave way.
     @discardableResult
     func yieldToCard() -> Bool {
         guard NotchContentState.shared.isBottomOverlayPresented,
               !NotchContentState.shared.isBottomOverlayDismissing,
-              SignalOverlayModel.shared.isPostStop
+              SignalOverlayModel.shared.isPostStop,
+              let pending = self.pendingDelivery,
+              pending.awaitsCard,
+              pending.generation == self.presentationGeneration
         else { return false }
         self.cancelDeliveryHold()
         self.nextHideIsCut = true
@@ -462,11 +469,18 @@ final class BottomOverlayWindowController {
         return true
     }
 
-    /// The app the held dictation was pasted into, for the recovery card's headline.
+    /// The app the held dictation was pasted into, for its recovery card's headline: only while
+    /// that dictation's failure is awaited, so a late card for another dictation never borrows it.
     var pendingDeliveryAppName: String? {
-        guard let pending = self.pendingDelivery, pending.generation == self.presentationGeneration else { return nil }
+        guard let pending = self.pendingDelivery,
+              pending.awaitsCard,
+              pending.generation == self.presentationGeneration
+        else { return nil }
         return pending.appName
     }
+
+    /// How long the outcome stays (DESIGN.md §8: 1.2 s). Tests shorten it.
+    static var deliveredHold: TimeInterval = SignalTheme.Motion.deliveredHold
 
     private static let outcomeWait: TimeInterval = 5
     private static let cardWait: TimeInterval = 1.5
@@ -545,8 +559,16 @@ final class BottomOverlayWindowController {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.sendCancelHoldDuration, execute: work)
         case .armed, .hidden:
             // A completed countdown turns back to armed just before its stop: keep the empty bar
-            // for the few milliseconds until the stop flattens the row, so the trace never flickers.
+            // briefly so the trace never flickers before the stop flattens the row. If no stop
+            // follows (the countdown expired without one), the live row comes back.
             if let drain = model.sendDrain, !drain.isCanceled, drain.remaining(at: Date()) <= 0.05 {
+                let generation = self.presentationGeneration
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                    guard let self, self.presentationGeneration == generation,
+                          SignalOverlayModel.shared.phase == .listening
+                    else { return }
+                    SignalOverlayModel.shared.clearSendCountdown()
+                }
                 return
             }
             model.clearSendCountdown()
@@ -558,8 +580,16 @@ final class BottomOverlayWindowController {
     /// The live preview as it stood when the recording stopped, without the stop path's status words.
     private static func previewAtStop() -> String {
         let text = NotchContentState.shared.cachedPreviewText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let statusWords: Set<String> = ["Transcribing", "Refining", "Thinking", "Working", "Transcribing...", "Refining...", "Thinking...", "Working..."]
-        return statusWords.contains(text) ? "" : text
+        return SignalOverlayModel.statusWords.contains(text) ? "" : text
+    }
+
+    /// The microphone name without touching Core Audio (for the start path).
+    static func cachedMicrophoneName(current: String) -> String {
+        if let name = AppServices.shared.microphonePreferenceCoordinator.lastResolvedMicrophoneName, !name.isEmpty {
+            return name
+        }
+        if !current.isEmpty { return current }
+        return SettingsStore.shared.microphonePriority.first?.name ?? ""
     }
 
     /// The microphone to name in the mic row: the one capture resolved last, else the first in the

@@ -2209,15 +2209,20 @@ struct ContentView: View {
             source: "ContentView"
         )
 
-        // Reset the transcription text display after transcription completes
-        NotchOverlayManager.shared.updateTranscriptionText("")
+        // Reset the transcription text display after transcription completes. A held overlay
+        // keeps its frozen preview and clears on the next recording; clearing now would only
+        // re-render it on the stop path.
+        if !holdsOverlayForOutcome {
+            NotchOverlayManager.shared.updateTranscriptionText("")
+        }
 
         guard transcribedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
             traceOutcome = "empty"
             DebugLogger.shared.debug("Transcription returned empty text", source: "ContentView")
-            // Finish the same short exit transition even when no text is emitted.
+            // Finish the same short exit transition even when no text is emitted. Not awaited: the
+            // 120 ms fade must not hold the stop pipeline (and with it the next start).
             if !didRequestOverlayHideOnStop {
-                await self.menuBarManager.finishProcessingAndHideOverlay()
+                self.hideOverlayAsync(reason: "empty_transcript")
             }
             return
         }
@@ -2259,7 +2264,9 @@ struct ContentView: View {
             return
         }
 
-        if NotchOverlayManager.shared.isBottomOverlayVisible {
+        // A held Signal overlay is already frozen (markRecordingStopped); the release transition's
+        // flag would only re-render it on the stop path.
+        if NotchOverlayManager.shared.isBottomOverlayVisible, !holdsOverlayForOutcome {
             BottomOverlayWindowController.shared.beginReleaseTransition()
         }
 
@@ -2716,7 +2723,7 @@ struct ContentView: View {
             }
         }
         if !didRequestOverlayHideOnStop {
-            await self.menuBarManager.finishProcessingAndHideOverlay()
+            self.hideOverlayAsync(reason: "phrase_only")
         }
     }
 

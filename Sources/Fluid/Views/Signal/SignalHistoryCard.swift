@@ -22,7 +22,6 @@ struct SignalHistoryCard: View {
     @Environment(\.signalPalette) private var palette
     @State private var hoveredRowID: UUID?
     @State private var isHovered = false
-    @State private var listHeight: CGFloat = 0
 
     private var metrics: SignalTheme.Metrics.Type {
         SignalTheme.Metrics.self
@@ -114,21 +113,13 @@ struct SignalHistoryCard: View {
         }
     }
 
+    /// The list scrolls past 480 - header - footer; below that it takes its rows' height, which
+    /// the panel reads through its hosting view's fitting size (as the card always did).
     private var scrollingList: some View {
         ScrollView(.vertical, showsIndicators: false) {
             self.rows
-                .background(GeometryReader { proxy in
-                    Color.clear.preference(key: SignalHistoryListHeightKey.self, value: proxy.size.height)
-                })
         }
-        .frame(height: self.listHeight > 0 ? min(self.listHeight, self.maxListHeight) : self.initialListHeight)
-        .onPreferenceChange(SignalHistoryListHeightKey.self) { self.listHeight = $0 }
-    }
-
-    /// Before the first measurement (and for renders, which never measure): the table's height
-    /// from its row count, so the card does not start at zero and grow.
-    private var initialListHeight: CGFloat {
-        min(self.maxListHeight, CGFloat(self.dayGroups.count) * self.metrics.historyDayRow + CGFloat(self.entries.count) * 110)
+        .frame(maxHeight: self.maxListHeight)
     }
 
     private var rows: some View {
@@ -297,12 +288,4 @@ struct SignalHistoryCard: View {
         formatter.dateFormat = "EEEE"
         return formatter
     }()
-}
-
-private struct SignalHistoryListHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
 }

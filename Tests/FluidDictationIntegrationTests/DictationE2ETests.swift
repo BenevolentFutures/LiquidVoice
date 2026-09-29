@@ -3268,7 +3268,13 @@ enum SignalRenderStage {
 /// chips act when, and the delivered hold (quiet: no window reaches the screen).
 @MainActor
 final class SignalOverlayBehaviorTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        BottomOverlayWindowController.deliveredHold = 0.2
+    }
+
     override func tearDown() {
+        BottomOverlayWindowController.deliveredHold = SignalTheme.Motion.deliveredHold
         TypingService.dictationOutcomeHandler = { outcome in
             BottomOverlayWindowController.shared.dictationDeliveryFinished(outcome)
         }
@@ -3332,13 +3338,16 @@ final class SignalOverlayBehaviorTests: XCTestCase {
 
     func testChipsNeverActDuringTheDeliveredHold() {
         let delivered = BottomOverlayView.Display.delivered(SignalDelivery(appName: "c11", words: 2, method: .paste, sentReturn: false))
-        for role in [BottomOverlayView.ChipRole.always, .historyAction] {
+        for role in [BottomOverlayView.ChipRole.history, .cancel, .historyAction] {
             XCTAssertTrue(BottomOverlayView.isChipInert(role, display: delivered))
             XCTAssertFalse(BottomOverlayView.isChipInert(role, display: .listening))
         }
-        // Stopped: Copy and Reprocess wait for the final pass; History and Cancel still work.
+        // After the stop only History acts: Copy and Reprocess wait for the final pass, and Cancel
+        // could no longer stop the paste.
         XCTAssertTrue(BottomOverlayView.isChipInert(.historyAction, display: .stopped))
-        XCTAssertFalse(BottomOverlayView.isChipInert(.always, display: .stopped))
+        XCTAssertTrue(BottomOverlayView.isChipInert(.cancel, display: .stopped))
+        XCTAssertTrue(BottomOverlayView.isChipInert(.cancel, display: .transcribing))
+        XCTAssertFalse(BottomOverlayView.isChipInert(.history, display: .stopped))
         // Transcribing: they dim instead.
         XCTAssertFalse(BottomOverlayView.isChipEnabled(.historyAction, display: .transcribing, hasHistory: true))
         XCTAssertTrue(BottomOverlayView.isChipEnabled(.historyAction, display: .listening, hasHistory: true))
@@ -3397,14 +3406,47 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented)
         XCTAssertEqual(controller.windowStateForTests?.alpha, 1)
 
-        // 1.2 s hold, 120 ms fade, then hidden: alpha 0, nothing painted, never ignoresMouseEvents.
-        try await Task.sleep(nanoseconds: 1_600_000_000)
+        // The hold (1.2 s; 0.2 s here), the 120 ms fade, then hidden: alpha 0, nothing painted,
+        // never ignoresMouseEvents.
+        try await Task.sleep(nanoseconds: 600_000_000)
         XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
         let hidden = try XCTUnwrap(controller.windowStateForTests)
         XCTAssertEqual(hidden.alpha, 0)
         XCTAssertFalse(hidden.ignoresMouse)
         XCTAssertFalse(controller.contentPaintsPixelsForTests())
         XCTAssertEqual(model.phase, .idle)
+    }
+
+    /// The live history card sizes to its rows through the panel's fitting size, and scrolls past
+    /// 480 pt, so the panel sits 6 pt above the History chip however many entries there are.
+    func testTheHistoryCardSizesToItsRows() {
+        func height(_ count: Int) -> CGFloat {
+            let card = SignalHistoryCard(
+                entries: Array(SignalRenderStage.sampleHistory.prefix(count)),
+                totalCount: count,
+                notPasted: [],
+                onPick: { _ in }
+            )
+            return NSHostingView(rootView: card.signalPalette()).fittingSize.height
+        }
+        let two = height(2)
+        XCTAssertGreaterThan(two, 36 + 28 + 28 + 2 * 60, "header, footer, a day row and two rows")
+        XCTAssertLessThan(two, 300)
+        XCTAssertEqual(height(12), 480, accuracy: 1, "capped at 480; the list scrolls")
+    }
+
+    /// A card for another dictation (a late Paste Check miss) never takes over a held outcome.
+    func testALateCardForAnotherDictationDoesNotTakeOverTheHold() async {
+        let controller = BottomOverlayWindowController.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        controller.markRecordingStopped()
+        controller.awaitDelivery(traceID: 9, appName: "c11", words: 2, failureReported: false)
+        XCTAssertNil(controller.pendingDeliveryAppName, "no failure awaited, so no card borrows the name")
+        XCTAssertFalse(controller.yieldToCard())
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented)
+        _ = await controller.hideAndWait()
     }
 
     /// A failed paste hands the overlay to the recovery card at once (a cut), so the card reads as

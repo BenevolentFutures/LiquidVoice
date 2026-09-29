@@ -2129,6 +2129,7 @@ final class ASRService: ObservableObject {
         onCaptureStarted: (@MainActor () -> Void)? = nil
     ) async -> AudioCaptureStartOutcome {
         DebugLogger.shared.info("🎤 START() called - beginning recording session", source: "ASRService")
+        StartPathTrace.captureRequested()
 
         guard self.micStatus == .authorized || self.recheckMicrophoneAccessBeforeStart() else {
             DebugLogger.shared.error(
@@ -2442,6 +2443,7 @@ final class ASRService: ObservableObject {
                 "✅ Audio capture running after first PCM (session=\(captureSessionID))",
                 source: "ASRService"
             )
+            StartPathTrace.captureStarted()
             onCaptureStarted?()
 
             // Direct capture already owns a required device-liveness listener

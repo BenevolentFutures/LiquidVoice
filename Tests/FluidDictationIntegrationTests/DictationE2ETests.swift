@@ -3983,16 +3983,6 @@ final class SignalFloatShadowTests: XCTestCase {
         XCTAssertEqual(panel.constrainFrameRect(parked, to: NSScreen.screens.first), parked)
     }
 
-    func testTheStartSummaryNamesEveryField() {
-        XCTAssertEqual(
-            StartPathTrace.summary(trigger: "hotkey", captureMs: 142, overlayVisibleMs: 9, overlayWasParked: true, shadowAfterMs: 21),
-            "START_SUMMARY trigger=hotkey hotkeyToCaptureMs=142 overlayVisibleMs=9 overlayWasParked=true shadowAfterMs=21"
-        )
-        XCTAssertEqual(
-            StartPathTrace.summary(trigger: "other", captureMs: 90, overlayVisibleMs: nil, overlayWasParked: nil, shadowAfterMs: nil),
-            "START_SUMMARY trigger=other hotkeyToCaptureMs=90 overlayVisibleMs=- overlayWasParked=- shadowAfterMs=-"
-        )
-    }
 
     func testARecoveryCardCastsItsOwnShadowFromItsGrownPill() async throws {
         let cards = DeliveryFailureOverlayController.shared
@@ -4113,5 +4103,93 @@ final class SignalFloatShadowTests: XCTestCase {
                 }
             }
         }
+    }
+}
+
+/// START_SUMMARY: one line per capture start, from the start hotkey, whichever start path the
+/// hotkey takes. The installed build logged none: the marks sat in `ContentView.startRecording()`,
+/// which the hotkey's dictation path (`beginDictationRecording`) never calls. They now sit in the
+/// hotkey's start action and in `ASRService.start` (entry and first PCM).
+@MainActor
+final class StartPathTraceTests: XCTestCase {
+    private var lines: [String] = []
+    private var savedEmit: ((String) -> Void)?
+
+    override func setUp() async throws {
+        try await super.setUp()
+        self.savedEmit = StartPathTrace.emit
+        StartPathTrace.emit = { [unowned self] line in self.lines.append(line) }
+    }
+
+    override func tearDown() async throws {
+        if let savedEmit { StartPathTrace.emit = savedEmit }
+        _ = await BottomOverlayWindowController.shared.hideAndWait()
+        try await super.tearDown()
+    }
+
+    /// What `ASRService.start` does around a capture start: its entry mark, then the first PCM.
+    private static func emulatedCaptureStart() -> HotkeyCaptureStartTask {
+        Task { @MainActor in
+            StartPathTrace.captureRequested()
+            try? await Task.sleep(nanoseconds: 20_000_000)
+            StartPathTrace.captureStarted()
+        }
+    }
+
+    func testAHotkeyStartEmitsExactlyOneStartSummary() async throws {
+        let asr = ASRService()
+        let start: () async -> HotkeyCaptureStartTask? = {
+            // As ContentView.beginDictationRecording: the pill first, then the capture start.
+            BottomOverlayWindowController.shared.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+            return Self.emulatedCaptureStart()
+        }
+        let manager = GlobalHotkeyManager(
+            asrService: asr,
+            primaryShortcuts: [HotkeyShortcut(keyCode: 96, modifierFlags: [])],
+            promptModeShortcut: HotkeyShortcut(keyCode: 97, modifierFlags: []),
+            commandModeShortcut: nil,
+            rewriteModeShortcut: HotkeyShortcut(keyCode: 98, modifierFlags: []),
+            promptModeShortcutEnabled: false,
+            commandModeShortcutEnabled: false,
+            rewriteModeShortcutEnabled: false,
+            startRecordingCallback: start,
+            dictationModeCallback: start
+        )
+        BottomOverlayWindowController.shared.prepare()
+        let down = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 96, keyDown: true))
+        down.flags = []
+        _ = manager.handleKeyEventForTests(down, type: CGEventType.keyDown)
+        for _ in 0..<50 where self.lines.isEmpty {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let up = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 96, keyDown: false))
+        up.flags = []
+        _ = manager.handleKeyEventForTests(up, type: CGEventType.keyUp)
+
+        XCTAssertEqual(self.lines.count, 1, "\(self.lines)")
+        let line = try XCTUnwrap(self.lines.first)
+        XCTAssertTrue(line.hasPrefix("START_SUMMARY trigger=hotkey hotkeyToCaptureMs="), line)
+        XCTAssertFalse(line.contains("overlayVisibleMs=-"), "the pill's show is in it: \(line)")
+        XCTAssertTrue(line.contains("overlayWasParked="), line)
+        // A second first-PCM for the same start logs nothing.
+        StartPathTrace.captureStarted()
+        XCTAssertEqual(self.lines.count, 1)
+    }
+
+    func testAStartWithoutAHotkeyStillLogsOnce() {
+        StartPathTrace.overlayShown(visibleMs: 7, wasParked: false)
+        StartPathTrace.captureRequested(at: ProcessInfo.processInfo.systemUptime + 5)
+        StartPathTrace.captureStarted(at: ProcessInfo.processInfo.systemUptime + 5.12)
+        StartPathTrace.captureStarted()
+        XCTAssertEqual(self.lines.count, 1)
+        XCTAssertTrue(self.lines.first?.hasPrefix("START_SUMMARY trigger=other hotkeyToCaptureMs=120") == true, "\(self.lines)")
+    }
+
+    func testTheStartSummaryNamesEveryField() {
+        XCTAssertEqual(
+            StartPathTrace.summary(trigger: "hotkey", captureMs: 142, overlayVisibleMs: 9, overlayWasParked: true, shadowAfterMs: 21),
+            "START_SUMMARY trigger=hotkey hotkeyToCaptureMs=142 overlayVisibleMs=9 overlayWasParked=true shadowAfterMs=21"
+        )
     }
 }

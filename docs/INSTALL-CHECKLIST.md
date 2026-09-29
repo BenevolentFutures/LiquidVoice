@@ -51,7 +51,7 @@ The app is now `com.stage11.liquidvoice`, no longer FluidVoice's `com.FluidApp.a
    Log: `frontmost_check stage=before_paste waitedMs=0 result=in_front`, and one `STOP_SUMMARY` per dictation.
 2. Stop in c11, then Cmd-Tab to Safari while it transcribes. Either c11 comes back and gets the text, or a card appears and the text is on the clipboard. It is never silent.
 3. Copy an image (a screenshot to the clipboard), then dictate into c11. After about 1 s, Preview > File > New from Clipboard shows the image.
-4. The pill now stays up after the paste for 1.2 s ("Pasted into c11"), then fades. During that hold, click the chips and the pill: nothing is typed again or copied. Click the transparent margin just outside the pill (between the chips, or a few points beyond the edge): the click reaches c11. After the fade, click where the pill was: the click reaches c11. Repeat after a long dictation.
+4. The pill now stays up after the paste for 0.6 s ("Pasted into c11"), then fades. During that hold, click the chips and the pill: nothing is typed again or copied. Click the transparent margin just outside the pill (between the chips, or a few points beyond the edge): the click reaches c11. After the fade, click where the pill was: the click reaches c11. Repeat after a long dictation.
 
 ## 2. Other apps
 5. Dictate into TextEdit, then into a Chrome textarea. The text lands.
@@ -81,7 +81,7 @@ The app is now `com.stage11.liquidvoice`, no longer FluidVoice's `com.FluidApp.a
 
 ## 7. The Signal overlay and menu bar
 20. Dictate into c11 with the pill in view. Listening: the preview (newest words, "…" in front once it fills three lines), the trace with its orange write head scrolling 12 bars a second and still scrolling in silence, a solid orange square and a running mono timer at the right, the microphone name bottom-centre, square chips.
-21. Stop a short dictation: it goes straight from listening to "Pasted into c11 · N WORDS" (no Transcribing flash), held 1.2 s, then a 120 ms fade. Log: `OVERLAY_OUTCOME … shown=pasted`. A long dictation first shows the hollow square, the dimmed frozen preview and the orange sweep, then Pasted.
+21. Stop a short dictation: it goes straight from listening to "Pasted into c11 · N WORDS" (no Transcribing flash), held 0.6 s, then a 120 ms fade. Log: `OVERLAY_OUTCOME … shown=pasted`. A long dictation first shows the hollow square, the dimmed frozen preview and the orange sweep, then Pasted.
 22. Move the pointer over the pill, then over each chip, then away: brackets draw outside the box under the pointer only, one at a time, and fade; nothing moves. Check it over a black terminal in light appearance too (the brackets keep their white halo).
 23. Press a chip quickly: it inverts for a visible moment. Copy turns orange with a check for about a second.
 24. Open History from the chip: the ruled table opens 6 pt above the chip, the chip stays inverted, rows invert on hover, a click inserts, an outside click closes it. Hover the card: only its bracket shows.

@@ -326,7 +326,7 @@ final class BottomOverlayWindowController {
     /// Parks the hidden panel offscreen after a long idle, never while a stop pipeline runs, and
     /// not at all if a newer presentation showed it meanwhile. Hidden already takes no clicks (alpha
     /// 0 and nothing painted), so parking is only the backstop, and its WindowServer fence
-    /// (70-300 ms) must not land where the next dictation starts: with the 1.2 s hold that is about
+    /// (70-300 ms) must not land where the next dictation starts: with the 0.6 s hold that is about
     /// 1.3-1.7 s after the paste, so it waits `idleParkingDelay` after the hide.
     private func scheduleParkingAfterHandoff(generation: UInt64) {
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.idleParkingDelay) { [weak self] in
@@ -409,7 +409,7 @@ final class BottomOverlayWindowController {
         Self.overlayBench("bottom_await_delivery trace=\(traceID) failureReported=\(failureReported)")
     }
 
-    /// The typing worker finished a dictation's delivery. Posted: the outcome state for 1.2 s,
+    /// The typing worker finished a dictation's delivery. Posted: the outcome state for 0.6 s,
     /// then dismiss. Failed: wait for the recovery card, which takes the overlay's place.
     func dictationDeliveryFinished(_ outcome: DictationDeliveryOutcome) {
         guard var pending = self.pendingDelivery,
@@ -554,7 +554,7 @@ final class BottomOverlayWindowController {
         return pending.appName
     }
 
-    /// How long the outcome stays (DESIGN.md §8: 1.2 s). Tests shorten it.
+    /// How long the outcome stays (DESIGN.md §8: 0.6 s). Tests shorten it.
     static var deliveredHold: TimeInterval = SignalTheme.Motion.deliveredHold
 
     private static let outcomeWait: TimeInterval = 5

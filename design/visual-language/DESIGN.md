@@ -190,7 +190,7 @@ Not prototyped in this pass; Atin locked the overlay and menu bar. The tokens, t
 - Corners are a hover affordance; no "LISTENING" word; mic bottom-centre; timer opposite the app icon. (Atin, round 3)
 - Square corners throughout; brackets outside the box. (Atin, round 4)
 - Assumed and unchallenged: dark by default with the light variant following the system; the delivered line stays; the mic label in every state; the bracket halo stays.
-- Round 5, our recommendations, offered to Atin with one-click alternatives in the prototype and not flipped: Spoken Send lives in the trace row, not a fifth chip; "Pasted into" and "Sent to" instead of "Delivered to"; one recovery-card family for every problem; app icon variant A (ink tile).
+- Round 5: "Pasted into" and "Sent to" instead of "Delivered to" (Atin: no preference, the state is new); recovery cards for timed out, mic off and failed, and a lighter notice row for recognition-back (Atin, "sure, great"); app icon variant A (unchallenged). Spoken Send's home, trace row or fifth chip, is awaiting Atin's word; the prototype builds both (`?send=chip`).
 
 ## 15. Round 5: Spoken Send, recovery cards, wording, icon
 
@@ -219,10 +219,13 @@ One anatomy for every problem: the failed card grown upward from the pill with t
 |---|---|---|---|---|---|
 | Failed → Copy | Couldn't paste into c11 | one of the three reasons above | **Copy** → "✓ Copied" | `118 WORDS` | flat, frozen timer / mic |
 | Transcription timed out | Transcription timed out | Your audio is kept | **Reprocess** | none | flat, frozen timer / mic |
-| Speech recognition is back | Speech recognition is back | A kept dictation is waiting | **Reprocess** | none | flat, frozen timer / mic |
 | Microphone access is off | Microphone access is off | Allow Liquid Voice in Privacy & Security | **Open System Settings** (gear; opens Privacy & Security → Microphone) | none | flat, hollow square, `0:00` dim / `NO MICROPHONE` |
 
 The Reprocess in a card and the Reprocess chip do the same thing; the chip stays. Card heights: 174 pt for a one-line card, 231 for failed, 248 with the two-line clipboard reason. Every card leaves after 10 s unless dismissed first (paused while the pointer is over it), fading over 120 ms linear. A card about the dictation the pill is holding takes the pill's place at once, so the pill reads as growing; a card about anything else, while a newer recording is live, sits above the pill.
+
+### Notice row (lighter than a card)
+
+For news that needs no rescue, the pill does not grow and there is no top rule. **Speech recognition is back** is the one notice today (Atin, round 5: "sure, great"). It swaps into the reserved 3-line preview area the way Pasted does: line 1 "Speech recognition is back" (Pro 13.5 semibold), line 2 "A kept dictation is waiting" (Pro 13, `text-2`), line 3 an inline **Reprocess** text action (Pro 13 semibold in `accent`, arrow.clockwise glyph, no fill; hover draws its outside bracket, press inverts) then `·` **Dismiss** (Pro 13 medium, `text-2`). The Cancel chip also dismisses it. Trace row, mic row, rails and chips do not move.
 
 ### Wording
 

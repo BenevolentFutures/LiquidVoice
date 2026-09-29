@@ -239,10 +239,18 @@ The pill grows upward by 25 pt for a one-line card, and the history card clears 
 |---|---|---|---|---|---|
 | `failed` | Couldn't paste into c11 | `nofocus` (default) "No text field focused" · `clipboard` "The text is on your clipboard" · `clipboardkept` "Your newer clipboard was left alone, the text is in History" (two lines, +17 pt) | **Copy** (doc.on.doc), which becomes "✓ Copied" in the same width | `118 WORDS` | flat, 0:41 / mic |
 | `timedout` | Transcription timed out | Your audio is kept | **Reprocess** (arrow.clockwise) | none (the frozen timer shows 0:41) | flat, 0:41 / mic |
-| `asrback` | Speech recognition is back | A kept dictation is waiting | **Reprocess** | none (the frozen timer shows 0:41) | flat, 0:41 / mic |
 | `micoff` | Microphone access is off | Allow Liquid Voice in Privacy & Security | **Open System Settings** (gearshape) | none | flat, hollow square, 0:00 dim / `NO MICROPHONE` |
 
 The Reprocess in a card and the Reprocess chip do the same thing, and the chip stays. Pixel heights: generic card 174 pt (+25), failed 231 pt (+82), failed with the two-line reason 248 pt (+99).
+
+**Notice row (`asrback`), not a card (Atin).** "Speech recognition is back" is good news, so it gets a lighter treatment:
+- **Placement:** it lives in the pill's reserved preview slot (54 pt, three 18 pt lines) and swaps content the way Pasted does. There is no upward growth and no orange top rule.
+- **Line 1:** "Speech recognition is back", Pro 13.5 semibold, `text`.
+- **Line 2:** "A kept dictation is waiting", Pro 13, `text-2`.
+- **Line 3:** an inline **Reprocess** text action (Pro 13 semibold, `accent`, a 12 pt `arrow.clockwise` glyph, no fill), then `·`, then **Dismiss** (Pro 13 medium, `text-2`).
+- **Hover and press:** each text action draws its own outside bracket on hover (2 pt gap, 6 pt arms, like a chip), and the pill's bracket yields. Press inverts.
+- **Everything else:** the trace row (flat, frozen 0:41), mic row, rails and chips are unchanged, and the Cancel chip dismisses the row.
+- **Native:** a `VStack(spacing: 0)` of three 18 pt rows in the preview slot; the actions are `Button`s with a plain style plus the `Bracket` overlay on hover.
 
 ### Wording (default: truthful)
 
@@ -272,6 +280,7 @@ The paste is posted, not verified, so:
 
 ### Prototype
 
+- **asrback** is a notice row (above), not a card.
 - **New states** in the stage list, in this order: idle, listening, transcribing, delivered (labelled "Pasted"), failed, history, countdown, sent, timedout, asrback, micoff. Digits reach the first nine.
 - **Demo:** **S** plays a Spoken Send dictation.
 - **Hooks:** `?armed=1`, `?t=<remaining>` (holds the countdown), `?canceled=1`, `?target=noreturn`, `?send=chip`, `?wording=delivered`, `?reason=…`.

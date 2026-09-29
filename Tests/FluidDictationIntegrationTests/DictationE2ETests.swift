@@ -3080,6 +3080,9 @@ final class SignalOverlayRenderTests: XCTestCase {
             for (name, hoverRow) in [("09-history", nil), ("10-history-hover-row", 2)] as [(String, Int?)] {
                 SignalRenderStage.reset()
                 SignalRenderStage.listening()
+                // The History chip stays inverted while its card is open.
+                BottomOverlayHistoryMenuController.shared.holdLatchedForInspection(true)
+                defer { BottomOverlayHistoryMenuController.shared.holdLatchedForInspection(false) }
                 let card = SignalHistoryCard(
                     entries: SignalRenderStage.sampleHistory,
                     totalCount: 247,

@@ -964,6 +964,11 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
     /// The pointer is over the card: only the card's bracket draws.
     @Published var isHovered = false
 
+    /// Holds the latched state without opening the panel (renders and inspection).
+    func holdLatchedForInspection(_ latched: Bool) {
+        self.isOpen = latched
+    }
+
     private var menuWindow: NSPanel?
     private var hostingView: NSHostingView<BottomOverlayHistoryMenuView>?
     private var selectorFrameInScreen: CGRect = .zero

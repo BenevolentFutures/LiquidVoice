@@ -30,6 +30,9 @@ final class BottomOverlayWindowController {
     static let shared = BottomOverlayWindowController()
 
     private var window: NSPanel?
+    /// The pill's floating shadow (DESIGN.md §6): a click-through child panel under the overlay's,
+    /// with the overlay's own visibility, so the transparent margin keeps passing clicks.
+    let floatShadow = SignalFloatShadow { state in BottomOverlayShadowView(state: state) }
     /// Level ticks feed the Signal trace's sampler directly: no view is invalidated per tick.
     private var audioSubscription: AnyCancellable?
     private var spokenSendSubscription: AnyCancellable?
@@ -913,7 +916,9 @@ final class BottomOverlayWindowController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = false // SwiftUI handles shadow
+        // No window-server shadow: it would rim the brackets and chips. The pill's floating shadow
+        // is its own click-through panel (SignalFloatShadow), attached below.
+        panel.hasShadow = false
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none
@@ -935,6 +940,7 @@ final class BottomOverlayWindowController {
         hostingView.display()
 
         self.window = panel
+        self.floatShadow.attach(to: panel)
     }
 
     private var isReleaseTransitionActive: Bool {
@@ -1142,6 +1148,8 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
     }
 
     private var menuWindow: NSPanel?
+    /// The card's floating shadow (DESIGN.md §6), in its own click-through panel under the card's.
+    let floatShadow = SignalFloatShadow { state in SignalFloatShadowView(state: state).signalPalette() }
     private var hostingView: NSHostingView<BottomOverlayHistoryMenuView>?
     private var selectorFrameInScreen: CGRect = .zero
     private weak var parentWindow: NSWindow?
@@ -1239,8 +1247,8 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        // No window shadow (DESIGN.md §6): the card's own 1 px edge and flat 2 pt drop rule
-        // separate it from the pill.
+        // No window-server shadow: the card's floating shadow is its own click-through panel
+        // (SignalFloatShadow, DESIGN.md §6), attached below.
         panel.hasShadow = false
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
@@ -1257,6 +1265,7 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
 
         self.hostingView = hostingView
         self.menuWindow = panel
+        self.floatShadow.attach(to: panel)
     }
 
     private func makeMenuContent() -> BottomOverlayHistoryMenuView {
@@ -1361,6 +1370,7 @@ private struct BottomOverlayHistoryMenuView: View {
                 BottomOverlayHistoryMenuController.shared.isHovered = hovering
             }
         )
+        .signalFloatShadowSource(BottomOverlayHistoryMenuController.shared.floatShadow.state)
         .padding(SignalTheme.Metrics.windowInsets)
         .signalPalette()
     }

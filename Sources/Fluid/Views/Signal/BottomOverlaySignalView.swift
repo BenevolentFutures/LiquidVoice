@@ -272,16 +272,11 @@ struct BottomOverlayView: View {
         .signalPalette()
         // A hiding or hidden overlay must never act on a click meant for the app beneath it.
         .allowsHitTesting(self.isInteractive)
-        // Dismiss fades over 120 ms linear (a cut under reduced motion)...
-        .opacity(self.model.isFading ? 0 : 1)
-        .animation(
-            self.model.isFading && !self.reduceMotion ? .linear(duration: SignalTheme.Motion.dismiss) : nil,
-            value: self.model.isFading
-        )
-        // ...and hidden paints nothing at all, at once, whatever the fade's progress: a transparent
-        // panel passes clicks through wherever its pixels are clear, from the hide on. Not
-        // animated, so it never depends on a frame clock. ignoresMouseEvents is never touched.
-        .opacity(self.contentState.isBottomOverlayPresented ? 1 : 0)
+        .modifier(BottomOverlayVisibility(
+            isFading: self.model.isFading,
+            isPresented: self.contentState.isBottomOverlayPresented,
+            reduceMotion: self.reduceMotion
+        ))
         .onChange(of: self.display) { _, display in
             switch display {
             case .delivered, .idle:
@@ -333,6 +328,7 @@ struct BottomOverlayView: View {
             BottomOverlayWindowController.shared.cancelSpokenSendIfArmed()
         })
         .help(self.canCancelSend ? "Click to cancel Send" : "")
+        .signalFloatShadowSource(BottomOverlayWindowController.shared.floatShadow.state)
     }
 
     @ViewBuilder
@@ -542,4 +538,44 @@ struct BottomOverlayView: View {
 final class SignalChipAnchor {
     var frameInScreen: CGRect = .zero
     weak var window: NSWindow?
+}
+
+/// The overlay's visibility (DESIGN.md §8), shared by the overlay and its floating shadow so the
+/// shadow never outlives or precedes the pill: the dismiss fades over 120 ms linear (a cut under
+/// reduced motion), and hidden paints nothing at all, at once, whatever the fade's progress (a
+/// transparent panel passes clicks through wherever its pixels are clear, from the hide on; not
+/// animated, so it never depends on a frame clock; ignoresMouseEvents is never touched).
+struct BottomOverlayVisibility: ViewModifier {
+    let isFading: Bool
+    let isPresented: Bool
+    let reduceMotion: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(self.isFading ? 0 : 1)
+            .animation(
+                self.isFading && !self.reduceMotion ? .linear(duration: SignalTheme.Motion.dismiss) : nil,
+                value: self.isFading
+            )
+            .opacity(self.isPresented ? 1 : 0)
+    }
+}
+
+/// The pill's floating shadow (DESIGN.md §6), drawn in its own click-through panel under the
+/// overlay's (SignalFloatShadow), fading and hiding exactly as the overlay does.
+struct BottomOverlayShadowView: View {
+    @ObservedObject var state: SignalFloatShadow.State
+    @ObservedObject private var contentState = NotchContentState.shared
+    @ObservedObject private var model = SignalOverlayModel.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        SignalFloatShadowView(state: self.state)
+            .signalPalette()
+            .modifier(BottomOverlayVisibility(
+                isFading: self.model.isFading,
+                isPresented: self.contentState.isBottomOverlayPresented,
+                reduceMotion: self.reduceMotion
+            ))
+    }
 }

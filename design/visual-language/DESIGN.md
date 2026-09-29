@@ -22,6 +22,7 @@ The diagram grammar (brackets, mono, thin rules, status in solid colour and word
 | `edge` | `#2C2E33` | `#111214` | 1 px pill and card edge, table rules |
 | `chip` | `#1A1B1F` | `#F2F2F4` | chip fill (no edge at rest) |
 | `drop` | `0 2 0 rgba(0,0,0,.35)` | `0 2 0 #111214` | flat, unblurred 2 pt offset rule under pill and card; on square corners it reads as a printed thick bottom rule |
+| `float-shadow` | black 0.32 | black 0.16 | the soft floating shadow under pill and cards (§6): radius 12, y 5 |
 | `ink` | `#FFFFFF` | `#111214` | trace bars |
 | `midline` | `#2C2E33` | `#D3D4D8` | 1 px rule behind the trace |
 | `text` | white 0.92 | `#111214` | preview, headlines, timer |
@@ -80,7 +81,9 @@ Nothing inside the overlay is smaller than 10 pt mono uppercase; prose never dro
 
 ## 6. Materials
 
-None. Every surface is an opaque fill with a 1 px edge and a flat 2 pt drop rule. No `NSVisualEffectView`, no vibrancy, no glass, no noise, no blurred shadows.
+None. Every surface is an opaque fill with a 1 px edge and a flat 2 pt drop rule. No `NSVisualEffectView`, no vibrancy, no glass, no noise.
+
+**Floating shadow (Atin, 2026-09-29).** The one blurred shadow, "a little bit of drop shadow to make it seem like it's floating above the screen": the pill, the recovery cards and the history card sit on a soft neutral shadow, blur radius 12, offset y 5, black at 0.32 in dark and 0.16 in light (`float-shadow`). The flat 2 pt drop rule stays, drawn over it: it still reads as the printed bottom rule, and the bottom bracket gap is still measured from it. Chips, brackets and the menu cast none. The shadow lives in its own click-through panel under the surface's (§11), so the transparent bracket margin still passes clicks, and it follows the surface's alpha and fade: a hidden surface casts nothing. Renders beside the flat originals: `native-renders/compare/shadow-dark.png`, `shadow-light.png`.
 
 ## 7. The selection brackets
 
@@ -147,6 +150,7 @@ A 22 × 16 template mark: three square-ended bars at rest; bars plus a solid squ
 | Effect | SwiftUI / AppKit, macOS 15 and 26 |
 |---|---|
 | Pill, card | `Rectangle().fill(surface)` + `.strokeBorder(edge, lineWidth: 1)`; drop rule `.shadow(color: drop, radius: 0, x: 0, y: 2)` |
+| Floating shadow (Atin, 2026-09-29) | a borderless child `NSPanel` ordered below the surface's panel (so it moves with it), `ignoresMouseEvents` set once at creation and never toggled, framed to the surface's panel plus 32 pt, mirroring its alpha by KVO (a card's fade takes it along). One `Canvas` fills the surface's rect, reported by `onGeometryChange`, with `.shadow(color: float-shadow, radius: 12, x: 0, y: 5, options: .shadowOnly)`, then clears the rect, so nothing paints under a fading surface. The overlay's shadow shares the overlay's fade and hidden-opacity modifiers. Not `hasShadow`: the window server's shadow rims every painted pixel with a dark hairline, shadows the brackets and chips too, and has no per-appearance values. Not `.shadow` in the surface's own panel: its pixels would make the transparent margin take clicks |
 | Selection brackets | A `Bracket: Shape` whose path is four L sub-paths, one per corner. Overlay it stroked twice (halo 3.5 pt in `surface`, then 1.5 pt in `bracket`), with negative padding of `gap + 0.75` (plus the drop rule at the bottom) so it sits outside the frame without changing layout, `allowsHitTesting(false)`, opacity driven by a single `hoveredElement` enum from `.onHover` on the pill, each chip and the card, animated `.linear(duration: 0.06)`. The non-activating panel needs an `NSTrackingArea` with `.activeAlways` |
 | Chip | a `ButtonStyle`: `Rectangle` fill `chip`; `Bracket(len: 6)` at gap 2 on hover; `isPressed` or latched swaps to `inv-bg` with an outer 1 pt `surface` stroke |
 | Trace row | `HStack(alignment: .center)`: the target icon, the `Canvas`, `Spacer`, a 6 pt `Rectangle` (filled or 1.5 pt outline), then the timer `.system(size: 15, weight: .semibold, design: .monospaced)` in a fixed-width trailing frame |
@@ -172,7 +176,7 @@ The full table is in `prototypes/signal/DIRECTION.md`.
 
 **Don't**
 - No corner radius on anything we draw.
-- No gradients, blur, glow, vibrancy, noise, springs or bounces.
+- No gradients, blur, glow, vibrancy, noise, springs or bounces. The floating shadow (§6) is the one blur.
 - No blinking. Status is solid colour and words.
 - No status words for transcribing; the hollow square, frozen timer and sweep carry it.
 - No red, green or amber.

@@ -3909,3 +3909,161 @@ final class SignalTraceLifecycleTests: XCTestCase {
         XCTAssertGreaterThan(less.gate, quiet.gate)
     }
 }
+
+/// The floating shadow (DESIGN.md §6, Atin 2026-09-29): a click-through child panel under each
+/// Signal surface that draws only the soft shadow, and nothing at all when the surface is hidden.
+@MainActor
+final class SignalFloatShadowTests: XCTestCase {
+    private var outputFolder: URL? {
+        ProcessInfo.processInfo.environment["LIQUID_VOICE_RENDER_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
+
+    override func tearDown() {
+        SignalRenderStage.reset()
+        super.tearDown()
+    }
+
+    func testTheShadowPanelIsAClickThroughChildUnderTheOverlayThatFollowsIt() async throws {
+        let controller = BottomOverlayWindowController.shared
+        controller.prepare()
+        let shadow = controller.floatShadow.panelForTests
+        let overlay = try XCTUnwrap(shadow.parent, "attached to the overlay's panel")
+        XCTAssertTrue(shadow.ignoresMouseEvents, "the shadow never takes a click")
+        XCTAssertTrue(overlay.childWindows?.contains(shadow) == true)
+        XCTAssertFalse(shadow.hasShadow)
+
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let margin = SignalFloatShadow.margin
+        XCTAssertEqual(shadow.frame, overlay.frame.insetBy(dx: -margin, dy: -margin), "sized to the overlay plus its margin")
+        XCTAssertEqual(shadow.alphaValue, 1)
+        // The pill reports its own box: rails and the bracket margin to its left, the top margin above.
+        let geometry = SignalOverlayGeometry.forSize(SettingsStore.shared.overlaySize)
+        let insets = SignalTheme.Metrics.windowInsets
+        XCTAssertEqual(
+            controller.floatShadow.state.surface,
+            CGRect(x: insets.leading + SignalTheme.Metrics.chip + SignalTheme.Metrics.railGap, y: insets.top, width: geometry.pillWidth, height: geometry.pillHeight)
+        )
+
+        _ = await controller.hideAndWait()
+        XCTAssertEqual(overlay.alphaValue, 0)
+        XCTAssertEqual(shadow.alphaValue, 0, "alpha 0 casts nothing: the shadow mirrors the overlay's alpha")
+    }
+
+    func testARecoveryCardCastsItsOwnShadowFromItsGrownPill() async throws {
+        let cards = DeliveryFailureOverlayController.shared
+        cards.showTranscriptionTimeout(.timedOut)
+        defer { cards.hide() }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let shadow = cards.floatShadow.panelForTests
+        XCTAssertNotNil(shadow.parent, "attached under the card's panel")
+        XCTAssertTrue(shadow.ignoresMouseEvents)
+        let surface = try XCTUnwrap(cards.floatShadow.state.surface, "the card reports its grown pill")
+        XCTAssertEqual(surface.height, 174, "the one-line card: the pill grown upward to 174")
+        XCTAssertEqual(surface.minX, SignalTheme.Metrics.windowInsets.leading + SignalTheme.Metrics.chip + SignalTheme.Metrics.railGap)
+    }
+
+    func testTheShadowFollowsItsSurfaceAlphaThroughAFade() async throws {
+        let parent = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        let floatShadow = SignalFloatShadow { state in SignalFloatShadowView(state: state) }
+        floatShadow.attach(to: parent)
+        defer { floatShadow.detach() }
+        XCTAssertEqual(floatShadow.panelForTests.frame, NSRect(x: -32, y: -32, width: 264, height: 164))
+        parent.setFrame(NSRect(x: 10, y: 20, width: 300, height: 120), display: false)
+        XCTAssertEqual(floatShadow.panelForTests.frame, NSRect(x: -22, y: -12, width: 364, height: 184), "follows a resize")
+        await withCheckedContinuation { continuation in
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = SignalTheme.Motion.dismiss
+                parent.animator().alphaValue = 0
+            } completionHandler: {
+                continuation.resume()
+            }
+        }
+        XCTAssertEqual(floatShadow.panelForTests.alphaValue, 0, "a card's fade takes its shadow along")
+        parent.alphaValue = 1
+        XCTAssertEqual(floatShadow.panelForTests.alphaValue, 1)
+    }
+
+    private static func pixels(_ view: some View, size: CGSize) throws -> (cg: CGImage, alphaAt: (Int, Int) -> UInt8) {
+        let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height))
+        renderer.scale = 1
+        let image = try XCTUnwrap(renderer.cgImage)
+        let rep = NSBitmapImageRep(cgImage: image)
+        return (image, { x, y in UInt8(((rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) * 255).rounded()) })
+    }
+
+    func testTheShadowPaintsOnlyOutsideTheSurfaceAndNothingWhileHidden() throws {
+        let margin = SignalFloatShadow.margin
+        let surface = CGRect(x: 42, y: 6, width: 340, height: 149)
+        let size = CGSize(width: 424 + 2 * margin, height: 163 + 2 * margin)
+        let state = SignalFloatShadow.State()
+        state.surface = surface
+
+        SignalRenderStage.listening()
+        let shown = try Self.pixels(BottomOverlayShadowView(state: state), size: size)
+        // Under the box: nothing (a fading surface never shows a dark box through).
+        XCTAssertEqual(shown.alphaAt(Int(margin + surface.midX), Int(margin + surface.midY)), 0)
+        // Just below the box: the shadow, deepest there; well clear of it: nothing.
+        let below = shown.alphaAt(Int(margin + surface.midX), Int(margin + surface.maxY + 3))
+        XCTAssertGreaterThan(below, 20)
+        XCTAssertLessThan(below, 110, "subtle")
+        XCTAssertEqual(shown.alphaAt(2, 2), 0)
+
+        NotchContentState.shared.setBottomOverlayPresented(false)
+        let hidden = try Self.pixels(BottomOverlayShadowView(state: state), size: size)
+        let rep = NSBitmapImageRep(cgImage: hidden.cg)
+        var painted = 0
+        for y in stride(from: 0, to: rep.pixelsHigh, by: 2) {
+            for x in stride(from: 0, to: rep.pixelsWide, by: 2) where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0 {
+                painted += 1
+            }
+        }
+        XCTAssertEqual(painted, 0, "a hidden overlay's shadow paints nothing")
+    }
+
+    /// The listening pill and a failed card over their shadow panels, as the window server stacks
+    /// them, beside the same surfaces without it (design/visual-language/native-renders/shadow).
+    func testFloatingShadowRenders() throws {
+        let margin = SignalFloatShadow.margin
+        let transcript = "Okay, take a look at the retry admission path in the queue worker. When the same job ID lands twice inside the lease window we are admitting both and the second one clobbers the first one's checkpoint so I think the fix is to key the admission set."
+        for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+            let theme = appearance == .darkAqua ? "dark" : "light"
+            SignalRenderStage.reset()
+            SignalRenderStage.listening()
+            let pillShadow = SignalFloatShadow.State()
+            pillShadow.surface = CGRect(x: 42, y: 6, width: 340, height: 149)
+            let card = DeliveryFailureCardView(
+                content: SignalCardContent(headline: "Couldn\u{2019}t paste into c11", reason: "No text field focused", transcript: transcript, primary: .copy, meta: "118 words"),
+                icon: NSWorkspace.shared.icon(forFile: "/Applications/c11.app"),
+                timerText: "0:41",
+                microphoneName: "MacBook Pro Microphone",
+                onPrimary: {},
+                onDismiss: {},
+                onHoverChanged: { _ in }
+            )
+            let cardShadow = SignalFloatShadow.State()
+            cardShadow.surface = CGRect(x: 42, y: 6, width: 340, height: 231)
+            let surfaces: [(String, AnyView, SignalFloatShadow.State)] = [
+                ("01-listening", AnyView(BottomOverlayView()), pillShadow),
+                ("07-failed", AnyView(card), cardShadow),
+            ]
+            for (name, surface, state) in surfaces {
+                for withShadow in [false, true] {
+                    let composite = surface
+                        .padding(margin)
+                        .background(alignment: .topLeading) {
+                            if withShadow {
+                                SignalFloatShadowView(state: state).signalPalette()
+                            }
+                        }
+                    let rep = try SignalRenderStage.render(composite, appearance: appearance)
+                    XCTAssertGreaterThan(rep.size.width, 424 + 2 * margin)
+                    if let folder = self.outputFolder {
+                        let file = "\(theme)-\(name)-\(withShadow ? "shadow" : "flat").png"
+                        try SignalRenderStage.write(rep, to: folder.appendingPathComponent("shadow").appendingPathComponent(file))
+                    }
+                }
+            }
+        }
+    }
+}

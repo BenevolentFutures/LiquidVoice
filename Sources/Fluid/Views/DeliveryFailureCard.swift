@@ -155,7 +155,8 @@ final class DeliveryFailureOverlayController {
             microphoneName: BottomOverlayWindowController.cachedMicrophoneName(current: SignalOverlayModel.shared.microphoneName),
             onPrimary: primary,
             onDismiss: { [weak self] in self?.hide() },
-            onHoverChanged: { [weak self] hovering in self?.hoverChanged(hovering) }
+            onHoverChanged: { [weak self] hovering in self?.hoverChanged(hovering) },
+            floatShadow: self.floatShadow.state
         )
         self.present(view, avoidingOverlay: !overlayYielded)
     }
@@ -335,6 +336,9 @@ struct DeliveryFailureCardView: View {
     let onPrimary: () -> Void
     let onDismiss: () -> Void
     let onHoverChanged: (Bool) -> Void
+    /// The card panel's floating shadow, which this card reports its grown pill to. Only the
+    /// card's own panel passes it; a render or another host reports nowhere.
+    var floatShadow: SignalFloatShadow.State?
 
     @ObservedObject private var historyStore = TranscriptionHistoryStore.shared
     @ObservedObject private var historyCard = BottomOverlayHistoryMenuController.shared
@@ -411,7 +415,7 @@ struct DeliveryFailureCardView: View {
                     onDismiss: self.onDismiss
                 )
             }
-            .signalFloatShadowSource(DeliveryFailureOverlayController.shared.floatShadow.state)
+            .signalFloatShadowSource(self.floatShadow)
 
             SignalRail(height: geometry.railHeight) {
                 self.chip("cancel", "xmark", "Dismiss", enabled: true, action: self.onDismiss)

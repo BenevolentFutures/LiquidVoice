@@ -923,7 +923,7 @@ final class BottomOverlayWindowController {
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none
 
-        let contentView = BottomOverlayView()
+        let contentView = BottomOverlayView(floatShadow: self.floatShadow.state)
         let hostingView = BottomOverlayHostingView(rootView: contentView)
 
         // Let SwiftUI determine the size
@@ -1271,6 +1271,7 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
     private func makeMenuContent() -> BottomOverlayHistoryMenuView {
         BottomOverlayHistoryMenuView(
             maxWidth: self.menuMaxWidth,
+            floatShadow: self.floatShadow.state,
             onDismissRequested: { [weak self] in
                 self?.hide()
             }
@@ -1352,6 +1353,8 @@ private struct BottomOverlayHistoryMenuView: View {
     @ObservedObject private var historyStore = TranscriptionHistoryStore.shared
 
     let maxWidth: CGFloat
+    /// The card panel's floating shadow, which the card reports its box to.
+    let floatShadow: SignalFloatShadow.State
     let onDismissRequested: () -> Void
 
     private static let maxEntriesShown = 12
@@ -1370,7 +1373,7 @@ private struct BottomOverlayHistoryMenuView: View {
                 BottomOverlayHistoryMenuController.shared.isHovered = hovering
             }
         )
-        .signalFloatShadowSource(BottomOverlayHistoryMenuController.shared.floatShadow.state)
+        .signalFloatShadowSource(self.floatShadow)
         .padding(SignalTheme.Metrics.windowInsets)
         .signalPalette()
     }

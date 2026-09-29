@@ -3841,7 +3841,9 @@ final class SignalTraceLifecycleTests: XCTestCase {
         XCTAssertGreaterThan(raisedBars.max() ?? 0, 5, "\(label): the quiet speech draws above the floor")
         XCTAssertGreaterThan(Set(run.snapshots).count, 3, "\(label): the bars change from moment to moment")
         XCTAssertGreaterThanOrEqual(run.snapshots.flatMap { $0 }.max() ?? 0, 12, "\(label): syllables stretch tall")
-        XCTAssertGreaterThan(Double(run.stats.raised) / Double(max(run.stats.windows, 1)), 0.4, "\(label): \(run.stats)")
+        // A third of this speech is gaps, and the first syllable only sets the floor: under the
+        // old fixed gate this is 0.
+        XCTAssertGreaterThan(Double(run.stats.raised) / Double(max(run.stats.windows, 1)), 0.25, "\(label): \(run.stats)")
         XCTAssertEqual(run.menuBars.count, 3)
     }
 

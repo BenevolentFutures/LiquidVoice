@@ -30,6 +30,14 @@ struct BottomOverlayView: View {
     @State private var dragStartMouseLocation: NSPoint?
     @State private var dragStartWindowOrigin: NSPoint?
 
+    /// The overlay panel's floating shadow, which the pill reports its box to. Only the overlay's
+    /// own panel passes it; a render or another host reports nowhere.
+    private let floatShadow: SignalFloatShadow.State?
+
+    init(floatShadow: SignalFloatShadow.State? = nil) {
+        self.floatShadow = floatShadow
+    }
+
     /// What the pill shows, from the controller's phase and the shared flags.
     enum Display: Equatable {
         case listening
@@ -328,7 +336,7 @@ struct BottomOverlayView: View {
             BottomOverlayWindowController.shared.cancelSpokenSendIfArmed()
         })
         .help(self.canCancelSend ? "Click to cancel Send" : "")
-        .signalFloatShadowSource(BottomOverlayWindowController.shared.floatShadow.state)
+        .signalFloatShadowSource(self.floatShadow)
     }
 
     @ViewBuilder

@@ -89,11 +89,13 @@ None. Every surface is an opaque fill with a 1 px edge and a flat 2 pt drop rule
 
 The one flourish. Four L marks sit **outside** a box's corners, a gap clear of the edges, arms running along the outside of the two edges. They mark whatever is under the pointer and nothing else.
 
+**Brackets mark only things you can click (Atin, 2026-09-29).** A surface that is not clickable as a whole takes no bracket: not the pill at rest, not a recovery card, not the history card (its rows invert on hover). The one exception is the pill while the SEND placard shows, when a click on it cancels the Return. Recovery-card buttons (Copy, Reprocess, Open System Settings, Try Again, Dismiss) and the notice row's actions take a chip's bracket on hover; the text buttons lose their hover underline, the bracket is their hover mark.
+
 | Element | Gap | Arm | Shows when |
 |---|---|---|---|
-| Pill (and the failed card) | 3 pt (bottom gap measured from the drop rule) | 10 pt | pointer over the pill or the rails' gutter |
+| Pill | 3 pt (bottom gap measured from the drop rule) | 10 pt | pointer over the pill or the rails' gutter, **only while SEND shows** (a click cancels the Return) |
 | Chip | 2 pt | 6 pt | pointer over that chip |
-| History card | 3 pt | 10 pt | pointer over the card |
+| Card button, notice action | 2 pt | 6 pt | pointer over that button |
 | Menu bar mark | inside its 22 × 16 box | 4 pt | pointer over the item, or menu open |
 
 Rules: stroke 1.5 pt in `bracket` over a 1 pt `halo` in the surface colour (without the halo, ink marks vanish over a dark terminal in light mode). Never drawn at rest, never orange, never animated except a 60 ms linear fade in and out. One bracket at a time: over a chip or the card, the pill's hides, because the 6 pt gutter cannot hold two. Brackets never change layout or hit-testing. The window keeps a transparent margin around the visible content so they are not clipped: 6 pt on the top and sides (gap 3 + stroke 1.5 + halo 1 = 5.5) and 8 pt at the bottom, where the bracket also clears the 2 pt drop rule (7.5). The margin paints nothing, so clicks there reach the app beneath.

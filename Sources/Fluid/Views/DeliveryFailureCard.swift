@@ -405,8 +405,9 @@ struct DeliveryFailureCardView: View {
                 ),
                 micText: self.content.isMicrophoneOff ? "No microphone" : (self.microphoneName.isEmpty ? "Microphone" : self.microphoneName),
                 micEmphasized: self.content.isMicrophoneOff,
-                marksFailure: true,
-                isBracketVisible: self.isHovered && self.hoveredChips.isEmpty && !self.historyCard.isHovered
+                // No bracket on the card as a whole: it is not clickable; its buttons and chips are
+                // (DESIGN.md §7, Atin 2026-09-29).
+                marksFailure: true
             ) {
                 SignalCardBody(
                     content: self.content,

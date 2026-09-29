@@ -122,10 +122,12 @@ struct SignalCardBody: View {
                         }
                     }
                     .buttonStyle(SignalPrimaryButtonStyle())
+                    .signalHoverBracket()
                     .help(self.primaryHelp)
                 }
                 Button("Dismiss", action: self.onDismiss)
                     .buttonStyle(SignalTextButtonStyle())
+                    .signalHoverBracket()
                 Spacer(minLength: 0)
                 if !self.content.meta.isEmpty {
                     SignalMonoLabel(text: self.content.meta, color: self.palette.text2)
@@ -185,9 +187,9 @@ struct SignalNoticeRow: View {
                 self.messageText
                 Spacer(minLength: 4)
                 if self.canRetry {
-                    Button("Try Again", action: self.onRetry).buttonStyle(SignalTextButtonStyle())
+                    Button("Try Again", action: self.onRetry).buttonStyle(SignalTextButtonStyle()).signalHoverBracket()
                 }
-                Button("Dismiss", action: self.onDismiss).buttonStyle(SignalTextButtonStyle())
+                Button("Dismiss", action: self.onDismiss).buttonStyle(SignalTextButtonStyle()).signalHoverBracket()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -198,9 +200,11 @@ struct SignalNoticeRow: View {
                     if self.canRetry {
                         Button("Try Again", action: self.onRetry)
                             .buttonStyle(SignalPrimaryButtonStyle())
+                            .signalHoverBracket()
                     }
                     Button("Dismiss", action: self.onDismiss)
                         .buttonStyle(SignalTextButtonStyle())
+                        .signalHoverBracket()
                 }
                 .frame(height: SignalTheme.Metrics.buttonHeight)
             }

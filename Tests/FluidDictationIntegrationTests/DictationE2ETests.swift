@@ -3169,6 +3169,9 @@ enum SignalRenderStage {
         ("02-listening-hover", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionHover = "pill" }),
         ("03-listening-hover-cancel", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionHover = "cancel" }),
         ("04-listening-armed", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionPlacard = .send }),
+        // While SEND shows, a click on the pill cancels the Return: the pill is clickable, so it
+        // takes a bracket (DESIGN.md §7). Hovered at rest (02) it takes none.
+        ("04b-listening-armed-hover", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionPlacard = .send; SignalOverlayModel.shared.inspectionHover = "pill" }),
         ("05-transcribing", { SignalRenderStage.listening(); SignalRenderStage.stop(); NotchContentState.shared.setProcessing(true); SignalOverlayModel.shared.beginTranscribing(); SignalOverlayModel.shared.inspectionSweepProgress = 0.45 }),
         ("06-pasted", { SignalRenderStage.listening(); SignalRenderStage.stop(); SignalOverlayModel.shared.showDelivered(SignalDelivery(appName: "c11", words: 118, method: .paste, sentReturn: false)) }),
         ("13-countdown", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionPlacard = .send; SignalOverlayModel.shared.startSendCountdown(duration: 1.5, at: Date().addingTimeInterval(-0.55)) }),
@@ -3429,6 +3432,14 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         XCTAssertEqual(DeliveryFailureOverlayController.shared.presentedTimeout, .recovered, "the card, as before")
         DeliveryFailureOverlayController.shared.hide()
         _ = await controller.hideAndWait()
+    }
+
+    func testBracketsMarkOnlyWhatYouCanClick() {
+        // The pill at rest is not clickable as a whole: no bracket, hovered or not.
+        XCTAssertFalse(BottomOverlayView.showsPillBracket(isClickable: false, isHovered: true))
+        // While SEND shows a click cancels the Return: the hovered pill takes its bracket.
+        XCTAssertTrue(BottomOverlayView.showsPillBracket(isClickable: true, isHovered: true))
+        XCTAssertFalse(BottomOverlayView.showsPillBracket(isClickable: true, isHovered: false))
     }
 
     func testTheTraceTakesTwelveSamplesASecondAndScrollsThroughSilence() {

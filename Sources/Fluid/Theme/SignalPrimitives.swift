@@ -71,6 +71,18 @@ private struct SignalBracketOverlay: ViewModifier {
     }
 }
 
+private struct SignalHoverBracket: ViewModifier {
+    @State private var isHovered = false
+
+    func body(content: Content) -> some View {
+        content
+            .signalBracket(.chip, visible: self.isHovered)
+            .onHover { hovering in
+                if hovering != self.isHovered { self.isHovered = hovering }
+            }
+    }
+}
+
 /// A Signal surface: an opaque fill, a 1 px edge drawn inside the frame, and the flat,
 /// unblurred 2 pt drop rule under it.
 private struct SignalSurface: ViewModifier {
@@ -101,6 +113,12 @@ extension View {
         self.modifier(SignalBracketOverlay(spec: spec, isVisible: visible))
     }
 
+    /// A chip's outside bracket while the pointer is over this control: for a button that has no
+    /// hover bracket of its own (DESIGN.md §7: brackets mark only what you can click).
+    func signalHoverBracket() -> some View {
+        self.modifier(SignalHoverBracket())
+    }
+
     /// Fill, 1 px edge and drop rule (DESIGN.md §6: no materials).
     func signalSurface(edge: Bool = true, drop: Bool = true) -> some View {
         self.modifier(SignalSurface(hasEdge: edge, hasDrop: drop))
@@ -127,19 +145,17 @@ struct SignalPrimaryButtonStyle: ButtonStyle {
     }
 }
 
-/// A text-only action ("Dismiss"): ink, underlined on hover, orange while pressed.
+/// A text-only action ("Dismiss"): ink, orange while pressed; its hover mark is a chip bracket
+/// (`signalHoverBracket`, DESIGN.md §7).
 struct SignalTextButtonStyle: ButtonStyle {
     @Environment(\.signalPalette) private var palette
-    @State private var isHovered = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(SignalTheme.Typography.textButton.font)
             .foregroundStyle(configuration.isPressed ? self.palette.accent : self.palette.text)
-            .underline(self.isHovered, color: configuration.isPressed ? self.palette.accent : self.palette.text)
             .frame(height: SignalTheme.Metrics.buttonHeight)
             .contentShape(Rectangle())
-            .onHover { self.isHovered = $0 }
     }
 }
 

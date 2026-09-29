@@ -191,8 +191,6 @@ enum SignalTheme {
         static let micRowHeight: CGFloat = 13
         static let pillPaddingBottom: CGFloat = 10
         static let pillPaddingHorizontal: CGFloat = 18
-        /// The failed card: the pill grown upward by this much (210 vs 149).
-        static let failedGrowth: CGFloat = 61
         static let edgeWidth: CGFloat = 1
         static let dropRule: CGFloat = 2
         /// The failed card's top rule.
@@ -202,9 +200,10 @@ enum SignalTheme {
         static let railGap: CGFloat = 6
         static let chip: CGFloat = 30
         static let chipGlyphSize: CGFloat = 13
-        /// Every window that draws brackets is this much larger than its content on every side,
-        /// so a bracket outside a box is never clipped.
-        static let windowInset: CGFloat = 6
+        /// Every window that draws brackets keeps this transparent margin around its content, so
+        /// a bracket outside a box is never clipped: 6 pt on the sides and top (gap 3 + stroke 1.5
+        /// + halo 1 = 5.5), 8 at the bottom, where the bracket also clears the 2 pt drop rule (7.5).
+        static let windowInsets = EdgeInsets(top: 6, leading: 6, bottom: 8, trailing: 6)
 
         // Trace row: icon, trace, record square, timer.
         static let targetIcon: CGFloat = 20

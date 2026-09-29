@@ -606,14 +606,21 @@ final class TypingService {
         transcript: String,
         inHistory: Bool,
         since revision: Int? = nil,
-        pasteSession: ClipboardPasteSession = .shared
+        pasteSession: ClipboardPasteSession = .shared,
+        traceID: Int? = nil
     ) {
         DeliveryLog.bench("delivery_failed reason=\(failure.rawValue) chars=\(transcript.count)")
         DeliveryLog.warning("Text delivery failed reason=\(failure.rawValue) chars=\(transcript.count)")
         guard failure.isUserVisible, !transcript.isEmpty else { return }
         pasteSession.keepTranscript(transcript, since: revision) { outcome in
             DeliveryLog.info("delivery_failure_transcript_kept clipboard=\(outcome.rawValue) inHistory=\(inHistory)")
-            let report = DeliveryFailureReport(failure: failure, transcript: transcript, clipboard: outcome, inHistory: inHistory)
+            let report = DeliveryFailureReport(
+                failure: failure,
+                transcript: transcript,
+                clipboard: outcome,
+                inHistory: inHistory,
+                traceID: traceID
+            )
             Task { @MainActor in
                 TypingService.deliveryFailureHandler(report)
             }
@@ -697,7 +704,7 @@ final class TypingService {
         guard AXIsProcessTrusted() else {
             self.decision("request_return reason=accessibility_not_trusted")
             self.log("[TypingService] ERROR: Accessibility permissions required for text injection")
-            Self.reportDeliveryFailure(.accessibilityNotTrusted, transcript: text, inHistory: transcriptInHistory, pasteSession: self.pasteSession)
+            Self.reportDeliveryFailure(.accessibilityNotTrusted, transcript: text, inHistory: transcriptInHistory, pasteSession: self.pasteSession, traceID: stopTrace?.id)
             stopTrace?.finish(outcome: TextDeliveryFailure.accessibilityNotTrusted.rawValue)
             Self.reportDictationOutcome(.recoverableFailure(.accessibilityNotTrusted), path: nil, sendKey: nil, stopTrace: stopTrace)
             completion?(.recoverableFailure(.accessibilityNotTrusted))
@@ -794,7 +801,7 @@ final class TypingService {
                 "insert_return result=\(Self.describe(result)) elapsedMs=\(Self.elapsedMs(since: insertStartedAt)) totalMs=\(Self.elapsedMs(since: requestedAt))"
             )
             if case let .recoverableFailure(failure) = result {
-                Self.reportDeliveryFailure(failure, transcript: text, inHistory: transcriptInHistory, pasteSession: self.pasteSession)
+                Self.reportDeliveryFailure(failure, transcript: text, inHistory: transcriptInHistory, pasteSession: self.pasteSession, traceID: stopTrace?.id)
             } else if tracksDictionaryCorrections, sendKey == nil {
                 // Not after a send key: the field empties on submit and the tracker would misread it.
                 Task { @MainActor in
@@ -1006,7 +1013,8 @@ final class TypingService {
                     pastedAt: ProcessInfo.processInfo.systemUptime,
                     pasteRevision: self.pasteSession.changeCount,
                     transcriptInHistory: transcriptInHistory,
-                    pasteSession: self.pasteSession
+                    pasteSession: self.pasteSession,
+                    traceID: StopPathTrace.current?.id
                 )
             }
             guard let sendKey, let sendStep else { return (.dispatched, sendKeyOutcome, path) }
@@ -1151,7 +1159,8 @@ final class TypingService {
         pastedAt: TimeInterval,
         pasteRevision: Int,
         transcriptInHistory: Bool,
-        pasteSession: ClipboardPasteSession
+        pasteSession: ClipboardPasteSession,
+        traceID: Int?
     ) {
         Task.detached(priority: .utility) {
             var verdict = await PasteVerifier.verify(before: before, pastedText: text)
@@ -1175,7 +1184,8 @@ final class TypingService {
                 transcript: text,
                 inHistory: transcriptInHistory,
                 since: pasteRevision,
-                pasteSession: pasteSession
+                pasteSession: pasteSession,
+                traceID: traceID
             )
         }
     }

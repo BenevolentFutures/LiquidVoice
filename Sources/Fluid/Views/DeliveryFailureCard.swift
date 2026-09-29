@@ -44,7 +44,7 @@ final class DeliveryFailureOverlayController {
         let transcript = report.transcript
         guard failure.isUserVisible else { return }
         let reason = Self.reasonText(failure: failure, clipboard: report.clipboard, inHistory: report.inHistory)
-        let appName = BottomOverlayWindowController.shared.pendingDeliveryAppName
+        let appName = BottomOverlayWindowController.shared.heldDictationAppName(forDictation: report.traceID)
         let isAccessibility = failure == .accessibilityNotTrusted
         let words = SignalOverlayModel.wordCount(transcript)
         let content = SignalCardContent(
@@ -58,7 +58,9 @@ final class DeliveryFailureOverlayController {
             primary: isAccessibility ? .openSystemSettings : .copy,
             meta: "\(words) \(words == 1 ? "word" : "words")"
         )
-        self.present(content) { [weak self] in
+        self.present(content, yieldOverlay: {
+            BottomOverlayWindowController.shared.yieldToCard(forDictation: report.traceID)
+        }) { [weak self] in
             if isAccessibility {
                 if let url = Self.accessibilitySettingsURL { NSWorkspace.shared.open(url) }
                 self?.hide()
@@ -92,7 +94,10 @@ final class DeliveryFailureOverlayController {
         case .reprocessUnavailable:
             SignalCardContent(headline: "Speech recognition is recovering", reason: "Your audio is kept. Reprocess again in a moment", primary: .reprocess)
         }
-        self.present(content) { [weak self] in
+        let refusedStart: Bool = if case .recordingRefused = notice { true } else { false }
+        self.present(content, yieldOverlay: {
+            BottomOverlayWindowController.shared.yieldToNoticeCard(refusedStart: refusedStart)
+        }) { [weak self] in
             // Reprocess: the same path as the overlay's Reprocess chip and hotkey.
             NotchContentState.shared.onReprocessLastRequested?()
             self?.hide()
@@ -110,7 +115,7 @@ final class DeliveryFailureOverlayController {
             primary: .openSystemSettings,
             isMicrophoneOff: true
         )
-        self.present(content) { [weak self] in
+        self.present(content, yieldOverlay: { BottomOverlayWindowController.shared.yieldToNoticeCard() }) { [weak self] in
             if let url = Self.microphoneSettingsURL { NSWorkspace.shared.open(url) }
             self?.hide()
         }
@@ -118,16 +123,16 @@ final class DeliveryFailureOverlayController {
         DebugLogger.shared.info("Microphone access card shown", source: "DeliveryFailureCard")
     }
 
-    private func present(_ content: SignalCardContent, primary: @escaping () -> Void) {
-        // The overlay holding this dictation gives way at once, so the card reads as the pill
-        // growing upward; a live recording stays and the card sits above it.
-        let overlayYielded = BottomOverlayWindowController.shared.yieldToCard()
+    /// `yieldOverlay`: asks the overlay to give way (a cut) when the card is about the dictation it
+    /// is holding, so the card reads as the pill growing upward; otherwise the card sits above it.
+    private func present(_ content: SignalCardContent, yieldOverlay: () -> Bool, primary: @escaping () -> Void) {
+        let overlayYielded = yieldOverlay()
         let model = SignalOverlayModel.shared
         let view = DeliveryFailureCardView(
             content: content,
             icon: NotchContentState.shared.targetAppIcon ?? ActiveAppMonitor.shared.activeAppIcon,
             timerText: model.lastRecording.map { SignalOverlayModel.formatDuration($0.duration) } ?? "0:00",
-            microphoneName: BottomOverlayWindowController.currentMicrophoneName(),
+            microphoneName: BottomOverlayWindowController.cachedMicrophoneName(current: SignalOverlayModel.shared.microphoneName),
             onPrimary: primary,
             onDismiss: { [weak self] in self?.hide() },
             onHoverChanged: { [weak self] hovering in self?.hoverChanged(hovering) }
@@ -154,6 +159,8 @@ final class DeliveryFailureOverlayController {
         hostingView.layer?.backgroundColor = .clear
         panel.contentView = hostingView
         self.hostingView = hostingView
+        // A card replacing one that was fading out starts opaque.
+        panel.alphaValue = 1
         self.positionPanel(avoidingOverlay: avoidingOverlay)
         panel.orderFrontRegardless()
         self.scheduleDismiss(after: Self.displayDuration)
@@ -183,7 +190,24 @@ final class DeliveryFailureOverlayController {
         self.presentedTranscript = nil
         self.presentedTimeout = nil
         self.presentedMicrophoneAccessNeeded = false
-        self.panel?.orderOut(nil)
+        guard let panel = self.panel, panel.isVisible, !SignalTheme.Motion.isReduced else {
+            self.panel?.orderOut(nil)
+            return
+        }
+        // Dismiss like the overlay: 120 ms linear to transparent, then out of the window list
+        // (a cut under reduced motion). A card presented meanwhile keeps the panel.
+        let generation = self.generation
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = SignalTheme.Motion.dismiss
+            context.timingFunction = CAMediaTimingFunction(name: .linear)
+            panel.animator().alphaValue = 0
+        } completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.generation == generation else { return }
+                panel.orderOut(nil)
+                panel.alphaValue = 1
+            }
+        }
     }
 
     private func hoverChanged(_ hovering: Bool) {
@@ -374,7 +398,7 @@ struct DeliveryFailureCardView: View {
             self.isHovered = hovering
             self.onHoverChanged(hovering)
         }
-        .padding(SignalTheme.Metrics.windowInset)
+        .padding(SignalTheme.Metrics.windowInsets)
         .signalPalette()
         .onAppear {
             if self.trace.barCount != geometry.traceBars {

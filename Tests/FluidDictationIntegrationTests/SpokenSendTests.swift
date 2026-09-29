@@ -929,6 +929,56 @@ final class SpokenSendControllerTests: XCTestCase {
         XCTAssertFalse(decision.shouldSend)
     }
 
+    /// Esc, the Cancel chip or a click on the pill while SEND shows drops only the Return; a second
+    /// cancel then cancels the dictation (the routing reads `cancelsReturnFirst`). Each phase:
+    func testACancelWhileSendShowsDropsOnlyTheReturnInEveryPhase() async {
+        // Armed (no pause countdown), while listening.
+        self.config.stopsAfterPause = false
+        self.controller.handlePartial("Ship it, send it")
+        XCTAssertEqual(self.controller.indicator, .armed)
+        XCTAssertTrue(self.controller.cancelsReturnFirst)
+        XCTAssertTrue(self.controller.cancelSend())
+        XCTAssertFalse(self.controller.cancelsReturnFirst, "the second cancel goes to the dictation")
+        XCTAssertFalse(self.controller.cancelSend())
+
+        // Counting down.
+        self.controller.beginRecording()
+        self.config.stopsAfterPause = true
+        self.controller.handlePartial("Ship it, send it")
+        XCTAssertEqual(self.controller.indicator, .countingDown)
+        XCTAssertTrue(self.controller.cancelsReturnFirst)
+        XCTAssertTrue(self.controller.cancelSend())
+        await self.letCountdownRunOut()
+        XCTAssertEqual(self.stops, 0, "the countdown no longer stops the dictation")
+
+        // Stopped and transcribing: the stop has begun, the decision has not been made.
+        self.controller.beginRecording()
+        self.controller.handlePartial("Ship it, send it")
+        let stop = self.controller.beginStop()
+        XCTAssertTrue(self.controller.cancelsReturnFirst)
+        XCTAssertTrue(self.controller.cancelSend())
+        let decision = self.controller.finishDictation("Ship it, send it.", stop: stop, target: nil, isNormalRoute: true)
+        XCTAssertFalse(decision.shouldSend)
+
+        // Once decided, nothing is left to cancel: a cancel goes to whatever else is on screen.
+        self.controller.beginRecording()
+        self.controller.handlePartial("Ship it, send it")
+        let decided = self.controller.beginStop()
+        _ = self.controller.finishDictation("Ship it, send it.", stop: decided, target: nil, isNormalRoute: true)
+        XCTAssertFalse(self.controller.cancelsReturnFirst)
+        XCTAssertFalse(self.controller.cancelSend())
+    }
+
+    /// A terminal that never gets Return shows NO SEND from the start: a cancel there cancels the
+    /// dictation, since no Return is pending.
+    func testNoReturnIsPendingInATerminalThatNeverGetsOne() {
+        self.recordingApp = ("com.apple.Terminal", "Terminal")
+        self.config.stopsAfterPause = false
+        self.controller.handlePartial("echo hello send it")
+        XCTAssertFalse(self.controller.sendsInRecordingApp)
+        XCTAssertFalse(self.controller.cancelsReturnFirst)
+    }
+
     func testStoppingEndsTheCountdown() async {
         self.controller.handlePartial("Ship it, send it")
         XCTAssertEqual(self.controller.indicator, .countingDown)

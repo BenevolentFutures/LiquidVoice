@@ -53,8 +53,8 @@ struct SignalHistoryCard: View {
             Spacer(minLength: 8)
             self.label("Click to insert", color: self.palette.text2)
         }
-        .padding(.horizontal, self.metrics.historyPaddingHorizontal - 1)
-        .frame(height: self.metrics.historyHeader - 1)
+        .padding(.horizontal, self.metrics.historyPaddingHorizontal)
+        .frame(height: self.metrics.historyHeader)
         .overlay(alignment: .bottom) { self.rule }
     }
 
@@ -64,7 +64,7 @@ struct SignalHistoryCard: View {
                 "History · \(self.entries.count) of \(self.totalCount) · Newest first",
                 color: self.palette.text2
             )
-            .padding(.horizontal, self.metrics.historyPaddingHorizontal - 1)
+            .padding(.horizontal, self.metrics.historyPaddingHorizontal)
             .frame(maxHeight: .infinity)
             Spacer(minLength: 0)
             self.label("Liquid Voice", color: self.palette.text, weight: .semibold)
@@ -72,7 +72,7 @@ struct SignalHistoryCard: View {
                 .frame(maxHeight: .infinity)
                 .overlay(alignment: .leading) { self.verticalRule }
         }
-        .frame(height: self.metrics.historyFooter - 1)
+        .frame(height: self.metrics.historyFooter)
         .overlay(alignment: .top) { self.rule }
     }
 
@@ -97,8 +97,9 @@ struct SignalHistoryCard: View {
     // MARK: List
 
     /// Header, footer and the edge leave this much of the 480 for the list.
+    /// The 480 pt card less its 1 px border, header and footer.
     private var maxListHeight: CGFloat {
-        self.metrics.historyMaxHeight - self.metrics.historyHeader - self.metrics.historyFooter
+        self.metrics.historyMaxHeight - 2 * SignalTheme.Metrics.edgeWidth - self.metrics.historyHeader - self.metrics.historyFooter
     }
 
     @ViewBuilder
@@ -129,7 +130,7 @@ struct SignalHistoryCard: View {
                     .font(SignalTheme.Typography.historyTranscript.font)
                     .foregroundStyle(self.palette.text2)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, self.metrics.historyPaddingHorizontal - 1)
+                    .padding(.horizontal, self.metrics.historyPaddingHorizontal)
                     .frame(height: 44)
             }
             ForEach(Array(self.dayGroups.enumerated()), id: \.offset) { groupIndex, group in
@@ -162,7 +163,7 @@ struct SignalHistoryCard: View {
     private func dayRow(_ title: String, isFirst: Bool) -> some View {
         self.label(title, color: self.palette.text2)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, self.metrics.historyPaddingHorizontal - 1)
+            .padding(.horizontal, self.metrics.historyPaddingHorizontal)
             .frame(height: self.metrics.historyDayRow)
             .overlay(alignment: .top) {
                 if !isFirst { self.rule }
@@ -220,7 +221,7 @@ struct SignalHistoryCard: View {
             }
             .padding(.top, 11)
             .padding(.bottom, 12)
-            .padding(.horizontal, self.metrics.historyPaddingHorizontal - 1)
+            .padding(.horizontal, self.metrics.historyPaddingHorizontal)
             .background(isHovered ? self.palette.invBackground : Color.clear)
             .overlay(alignment: .top) { self.rule }
             .contentShape(Rectangle())

@@ -2997,7 +2997,7 @@ final class SignalOverlayRenderTests: XCTestCase {
                 )
                 XCTAssertEqual(content.height(width: 304) + 12 + 6 + 50 + 4 + 13 + 10, pillHeight, "\(name)")
                 let rep = try SignalRenderStage.render(card, appearance: appearance)
-                XCTAssertEqual(rep.size.height, pillHeight + 12 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
+                XCTAssertEqual(rep.size.height, pillHeight + 14 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
                 if let folder = self.outputFolder {
                     try SignalRenderStage.write(rep, to: folder.appendingPathComponent("\(theme)-\(name).png"))
                 }
@@ -3089,16 +3089,17 @@ final class SignalOverlayRenderTests: XCTestCase {
                     isStatic: true,
                     onPick: { _ in }
                 )
-                // The card's box sits 6 pt above the History chip, on its leading edge; both views
-                // carry the 6 pt bracket margin, so they overlap by it.
-                let composite = VStack(alignment: .leading, spacing: -SignalTheme.Metrics.windowInset) {
-                    card.padding(SignalTheme.Metrics.windowInset).signalPalette()
+                // The card's box sits 6 pt above the History chip, on its leading edge. The card
+                // view's bottom margin (8) and the overlay's top margin (6) overlap by 8.
+                let insets = SignalTheme.Metrics.windowInsets
+                let composite = VStack(alignment: .leading, spacing: -insets.bottom) {
+                    card.padding(insets).signalPalette()
                     BottomOverlayView()
                 }
                 let rep = try SignalRenderStage.render(composite, appearance: appearance)
                 XCTAssertEqual(rep.size.width, 480 + 12 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
                 // The card at its 480 maximum over the overlay (161), overlapping by the 6 pt margin.
-                XCTAssertLessThanOrEqual(rep.size.height, 480 + 12 + 161 - 6 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
+                XCTAssertLessThanOrEqual(rep.size.height, 480 + 14 + 163 - 8 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
                 if let folder = self.outputFolder {
                     try SignalRenderStage.write(rep, to: folder.appendingPathComponent("\(theme)-\(name).png"))
                 }
@@ -3115,7 +3116,7 @@ final class SignalOverlayRenderTests: XCTestCase {
                 let rep = try SignalRenderStage.render(BottomOverlayView(), appearance: appearance)
                 // Rails (30 + 6) either side of the 340 pill, plus the 6 pt bracket margin.
                 XCTAssertEqual(rep.size.width, 6 + 30 + 6 + 340 + 6 + 30 + 6 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
-                XCTAssertEqual(rep.size.height, 149 + 12 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
+                XCTAssertEqual(rep.size.height, 149 + 14 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
                 if let folder = self.outputFolder {
                     try SignalRenderStage.write(rep, to: folder.appendingPathComponent("\(theme)-\(name).png"))
                 }
@@ -3348,6 +3349,10 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         XCTAssertTrue(BottomOverlayView.isChipInert(.cancel, display: .stopped))
         XCTAssertTrue(BottomOverlayView.isChipInert(.cancel, display: .transcribing))
         XCTAssertFalse(BottomOverlayView.isChipInert(.history, display: .stopped))
+        // While SEND shows, Cancel still has a Return to drop after the stop.
+        XCTAssertFalse(BottomOverlayView.isChipInert(.cancel, display: .stopped, sendShows: true))
+        XCTAssertFalse(BottomOverlayView.isChipInert(.cancel, display: .transcribing, sendShows: true))
+        XCTAssertTrue(BottomOverlayView.isChipInert(.cancel, display: delivered, sendShows: true))
         // Transcribing: they dim instead.
         XCTAssertFalse(BottomOverlayView.isChipEnabled(.historyAction, display: .transcribing, hasHistory: true))
         XCTAssertTrue(BottomOverlayView.isChipEnabled(.historyAction, display: .listening, hasHistory: true))
@@ -3435,7 +3440,8 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         XCTAssertEqual(height(12), 480, accuracy: 1, "capped at 480; the list scrolls")
     }
 
-    /// A card for another dictation (a late Paste Check miss) never takes over a held outcome.
+    /// A card for another dictation never takes over a held outcome, and a failure that is not a
+    /// dictation's (a history paste) never does either.
     func testALateCardForAnotherDictationDoesNotTakeOverTheHold() async {
         let controller = BottomOverlayWindowController.shared
         controller.prepare()
@@ -3443,9 +3449,89 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
         controller.markRecordingStopped()
         controller.awaitDelivery(traceID: 9, appName: "c11", words: 2, failureReported: false)
-        XCTAssertNil(controller.pendingDeliveryAppName, "no failure awaited, so no card borrows the name")
-        XCTAssertFalse(controller.yieldToCard())
+        XCTAssertNil(controller.heldDictationAppName(forDictation: 8), "another dictation never borrows the name")
+        XCTAssertFalse(controller.yieldToCard(forDictation: 8))
+        XCTAssertFalse(controller.yieldToCard(forDictation: nil))
         XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented)
+        _ = await controller.hideAndWait()
+    }
+
+    /// A late Paste Check miss for the dictation whose Pasted is on screen replaces it with its
+    /// card, instead of showing Pasted and Couldn't paste at once.
+    func testALatePasteCheckMissReplacesThatDictationsPasted() async throws {
+        let controller = BottomOverlayWindowController.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        controller.markRecordingStopped()
+        controller.awaitDelivery(traceID: 31, appName: "TextEdit", words: 4, failureReported: false)
+        controller.dictationDeliveryFinished(DictationDeliveryOutcome(traceID: 31, result: .dispatched, method: .paste, sentReturn: false))
+        XCTAssertTrue(SignalOverlayModel.shared.isDelivered)
+        XCTAssertEqual(controller.heldDictationAppName(forDictation: 31), "TextEdit")
+        XCTAssertTrue(controller.yieldToCard(forDictation: 31))
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented, "a cut: the card takes the pill's place")
+    }
+
+    /// The transcription timed out while the pill was held after the stop: the timeout card takes
+    /// its place (a cut) instead of sitting above a frozen pill.
+    func testATimeoutCardReplacesTheHeldPill() async throws {
+        let controller = BottomOverlayWindowController.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        XCTAssertFalse(controller.yieldToNoticeCard(), "a live recording stays")
+        controller.markRecordingStopped()
+        DeliveryFailureOverlayController.shared.showTranscriptionTimeout(.timedOut)
+        defer { DeliveryFailureOverlayController.shared.hide() }
+        XCTAssertEqual(DeliveryFailureOverlayController.shared.presentedTimeout, .timedOut)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
+        XCTAssertEqual(controller.windowStateForTests?.alpha, 0)
+        XCTAssertEqual(TestHostQuietModeTests.onScreenWindowCount(), 0)
+    }
+
+    /// A start refused while the model recovers: the pill shown for it gives way to the card; a
+    /// "recognition is back" notice never hides a pill that is not held after a stop.
+    func testARefusedStartCardReplacesItsPillButOtherNoticesDoNot() async throws {
+        let controller = BottomOverlayWindowController.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        XCTAssertFalse(controller.yieldToNoticeCard(refusedStart: false))
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented)
+        XCTAssertTrue(controller.yieldToNoticeCard(refusedStart: true), "no capture ever started")
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
+    }
+
+    /// A new recording during the hold or the fade cancels the old timers: nothing from the
+    /// previous dictation hides the new pill.
+    func testShowDuringTheHoldOrFadeCancelsTheOldTimers() async throws {
+        let controller = BottomOverlayWindowController.shared
+        let publisher = Just(CGFloat.zero).eraseToAnyPublisher()
+        controller.prepare()
+        await Task.yield()
+        // During the hold.
+        controller.show(audioPublisher: publisher, mode: .dictation)
+        controller.markRecordingStopped()
+        controller.awaitDelivery(traceID: 51, appName: "c11", words: 1, failureReported: false)
+        controller.dictationDeliveryFinished(DictationDeliveryOutcome(traceID: 51, result: .dispatched, method: .paste, sentReturn: false))
+        controller.show(audioPublisher: publisher, mode: .dictation)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented, "the old hold's end must not hide the new pill")
+        XCTAssertEqual(SignalOverlayModel.shared.phase, .listening)
+        // During the fade.
+        controller.markRecordingStopped()
+        let fade = Task { @MainActor in await controller.hideAndWait() }
+        await Task.yield()
+        controller.show(audioPublisher: publisher, mode: .dictation)
+        let outcome = await fade.value
+        XCTAssertEqual(outcome, .superseded)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented)
+        XCTAssertFalse(SignalOverlayModel.shared.isFading)
+        XCTAssertEqual(controller.windowStateForTests?.alpha, 1)
         _ = await controller.hideAndWait()
     }
 
@@ -3456,17 +3542,81 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         controller.prepare()
         await Task.yield()
         controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
-        XCTAssertFalse(controller.yieldToCard(), "a live recording stays; the card sits above it")
+        XCTAssertFalse(controller.yieldToCard(forDictation: 77), "a live recording stays; the card sits above it")
         XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented)
 
         controller.markRecordingStopped()
         controller.awaitDelivery(traceID: 77, appName: "c11", words: 3, failureReported: false)
         controller.dictationDeliveryFinished(DictationDeliveryOutcome(traceID: 77, result: .recoverableFailure(.pasteNotLanded), method: nil, sentReturn: false))
         XCTAssertEqual(SignalOverlayModel.shared.phase, .stopped, "waits for the card, never shows an outcome")
-        XCTAssertEqual(controller.pendingDeliveryAppName, "c11")
-        XCTAssertTrue(controller.yieldToCard())
+        XCTAssertEqual(controller.heldDictationAppName(forDictation: 77), "c11")
+        XCTAssertTrue(controller.yieldToCard(forDictation: 77))
         try await Task.sleep(nanoseconds: 100_000_000)
         XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented, "a cut, no 120 ms fade")
         XCTAssertEqual(controller.windowStateForTests?.alpha, 0)
+    }
+}
+
+/// Opt-in: where the offscreen park lands relative to a start about 1.5 s after a paste, and how
+/// long the start and the main thread take around it. TEST_RUNNER_LIQUID_VOICE_PARK_BENCH=<delay>
+/// sets the idle parking delay in seconds (0 reproduces the old park right after the handoff).
+/// The test host's panel is never on screen (quiet mode), so the WindowServer fence itself cannot
+/// occur here; the probe measures the timing and the main-thread cost that can be measured.
+@MainActor
+final class OverlayParkTimingBenchmarkTests: XCTestCase {
+    func testWhereTheParkLandsAroundTheNextStart() async throws {
+        guard let value = ProcessInfo.processInfo.environment["LIQUID_VOICE_PARK_BENCH"], let delay = Double(value) else {
+            throw XCTSkip("Set TEST_RUNNER_LIQUID_VOICE_PARK_BENCH=<idle parking delay> to run.")
+        }
+        let controller = BottomOverlayWindowController.shared
+        let publisher = Just(CGFloat.zero).eraseToAnyPublisher()
+        let savedDelay = BottomOverlayWindowController.idleParkingDelay
+        BottomOverlayWindowController.idleParkingDelay = delay
+        defer { BottomOverlayWindowController.idleParkingDelay = savedDelay }
+        controller.prepare()
+        await Task.yield()
+
+        var showMs: [Double] = []
+        var stallMs: [Double] = []
+        var parkedBeforeStart = 0
+        for run in 0..<5 {
+            controller.show(audioPublisher: publisher, mode: .dictation)
+            controller.markRecordingStopped()
+            controller.awaitDelivery(traceID: 7000 + run, appName: "c11", words: 3, failureReported: false)
+            let pastedAt = ProcessInfo.processInfo.systemUptime
+            controller.dictationDeliveryFinished(DictationDeliveryOutcome(traceID: 7000 + run, result: .dispatched, method: .paste, sentReturn: false))
+
+            // Watch the main thread from 1.2 s to 1.8 s after the paste: a 1 ms timer's lateness.
+            var worstLateness = 0.0
+            var last = ProcessInfo.processInfo.systemUptime
+            let probe = Timer(timeInterval: 0.001, repeats: true) { _ in
+                let now = ProcessInfo.processInfo.systemUptime
+                if now - pastedAt > 1.2, now - pastedAt < 1.8 { worstLateness = max(worstLateness, now - last - 0.001) }
+                last = now
+            }
+            RunLoop.main.add(probe, forMode: .common)
+            while ProcessInfo.processInfo.systemUptime - pastedAt < 1.5 {
+                try await Task.sleep(nanoseconds: 5_000_000)
+            }
+            if controller.windowStateForTests?.isParkedOffscreen == true { parkedBeforeStart += 1 }
+            // The hotkey: the overlay's part of the start path.
+            let started = ProcessInfo.processInfo.systemUptime
+            controller.show(audioPublisher: publisher, mode: .dictation)
+            showMs.append((ProcessInfo.processInfo.systemUptime - started) * 1000)
+            while ProcessInfo.processInfo.systemUptime - pastedAt < 1.8 {
+                try await Task.sleep(nanoseconds: 5_000_000)
+            }
+            probe.invalidate()
+            stallMs.append(worstLateness * 1000)
+            _ = await controller.hideAndWait()
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        func median(_ values: [Double]) -> Double { values.sorted()[values.count / 2] }
+        let line = String(
+            format: "PARK_BENCH idleDelay=%.1fs runs=5 parkedBeforeStartAt1.5s=%d showMedianMs=%.2f showMaxMs=%.2f mainStallMedianMs=%.2f mainStallMaxMs=%.2f",
+            delay, parkedBeforeStart, median(showMs), showMs.max() ?? 0, median(stallMs), stallMs.max() ?? 0
+        )
+        print(line)
+        DebugLogger.shared.info(line, source: "OverlayParkBenchmark")
     }
 }

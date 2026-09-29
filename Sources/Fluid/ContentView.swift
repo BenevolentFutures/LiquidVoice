@@ -2595,7 +2595,7 @@ struct ContentView: View {
                 // The field chosen at stop could not be brought back. Typing into whatever
                 // has focus now could land the text in the wrong place, so keep it instead.
                 traceOutcome = "target_restore_failed"
-                TypingService.reportDeliveryFailure(.targetRestoreFailed, transcript: finalText, inHistory: isInHistory)
+                TypingService.reportDeliveryFailure(.targetRestoreFailed, transcript: finalText, inHistory: isInHistory, traceID: trace.id)
             }
             didTypeExternally = true
             if !shouldShowAIProcessingFailure, !didRequestOverlayHideOnStop {
@@ -3756,11 +3756,11 @@ struct ContentView: View {
     private func handleCancelShortcut() -> Bool {
         var handled = false
 
-        // During Spoken Send's quiet countdown, cancel means "don't press Return": the dictation
-        // goes on (DESIGN.md §15: the pill, the Cancel chip or Esc cancel the send).
-        if SpokenSendController.shared.indicator == .countingDown {
-            DebugLogger.shared.debug("Cancel shortcut: canceling the Spoken Send countdown", source: "ContentView")
-            SpokenSendController.shared.cancelSend()
+        // While SEND shows (armed, counting down, or stopped and transcribing), cancel means
+        // "don't press Return" and the dictation goes on; a second cancel then cancels it. A stray
+        // Esc never throws away a long dictation (DESIGN.md §15).
+        if BottomOverlayWindowController.shared.cancelSpokenSendIfArmed() {
+            DebugLogger.shared.debug("Cancel shortcut: canceled the Spoken Send Return", source: "ContentView")
             return true
         }
 

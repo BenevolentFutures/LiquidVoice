@@ -473,13 +473,15 @@ final class HotkeyShortcutTests: XCTestCase {
     }
 
     /// Hiding sets alpha 0 at once (no WindowServer fence on the stop path) and parks the panel
-    /// offscreen right after the stop pipeline hands its text off, so it cannot take clicks meant
-    /// for the app beneath. ignoresMouseEvents is never set: once set, the pill's transparent
-    /// margin would take clicks for good.
+    /// offscreen later, never while a stop pipeline runs (the idle delay is 8 s in the app, 0 here).
+    /// Hidden already takes no clicks: nothing is painted. ignoresMouseEvents is never set: once
+    /// set, the pill's transparent margin would take clicks for good.
     @MainActor
     func testBottomOverlayHidesByAlphaThenParksAfterTheHandoff() async throws {
         let audioPublisher = Just(CGFloat.zero).eraseToAnyPublisher()
         let controller = BottomOverlayWindowController.shared
+        BottomOverlayWindowController.idleParkingDelay = 0
+        defer { BottomOverlayWindowController.idleParkingDelay = 8 }
 
         controller.prepare()
         await Task.yield()
@@ -502,7 +504,9 @@ final class HotkeyShortcutTests: XCTestCase {
         XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented, "controls are inert while hidden")
 
         // The text was handed off: parked offscreen, where no click can reach it.
+        try await Task.sleep(nanoseconds: 30_000_000)
         StopPipelineWindowWork.release()
+        try await Task.sleep(nanoseconds: 30_000_000)
         let parked = try XCTUnwrap(controller.windowStateForTests)
         XCTAssertTrue(parked.isParkedOffscreen)
         XCTAssertFalse(parked.ignoresMouse, "ignoresMouseEvents is never touched")

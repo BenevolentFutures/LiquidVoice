@@ -4,10 +4,10 @@ import SwiftUI
 // MARK: - Bottom Overlay SwiftUI View (Signal)
 
 /// The recording overlay in the Signal language (DESIGN.md §4, §9): the pill between two rails of
-/// chips, History / Copy on the left and Cancel / Reprocess on the right, with Spoken Send in the
-/// right rail's middle slot. The window is 6 pt larger than the content on every side so the
-/// selection brackets outside the boxes are never clipped; that margin paints nothing, so clicks
-/// there reach the app beneath.
+/// chips, History / Copy on the left and Cancel / Reprocess on the right; Spoken Send lives in the
+/// trace row (§15). The window keeps a transparent margin around the content (6 pt, 8 at the
+/// bottom) so the selection brackets outside the boxes are never clipped; that margin paints
+/// nothing, so clicks there reach the app beneath.
 struct BottomOverlayView: View {
     @ObservedObject private var contentState = NotchContentState.shared
     @ObservedObject private var model = SignalOverlayModel.shared
@@ -67,8 +67,9 @@ struct BottomOverlayView: View {
     enum ChipRole {
         /// History: live whenever the overlay is, except during the delivered hold.
         case history
-        /// Cancel: live while recording or on a notice. After the stop it could only hide the
-        /// overlay while the paste still went out, so it rests there instead of pretending.
+        /// Cancel: live while recording or on a notice. After the stop it acts only while SEND shows
+        /// (it then drops the Return); otherwise it could only hide the overlay while the paste
+        /// still went out, so it rests.
         case cancel
         /// Copy and Reprocess: live only while listening or on a notice; dimmed while transcribing.
         case historyAction
@@ -80,11 +81,12 @@ struct BottomOverlayView: View {
 
     /// Inert: the chip looks at rest but acts on nothing. During the delivered hold no chip may
     /// re-fire a paste or copy; Copy and Reprocess wait until the final pass is done.
-    static func isChipInert(_ role: ChipRole, display: Display) -> Bool {
+    /// `sendShows`: the SEND placard is up, so Cancel still has a Return to cancel after the stop.
+    static func isChipInert(_ role: ChipRole, display: Display, sendShows: Bool = false) -> Bool {
         switch display {
         case .delivered, .idle: return true
-        case .stopped: return role != .history
-        case .transcribing: return role == .cancel
+        case .stopped: return role == .historyAction || (role == .cancel && !sendShows)
+        case .transcribing: return role == .cancel && !sendShows
         case .listening, .notice: return false
         }
     }
@@ -98,7 +100,7 @@ struct BottomOverlayView: View {
     }
 
     private func isInert(_ role: ChipRole) -> Bool {
-        Self.isChipInert(role, display: self.display)
+        Self.isChipInert(role, display: self.display, sendShows: self.placard == .send)
     }
 
     private func isEnabled(_ role: ChipRole) -> Bool {
@@ -234,7 +236,7 @@ struct BottomOverlayView: View {
         // The pill's bracket shows over the pill and the rails' gutter, but only one bracket at a
         // time: over a chip, that chip's own bracket draws instead.
         .onHover { self.isHoveringOverlay = $0 }
-        .padding(SignalTheme.Metrics.windowInset)
+        .padding(SignalTheme.Metrics.windowInsets)
         // Whole-surface drag with position memory; double-click returns to the default anchor.
         // Both sit on the parent so the chips' own taps win where they overlap.
         .onTapGesture(count: 2) {
@@ -300,10 +302,11 @@ struct BottomOverlayView: View {
         // A click anywhere on the pill while SEND shows cancels the Return (DESIGN.md §15).
         // Simultaneous, so the whole surface's double-click (reset position) and drag still work.
         .simultaneousGesture(TapGesture().onEnded {
-            // While SEND shows (armed, or counting down), a click on the pill cancels the Return.
-            guard self.isInteractive, self.display == .listening, self.placard == .send else { return }
-            self.spokenSend.cancelSend()
+            // While SEND shows (listening, stopped or transcribing), a click cancels the Return.
+            guard self.isInteractive, self.placard == .send else { return }
+            BottomOverlayWindowController.shared.cancelSpokenSendIfArmed()
         })
+        .help(self.placard == .send ? "Click to cancel Send" : "")
     }
 
     @ViewBuilder

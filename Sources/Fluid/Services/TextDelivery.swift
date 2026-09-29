@@ -89,6 +89,9 @@ nonisolated struct DeliveryFailureReport: Equatable, Sendable {
     /// The transcript is in transcription history (dictation with history on, paste-last).
     /// Rewrite output and debug deliveries are not.
     let inHistory: Bool
+    /// The dictation's stop-path trace, when the failure is a dictation's: its held overlay gives
+    /// way to the card (even after showing Pasted, for a late Paste Check miss).
+    var traceID: Int?
 }
 
 /// How one dictation's delivery ended, for the overlay's outcome state (the delivered hold).

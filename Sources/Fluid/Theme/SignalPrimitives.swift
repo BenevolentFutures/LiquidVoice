@@ -3,13 +3,17 @@ import SwiftUI
 // Signal primitives (DESIGN.md §5–§7, §11): the selection bracket, the surface (fill, 1 px edge,
 // flat 2 pt drop rule), and the card buttons. Every one is square: no corner radius anywhere.
 
-/// Four L marks, one outside each corner of the frame it is laid over. The path runs on the
-/// stroke's centreline: `inset` is how far outside the frame that centreline sits.
+/// Four L marks, one at each corner of the rect it is given. The path runs on the stroke's
+/// centreline, `inset` inside that rect: the rect itself is laid out on whole points, and the
+/// fractional offset lives here, so the strokes land exactly where they are meant to.
 struct SignalBracketShape: Shape {
     /// Arm length measured from the centreline vertex.
     let arm: CGFloat
+    /// The centreline's distance inside the rect.
+    var inset: CGFloat = 0
 
-    func path(in rect: CGRect) -> Path {
+    func path(in bounds: CGRect) -> Path {
+        let rect = bounds.insetBy(dx: self.inset, dy: self.inset)
         var path = Path()
         let corners: [(CGPoint, CGFloat, CGFloat)] = [
             (CGPoint(x: rect.minX, y: rect.minY), 1, 1),
@@ -39,23 +43,25 @@ private struct SignalBracketOverlay: ViewModifier {
     func body(content: Content) -> some View {
         let stroke = SignalTheme.BracketSpec.stroke
         let halo = SignalTheme.BracketSpec.halo
-        // The ink's inner edge sits `gap` clear of the box, so its centreline is half a stroke
-        // further out; the bottom also clears the drop rule.
-        let centreline = self.spec.gap + stroke / 2
+        // The overlay reaches a whole number of points outside the box (past the halo), and the
+        // bottom also clears the drop rule. The ink's inner edge sits `gap` clear of the box, so
+        // its centreline is `gap + stroke / 2` out, which is `inset` inside the overlay's rect.
+        let outset = (self.spec.gap + stroke + halo).rounded(.up)
+        let inset = outset - self.spec.gap - stroke / 2
         // Arms are measured from the outer vertex; the path runs on the centreline.
         let inkArm = self.spec.length - stroke / 2
         content.overlay {
             ZStack {
-                SignalBracketShape(arm: inkArm + halo)
+                SignalBracketShape(arm: inkArm + halo, inset: inset)
                     .stroke(self.palette.surface, style: StrokeStyle(lineWidth: stroke + 2 * halo, lineCap: .butt, lineJoin: .miter))
-                SignalBracketShape(arm: inkArm)
+                SignalBracketShape(arm: inkArm, inset: inset)
                     .stroke(self.palette.bracket, style: StrokeStyle(lineWidth: stroke, lineCap: .butt, lineJoin: .miter))
             }
             .padding(EdgeInsets(
-                top: -centreline,
-                leading: -centreline,
-                bottom: -(centreline + self.spec.drop),
-                trailing: -centreline
+                top: -outset,
+                leading: -outset,
+                bottom: -(outset + self.spec.drop),
+                trailing: -outset
             ))
             .opacity(self.isVisible ? 1 : 0)
             .animation(self.reduceMotion ? nil : .linear(duration: SignalTheme.Motion.bracketFade), value: self.isVisible)

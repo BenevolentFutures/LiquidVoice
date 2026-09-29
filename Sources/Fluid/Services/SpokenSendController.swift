@@ -160,14 +160,24 @@ final class SpokenSendController: ObservableObject {
         self.startCountdown()
     }
 
-    /// Cancels the send for the rest of this dictation (the overlay's send chip). The phrase is
-    /// still left out of the text; only the key is dropped.
-    func cancelSend() {
-        guard self.indicator == .armed || self.indicator == .countingDown else { return }
+    /// Whether a cancel (Esc, the Cancel chip, a click on the pill) should drop only the Return:
+    /// the SEND placard is showing, from the phrase being heard until the stop decides (armed,
+    /// counting down, or stopped and transcribing). A second cancel then cancels the dictation.
+    var cancelsReturnFirst: Bool {
+        (self.indicator == .armed || self.indicator == .countingDown) && self.sendsInRecordingApp
+    }
+
+    /// Cancels the send for the rest of this dictation. The phrase is still left out of the text;
+    /// only the key is dropped. Returns false when there was nothing to cancel (the send was
+    /// already decided, canceled, or never armed).
+    @discardableResult
+    func cancelSend() -> Bool {
+        guard self.indicator == .armed || self.indicator == .countingDown else { return false }
         self.isCanceled = true
         self.cancelCountdown()
         self.setIndicator(.canceled)
         DebugLogger.shared.info("SPOKEN_SEND canceled from overlay session=\(self.session)", source: "SpokenSend")
+        return true
     }
 
     private func startCountdown() {

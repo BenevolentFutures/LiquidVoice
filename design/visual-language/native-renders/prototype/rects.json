@@ -1,11 +1,11 @@
 {
   "dark-01-listening.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=listening",
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=listening",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 690,
-      "width": 460,
-      "height": 197
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
     },
     "pill": {
       "x": 630,
@@ -19,9 +19,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -29,9 +27,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -39,9 +35,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -49,9 +43,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -59,9 +51,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -69,9 +59,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -79,49 +67,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -129,19 +91,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -149,9 +99,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -159,57 +107,28 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-preview p": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
+          "height": 13
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:39",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceListening 0:39"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
     }
   },
   "dark-02-listening-hover.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=listening&hover=1",
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=listening&hover=1",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 690,
-      "width": 460,
-      "height": 197
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
     },
     "pill": {
       "x": 630,
@@ -223,9 +142,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -233,9 +150,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -243,9 +158,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -253,9 +166,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -263,9 +174,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -273,9 +182,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -283,49 +190,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -333,19 +214,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -353,9 +222,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -363,57 +230,28 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-preview p": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
+          "height": 13
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:39",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceListening 0:39"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
     }
   },
-  "dark-03-listening-hoverchip-cancel.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=listening&hoverChip=cancel",
+  "dark-03-listening-hover-cancel.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=listening&hoverChip=cancel",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 690,
-      "width": 460,
-      "height": 197
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
     },
     "pill": {
       "x": 630,
@@ -427,9 +265,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -437,9 +273,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -447,9 +281,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -457,9 +289,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -467,9 +297,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -477,9 +305,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -487,49 +313,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -537,19 +337,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -557,9 +345,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -567,57 +353,28 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-preview p": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
+          "height": 13
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:39",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceListening 0:39"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
     }
   },
-  "dark-04-listening-density-quiet.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=listening&density=quiet",
+  "dark-04-listening-armed.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=listening&armed=1",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 690,
-      "width": 460,
-      "height": 197
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
     },
     "pill": {
       "x": 630,
@@ -631,9 +388,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -641,9 +396,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -651,9 +404,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -661,9 +412,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -671,9 +420,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -681,9 +428,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -691,49 +436,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -741,19 +460,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -761,9 +468,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -771,57 +476,28 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-preview p": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
+          "height": 13
         }
       ]
     },
     "text": {
+      "placard": "Send",
       "time": "0:39",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceListening 0:39"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
     }
   },
   "dark-05-transcribing.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=transcribing",
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=transcribing",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 690,
-      "width": 460,
-      "height": 197
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
     },
     "pill": {
       "x": 630,
@@ -835,9 +511,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -845,9 +519,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -855,9 +527,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -865,9 +535,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -875,9 +543,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -885,9 +551,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -895,49 +559,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -945,19 +583,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -965,9 +591,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -975,57 +599,28 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-preview p": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
+          "height": 13
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:41",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceWorking"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
     }
   },
-  "dark-06-delivered-hold.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=delivered&hold=1",
+  "dark-06-pasted.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=delivered&hold=1",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 690,
-      "width": 460,
-      "height": 197
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
     },
     "pill": {
       "x": 630,
@@ -1039,9 +634,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -1049,9 +642,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -1059,9 +650,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -1069,9 +658,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -1079,9 +666,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -1089,9 +674,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -1099,49 +682,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -1149,19 +706,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -1169,9 +714,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -1179,73 +722,34 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-done": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-stamp": [
-        {
-          "x": 18,
-          "y": 24,
-          "width": 30,
-          "height": 30,
-          "pageX": 648,
-          "pageY": 738
+          "height": 13
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:41",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11118 words",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceReady"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "Pasted into c11",
+      "doneMeta": "118 words",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
     }
   },
   "dark-07-failed.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=failed",
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=failed&reason=nofocus",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 629,
-      "width": 460,
-      "height": 258
+      "x": 576,
+      "y": 614,
+      "width": 448,
+      "height": 267
     },
     "pill": {
       "x": 630,
-      "y": 653,
+      "y": 632,
       "width": 340,
-      "height": 210
+      "height": 231
     },
     "rects": {
       ".sg-pill": [
@@ -1253,243 +757,170 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 210,
-          "pageX": 630,
-          "pageY": 653
+          "height": 231
         }
       ],
       ".sg-rail.sg-lead": [
         {
           "x": -36,
-          "y": 61,
+          "y": 82,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
         {
           "x": 346,
-          "y": 61,
+          "y": 82,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
         {
           "x": -36,
-          "y": 61,
+          "y": 82,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
         {
           "x": -36,
-          "y": 180,
+          "y": 201,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
         {
           "x": 346,
-          "y": 61,
+          "y": 82,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
         {
           "x": 346,
-          "y": 180,
+          "y": 201,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 115,
-          "pageX": 648,
-          "pageY": 665
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 133,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 145,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
-          "y": 133,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "x": 48,
+          "y": 154,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 169,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
         {
           "x": 266.8515625,
-          "y": 146,
+          "y": 167,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 152,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
         {
           "x": 276.8515625,
-          "y": 146,
+          "y": 167,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
         {
           "x": 18,
-          "y": 187,
+          "y": 208,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
+          "height": 13
         }
       ],
-      ".sg-fail h3": [
+      ".sg-card h3": [
         {
           "x": 18,
           "y": 12,
           "width": 304,
-          "height": 18,
-          "pageX": 648,
-          "pageY": 665
+          "height": 18
         }
       ],
-      ".sg-fail p": [
+      ".sg-reason": [
         {
           "x": 18,
-          "y": 36,
+          "y": 34,
           "width": 304,
-          "height": 51,
-          "pageX": 648,
-          "pageY": 689
+          "height": 17
         }
       ],
-      ".sg-copy": [
+      ".sg-card-text": [
         {
           "x": 18,
-          "y": 99,
+          "y": 57,
+          "width": 304,
+          "height": 51
+        }
+      ],
+      ".sg-primary": [
+        {
+          "x": 18,
+          "y": 120,
           "width": 88,
-          "height": 28,
-          "pageX": 648,
-          "pageY": 752
+          "height": 28
         }
       ],
       ".sg-dismiss": [
         {
           "x": 122,
-          "y": 99,
+          "y": 120,
           "width": 48.1875,
-          "height": 28,
-          "pageX": 752,
-          "pageY": 752
+          "height": 28
         }
       ],
       ".sg-fail-meta": [
         {
           "x": 259.4296875,
-          "y": 99,
+          "y": 120,
           "width": 62.5703125,
-          "height": 28,
-          "pageX": 889.4296875,
-          "pageY": 752
+          "height": 28
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:41",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceReady"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "Couldn’t paste into c11",
+      "reason": "No text field focused",
+      "failMeta": "118 words"
     }
   },
   "dark-08-failed-copied.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=failed&copied=1",
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=failed&reason=nofocus&copied=1",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 629,
-      "width": 460,
-      "height": 258
+      "x": 576,
+      "y": 614,
+      "width": 448,
+      "height": 267
     },
     "pill": {
       "x": 630,
-      "y": 653,
+      "y": 632,
       "width": 340,
-      "height": 210
+      "height": 231
     },
     "rects": {
       ".sg-pill": [
@@ -1497,237 +928,164 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 210,
-          "pageX": 630,
-          "pageY": 653
+          "height": 231
         }
       ],
       ".sg-rail.sg-lead": [
         {
           "x": -36,
-          "y": 61,
+          "y": 82,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
         {
           "x": 346,
-          "y": 61,
+          "y": 82,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
         {
           "x": -36,
-          "y": 61,
+          "y": 82,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
         {
           "x": -36,
-          "y": 180,
+          "y": 201,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
         {
           "x": 346,
-          "y": 61,
+          "y": 82,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
         {
           "x": 346,
-          "y": 180,
+          "y": 201,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 115,
-          "pageX": 648,
-          "pageY": 665
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 133,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 145,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
-          "y": 133,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "x": 48,
+          "y": 154,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 169,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
         {
           "x": 266.8515625,
-          "y": 146,
+          "y": 167,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 152,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
         {
           "x": 276.8515625,
-          "y": 146,
+          "y": 167,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
         {
           "x": 18,
-          "y": 187,
+          "y": 208,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
+          "height": 13
         }
       ],
-      ".sg-fail h3": [
+      ".sg-card h3": [
         {
           "x": 18,
           "y": 12,
           "width": 304,
-          "height": 18,
-          "pageX": 648,
-          "pageY": 665
+          "height": 18
         }
       ],
-      ".sg-fail p": [
+      ".sg-reason": [
         {
           "x": 18,
-          "y": 36,
+          "y": 34,
           "width": 304,
-          "height": 51,
-          "pageX": 648,
-          "pageY": 689
+          "height": 17
         }
       ],
-      ".sg-copy": [
+      ".sg-card-text": [
         {
           "x": 18,
-          "y": 99,
+          "y": 57,
+          "width": 304,
+          "height": 51
+        }
+      ],
+      ".sg-primary": [
+        {
+          "x": 18,
+          "y": 120,
           "width": 88,
-          "height": 28,
-          "pageX": 648,
-          "pageY": 752
+          "height": 28
         }
       ],
       ".sg-dismiss": [
         {
           "x": 122,
-          "y": 99,
+          "y": 120,
           "width": 48.1875,
-          "height": 28,
-          "pageX": 752,
-          "pageY": 752
+          "height": 28
         }
       ],
       ".sg-fail-meta": [
         {
           "x": 259.4296875,
-          "y": 99,
+          "y": 120,
           "width": 62.5703125,
-          "height": 28,
-          "pageX": 889.4296875,
-          "pageY": 752
+          "height": 28
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:41",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceReady"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "Couldn’t paste into c11",
+      "reason": "No text field focused",
+      "failMeta": "118 words"
     }
   },
   "dark-09-history.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=history",
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=history",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 204,
-      "width": 528,
-      "height": 683
+      "x": 576,
+      "y": 210,
+      "width": 516,
+      "height": 671
     },
     "pill": {
       "x": 630,
@@ -1741,9 +1099,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -1751,9 +1107,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -1761,9 +1115,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -1771,9 +1123,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -1781,9 +1131,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -1791,9 +1139,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -1801,49 +1147,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -1851,19 +1171,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -1871,9 +1179,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -1881,19 +1187,7 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-preview p": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
+          "height": 13
         }
       ],
       ".sg-hist": [
@@ -1901,9 +1195,7 @@
           "x": -36,
           "y": -486,
           "width": 480,
-          "height": 480,
-          "pageX": 594,
-          "pageY": 228
+          "height": 480
         }
       ],
       ".sg-hist header": [
@@ -1911,9 +1203,7 @@
           "x": -35,
           "y": -485,
           "width": 478,
-          "height": 36,
-          "pageX": 595,
-          "pageY": 229
+          "height": 36
         }
       ],
       ".sg-hist footer": [
@@ -1921,9 +1211,7 @@
           "x": -35,
           "y": -35,
           "width": 478,
-          "height": 28,
-          "pageX": 595,
-          "pageY": 679
+          "height": 28
         }
       ],
       ".sg-hrow": [
@@ -1931,97 +1219,73 @@
           "x": -35,
           "y": -421,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 293
+          "height": 117
         },
         {
           "x": -35,
           "y": -304,
           "width": 478,
-          "height": 99,
-          "pageX": 595,
-          "pageY": 410
+          "height": 99
         },
         {
           "x": -35,
           "y": -205,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 509
+          "height": 117
         },
         {
           "x": -35,
           "y": -88,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 626
+          "height": 117
         },
         {
           "x": -35,
           "y": 29,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 743
+          "height": 117
         },
         {
           "x": -35,
           "y": 146,
           "width": 478,
-          "height": 81,
-          "pageX": 595,
-          "pageY": 860
+          "height": 81
         },
         {
           "x": -35,
           "y": 227,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 941
+          "height": 117
         },
         {
           "x": -35,
           "y": 344,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 1058
+          "height": 117
         },
         {
           "x": -35,
           "y": 489,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 1203
+          "height": 117
         },
         {
           "x": -35,
           "y": 606,
           "width": 478,
-          "height": 63,
-          "pageX": 595,
-          "pageY": 1320
+          "height": 63
         },
         {
           "x": -35,
           "y": 669,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 1383
+          "height": 117
         },
         {
           "x": -35,
           "y": 786,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 1500
+          "height": 117
         }
       ],
       ".sg-hday": [
@@ -2029,55 +1293,34 @@
           "x": -35,
           "y": -449,
           "width": 478,
-          "height": 28,
-          "pageX": 595,
-          "pageY": 265
+          "height": 28
         },
         {
           "x": -35,
           "y": 461,
           "width": 478,
-          "height": 28,
-          "pageX": 595,
-          "pageY": 1175
+          "height": 28
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:39",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceListening 0:39"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
     }
   },
-  "dark-10-history-hoverrow2.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=history&hoverRow=2",
+  "dark-10-history-hover-row.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=history&hoverRow=2",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 204,
-      "width": 528,
-      "height": 683
+      "x": 576,
+      "y": 210,
+      "width": 516,
+      "height": 671
     },
     "pill": {
       "x": 630,
@@ -2091,9 +1334,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -2101,9 +1342,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -2111,9 +1350,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -2121,9 +1358,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -2131,9 +1366,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -2141,9 +1374,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -2151,49 +1382,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -2201,19 +1406,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -2221,9 +1414,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -2231,19 +1422,7 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-preview p": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
+          "height": 13
         }
       ],
       ".sg-hist": [
@@ -2251,9 +1430,7 @@
           "x": -36,
           "y": -486,
           "width": 480,
-          "height": 480,
-          "pageX": 594,
-          "pageY": 228
+          "height": 480
         }
       ],
       ".sg-hist header": [
@@ -2261,9 +1438,7 @@
           "x": -35,
           "y": -485,
           "width": 478,
-          "height": 36,
-          "pageX": 595,
-          "pageY": 229
+          "height": 36
         }
       ],
       ".sg-hist footer": [
@@ -2271,9 +1446,7 @@
           "x": -35,
           "y": -35,
           "width": 478,
-          "height": 28,
-          "pageX": 595,
-          "pageY": 679
+          "height": 28
         }
       ],
       ".sg-hrow": [
@@ -2281,97 +1454,73 @@
           "x": -35,
           "y": -421,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 293
+          "height": 117
         },
         {
           "x": -35,
           "y": -304,
           "width": 478,
-          "height": 99,
-          "pageX": 595,
-          "pageY": 410
+          "height": 99
         },
         {
           "x": -35,
           "y": -205,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 509
+          "height": 117
         },
         {
           "x": -35,
           "y": -88,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 626
+          "height": 117
         },
         {
           "x": -35,
           "y": 29,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 743
+          "height": 117
         },
         {
           "x": -35,
           "y": 146,
           "width": 478,
-          "height": 81,
-          "pageX": 595,
-          "pageY": 860
+          "height": 81
         },
         {
           "x": -35,
           "y": 227,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 941
+          "height": 117
         },
         {
           "x": -35,
           "y": 344,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 1058
+          "height": 117
         },
         {
           "x": -35,
           "y": 489,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 1203
+          "height": 117
         },
         {
           "x": -35,
           "y": 606,
           "width": 478,
-          "height": 63,
-          "pageX": 595,
-          "pageY": 1320
+          "height": 63
         },
         {
           "x": -35,
           "y": 669,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 1383
+          "height": 117
         },
         {
           "x": -35,
           "y": 786,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 1500
+          "height": 117
         }
       ],
       ".sg-hday": [
@@ -2379,50 +1528,1157 @@
           "x": -35,
           "y": -449,
           "width": 478,
-          "height": 28,
-          "pageX": 595,
-          "pageY": 265
+          "height": 28
         },
         {
           "x": -35,
           "y": 461,
           "width": 478,
-          "height": 28,
-          "pageX": 595,
-          "pageY": 1175
+          "height": 28
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:39",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceListening 0:39"
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
+    }
+  },
+  "dark-13-countdown.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=countdown&t=0.9",
+    "cropBoxCssPx": {
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
     },
-    "fonts": {
-      "sgTime": [
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
         {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149
         }
       ],
-      "sgMic": [
+      ".sg-rail.sg-lead": [
         {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 48,
+          "y": 72,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13
         }
       ]
+    },
+    "text": {
+      "placard": "Send",
+      "time": "0.9",
+      "mic": "MacBook Pro Microphone",
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
+    }
+  },
+  "dark-14-countdown-canceled.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=countdown&t=0.9&canceled=1",
+    "cropBoxCssPx": {
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 48,
+          "y": 72,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13
+        }
+      ]
+    },
+    "text": {
+      "placard": "No send",
+      "time": "0.9",
+      "mic": "MacBook Pro Microphone",
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
+    }
+  },
+  "dark-15-sent.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=sent&hold=1",
+    "cropBoxCssPx": {
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 48,
+          "y": 72,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13
+        }
+      ]
+    },
+    "text": {
+      "placard": "",
+      "time": "0:41",
+      "mic": "MacBook Pro Microphone",
+      "doneHead": "Sent to c11",
+      "doneMeta": "118 words · Return",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
+    }
+  },
+  "dark-16-noreturn.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=listening&armed=1&target=noreturn",
+    "cropBoxCssPx": {
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 48,
+          "y": 72,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13
+        }
+      ]
+    },
+    "text": {
+      "placard": "No send",
+      "time": "0:39",
+      "mic": "MacBook Pro Microphone",
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
+    }
+  },
+  "dark-17-failed-clipboardkept.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=failed&reason=clipboardkept",
+    "cropBoxCssPx": {
+      "x": 576,
+      "y": 597,
+      "width": 448,
+      "height": 284
+    },
+    "pill": {
+      "x": 630,
+      "y": 615,
+      "width": 340,
+      "height": 248
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 248
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 99,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 99,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 99,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 218,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 99,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 218,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 48,
+          "y": 171,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 186,
+          "width": 48.65625,
+          "height": 14
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 184,
+          "width": 55.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 184,
+          "width": 45.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 225,
+          "width": 304,
+          "height": 13
+        }
+      ],
+      ".sg-card h3": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 18
+        }
+      ],
+      ".sg-reason": [
+        {
+          "x": 18,
+          "y": 34,
+          "width": 304,
+          "height": 34
+        }
+      ],
+      ".sg-card-text": [
+        {
+          "x": 18,
+          "y": 74,
+          "width": 304,
+          "height": 51
+        }
+      ],
+      ".sg-primary": [
+        {
+          "x": 18,
+          "y": 137,
+          "width": 88,
+          "height": 28
+        }
+      ],
+      ".sg-dismiss": [
+        {
+          "x": 122,
+          "y": 137,
+          "width": 48.1875,
+          "height": 28
+        }
+      ],
+      ".sg-fail-meta": [
+        {
+          "x": 259.4296875,
+          "y": 137,
+          "width": 62.5703125,
+          "height": 28
+        }
+      ]
+    },
+    "text": {
+      "placard": "",
+      "time": "0:41",
+      "mic": "MacBook Pro Microphone",
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "Couldn’t paste into c11",
+      "reason": "Your newer clipboard was left alone, the text is in History",
+      "failMeta": "118 words"
+    }
+  },
+  "dark-18-timedout.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=timedout",
+    "cropBoxCssPx": {
+      "x": 576,
+      "y": 671,
+      "width": 448,
+      "height": 210
+    },
+    "pill": {
+      "x": 630,
+      "y": 689,
+      "width": 340,
+      "height": 174
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 174
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 25,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 25,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 25,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 144,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 25,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 144,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 48,
+          "y": 97,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 112,
+          "width": 48.65625,
+          "height": 14
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 110,
+          "width": 55.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 110,
+          "width": 45.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 151,
+          "width": 304,
+          "height": 13
+        }
+      ],
+      ".sg-card h3": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 18
+        }
+      ],
+      ".sg-reason": [
+        {
+          "x": 18,
+          "y": 34,
+          "width": 304,
+          "height": 17
+        }
+      ],
+      ".sg-primary": [
+        {
+          "x": 18,
+          "y": 63,
+          "width": 109.4921875,
+          "height": 28
+        }
+      ],
+      ".sg-dismiss": [
+        {
+          "x": 143.4921875,
+          "y": 63,
+          "width": 48.1875,
+          "height": 28
+        }
+      ]
+    },
+    "text": {
+      "placard": "",
+      "time": "0:41",
+      "mic": "MacBook Pro Microphone",
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "Transcription timed out",
+      "reason": "Your audio is kept",
+      "failMeta": ""
+    }
+  },
+  "dark-19-asrback.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=asrback",
+    "cropBoxCssPx": {
+      "x": 576,
+      "y": 671,
+      "width": 448,
+      "height": 210
+    },
+    "pill": {
+      "x": 630,
+      "y": 689,
+      "width": 340,
+      "height": 174
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 174
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 25,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 25,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 25,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 144,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 25,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 144,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 48,
+          "y": 97,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 112,
+          "width": 48.65625,
+          "height": 14
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 110,
+          "width": 55.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 110,
+          "width": 45.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 151,
+          "width": 304,
+          "height": 13
+        }
+      ],
+      ".sg-card h3": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 18
+        }
+      ],
+      ".sg-reason": [
+        {
+          "x": 18,
+          "y": 34,
+          "width": 304,
+          "height": 17
+        }
+      ],
+      ".sg-primary": [
+        {
+          "x": 18,
+          "y": 63,
+          "width": 109.4921875,
+          "height": 28
+        }
+      ],
+      ".sg-dismiss": [
+        {
+          "x": 143.4921875,
+          "y": 63,
+          "width": 48.1875,
+          "height": 28
+        }
+      ]
+    },
+    "text": {
+      "placard": "",
+      "time": "0:41",
+      "mic": "MacBook Pro Microphone",
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "Speech recognition is back",
+      "reason": "A kept dictation is waiting",
+      "failMeta": ""
+    }
+  },
+  "dark-20-micoff.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=micoff",
+    "cropBoxCssPx": {
+      "x": 576,
+      "y": 671,
+      "width": 448,
+      "height": 210
+    },
+    "pill": {
+      "x": 630,
+      "y": 689,
+      "width": 340,
+      "height": 174
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 174
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 25,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 25,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 25,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 144,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 25,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 144,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 48,
+          "y": 97,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 112,
+          "width": 48.65625,
+          "height": 14
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 110,
+          "width": 55.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 110,
+          "width": 45.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 151,
+          "width": 304,
+          "height": 13
+        }
+      ],
+      ".sg-card h3": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 18
+        }
+      ],
+      ".sg-reason": [
+        {
+          "x": 18,
+          "y": 34,
+          "width": 304,
+          "height": 17
+        }
+      ],
+      ".sg-primary": [
+        {
+          "x": 18,
+          "y": 63,
+          "width": 183.71875,
+          "height": 28
+        }
+      ],
+      ".sg-dismiss": [
+        {
+          "x": 217.71875,
+          "y": 63,
+          "width": 48.1875,
+          "height": 28
+        }
+      ]
+    },
+    "text": {
+      "placard": "",
+      "time": "0:00",
+      "mic": "No microphone",
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "Microphone access is off",
+      "reason": "Allow Liquid Voice in Privacy & Security",
+      "failMeta": ""
     }
   },
   "dark-11-menu-listening.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=listening&menu=1",
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=listening&menu=1",
     "cropBoxCssPx": {
       "x": 1313,
       "y": 1.5,
@@ -2441,9 +2697,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -2451,9 +2705,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -2461,9 +2713,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -2471,9 +2721,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -2481,9 +2729,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -2491,9 +2737,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -2501,49 +2745,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -2551,19 +2769,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -2571,9 +2777,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -2581,189 +2785,40 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-preview p": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-menu": [
-        {
-          "x": 683,
-          "y": -686.5,
-          "width": 279.484375,
-          "height": 166,
-          "pageX": 1313,
-          "pageY": 27.5
-        }
-      ],
-      ".sg-mh": [
-        {
-          "x": 688,
-          "y": -681.5,
-          "width": 269.484375,
-          "height": 24,
-          "pageX": 1318,
-          "pageY": 32.5
-        }
-      ],
-      ".sg-mi": [
-        {
-          "x": 688,
-          "y": -646.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 67.5
-        },
-        {
-          "x": 688,
-          "y": -624.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 89.5
-        },
-        {
-          "x": 688,
-          "y": -602.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 111.5
-        },
-        {
-          "x": 688,
-          "y": -580.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 133.5
-        },
-        {
-          "x": 688,
-          "y": -547.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 166.5
+          "height": 13
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:39",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceListening 0:39"
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
     }
   },
   "dark-12-menu-idle.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=dark&state=idle&menu=1",
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=dark&state=idle&menu=1",
     "cropBoxCssPx": {
       "x": 1313,
       "y": 1.5,
       "width": 279.484375,
       "height": 192
     },
-    "pill": {
-      "x": 630,
-      "y": 714,
-      "width": 340,
-      "height": 149
-    },
-    "rects": {
-      ".sg-menu": [
-        {
-          "x": 683,
-          "y": -686.5,
-          "width": 279.484375,
-          "height": 166,
-          "pageX": 1313,
-          "pageY": 27.5
-        }
-      ],
-      ".sg-mh": [
-        {
-          "x": 688,
-          "y": -681.5,
-          "width": 269.484375,
-          "height": 24,
-          "pageX": 1318,
-          "pageY": 32.5
-        }
-      ],
-      ".sg-mi": [
-        {
-          "x": 688,
-          "y": -646.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 67.5
-        },
-        {
-          "x": 688,
-          "y": -624.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 89.5
-        },
-        {
-          "x": 688,
-          "y": -602.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 111.5
-        },
-        {
-          "x": 688,
-          "y": -580.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 133.5
-        },
-        {
-          "x": 688,
-          "y": -547.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 166.5
-        }
-      ]
-    },
-    "text": {
-      "time": "0:00",
-      "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceReady"
-    }
+    "pill": null,
+    "rects": {},
+    "text": {}
   },
   "light-01-listening.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=listening",
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=listening",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 690,
-      "width": 460,
-      "height": 197
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
     },
     "pill": {
       "x": 630,
@@ -2777,9 +2832,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -2787,9 +2840,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -2797,9 +2848,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -2807,9 +2856,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -2817,9 +2864,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -2827,9 +2872,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -2837,49 +2880,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -2887,19 +2904,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -2907,9 +2912,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -2917,57 +2920,28 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-preview p": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
+          "height": 13
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:39",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceListening 0:39"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
     }
   },
   "light-02-listening-hover.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=listening&hover=1",
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=listening&hover=1",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 690,
-      "width": 460,
-      "height": 197
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
     },
     "pill": {
       "x": 630,
@@ -2981,9 +2955,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -2991,9 +2963,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -3001,9 +2971,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -3011,9 +2979,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -3021,9 +2987,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -3031,9 +2995,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -3041,49 +3003,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -3091,19 +3027,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -3111,9 +3035,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -3121,57 +3043,28 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-preview p": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
+          "height": 13
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:39",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceListening 0:39"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
     }
   },
-  "light-03-listening-hoverchip-cancel.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=listening&hoverChip=cancel",
+  "light-03-listening-hover-cancel.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=listening&hoverChip=cancel",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 690,
-      "width": 460,
-      "height": 197
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
     },
     "pill": {
       "x": 630,
@@ -3185,9 +3078,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -3195,9 +3086,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -3205,9 +3094,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -3215,9 +3102,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -3225,9 +3110,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -3235,9 +3118,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -3245,49 +3126,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -3295,19 +3150,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -3315,9 +3158,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -3325,57 +3166,28 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-preview p": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
+          "height": 13
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:39",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceListening 0:39"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
     }
   },
-  "light-04-listening-density-quiet.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=listening&density=quiet",
+  "light-04-listening-armed.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=listening&armed=1",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 690,
-      "width": 460,
-      "height": 197
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
     },
     "pill": {
       "x": 630,
@@ -3389,9 +3201,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -3399,9 +3209,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -3409,9 +3217,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -3419,9 +3225,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -3429,9 +3233,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -3439,9 +3241,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -3449,49 +3249,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -3499,19 +3273,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -3519,9 +3281,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -3529,57 +3289,28 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-preview p": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
+          "height": 13
         }
       ]
     },
     "text": {
+      "placard": "Send",
       "time": "0:39",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceListening 0:39"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
     }
   },
   "light-05-transcribing.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=transcribing",
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=transcribing",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 690,
-      "width": 460,
-      "height": 197
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
     },
     "pill": {
       "x": 630,
@@ -3593,9 +3324,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -3603,9 +3332,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -3613,9 +3340,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -3623,9 +3348,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -3633,9 +3356,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -3643,9 +3364,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -3653,49 +3372,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -3703,19 +3396,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -3723,9 +3404,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -3733,57 +3412,28 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-preview p": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
+          "height": 13
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:41",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceWorking"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
     }
   },
-  "light-06-delivered-hold.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=delivered&hold=1",
+  "light-06-pasted.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=delivered&hold=1",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 690,
-      "width": 460,
-      "height": 197
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
     },
     "pill": {
       "x": 630,
@@ -3797,9 +3447,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -3807,9 +3455,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -3817,9 +3463,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -3827,9 +3471,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -3837,9 +3479,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -3847,9 +3487,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -3857,49 +3495,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -3907,19 +3519,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -3927,9 +3527,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -3937,73 +3535,34 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-done": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-stamp": [
-        {
-          "x": 18,
-          "y": 24,
-          "width": 30,
-          "height": 30,
-          "pageX": 648,
-          "pageY": 738
+          "height": 13
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:41",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11118 words",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceReady"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "Pasted into c11",
+      "doneMeta": "118 words",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
     }
   },
   "light-07-failed.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=failed",
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=failed&reason=nofocus",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 629,
-      "width": 460,
-      "height": 258
+      "x": 576,
+      "y": 614,
+      "width": 448,
+      "height": 267
     },
     "pill": {
       "x": 630,
-      "y": 653,
+      "y": 632,
       "width": 340,
-      "height": 210
+      "height": 231
     },
     "rects": {
       ".sg-pill": [
@@ -4011,243 +3570,170 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 210,
-          "pageX": 630,
-          "pageY": 653
+          "height": 231
         }
       ],
       ".sg-rail.sg-lead": [
         {
           "x": -36,
-          "y": 61,
+          "y": 82,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
         {
           "x": 346,
-          "y": 61,
+          "y": 82,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
         {
           "x": -36,
-          "y": 61,
+          "y": 82,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
         {
           "x": -36,
-          "y": 180,
+          "y": 201,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
         {
           "x": 346,
-          "y": 61,
+          "y": 82,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
         {
           "x": 346,
-          "y": 180,
+          "y": 201,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 115,
-          "pageX": 648,
-          "pageY": 665
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 133,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 145,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
-          "y": 133,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "x": 48,
+          "y": 154,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 169,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
         {
           "x": 266.8515625,
-          "y": 146,
+          "y": 167,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 152,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
         {
           "x": 276.8515625,
-          "y": 146,
+          "y": 167,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
         {
           "x": 18,
-          "y": 187,
+          "y": 208,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
+          "height": 13
         }
       ],
-      ".sg-fail h3": [
+      ".sg-card h3": [
         {
           "x": 18,
           "y": 12,
           "width": 304,
-          "height": 18,
-          "pageX": 648,
-          "pageY": 665
+          "height": 18
         }
       ],
-      ".sg-fail p": [
+      ".sg-reason": [
         {
           "x": 18,
-          "y": 36,
+          "y": 34,
           "width": 304,
-          "height": 51,
-          "pageX": 648,
-          "pageY": 689
+          "height": 17
         }
       ],
-      ".sg-copy": [
+      ".sg-card-text": [
         {
           "x": 18,
-          "y": 99,
+          "y": 57,
+          "width": 304,
+          "height": 51
+        }
+      ],
+      ".sg-primary": [
+        {
+          "x": 18,
+          "y": 120,
           "width": 88,
-          "height": 28,
-          "pageX": 648,
-          "pageY": 752
+          "height": 28
         }
       ],
       ".sg-dismiss": [
         {
           "x": 122,
-          "y": 99,
+          "y": 120,
           "width": 48.1875,
-          "height": 28,
-          "pageX": 752,
-          "pageY": 752
+          "height": 28
         }
       ],
       ".sg-fail-meta": [
         {
           "x": 259.4296875,
-          "y": 99,
+          "y": 120,
           "width": 62.5703125,
-          "height": 28,
-          "pageX": 889.4296875,
-          "pageY": 752
+          "height": 28
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:41",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceReady"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "Couldn’t paste into c11",
+      "reason": "No text field focused",
+      "failMeta": "118 words"
     }
   },
   "light-08-failed-copied.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=failed&copied=1",
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=failed&reason=nofocus&copied=1",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 629,
-      "width": 460,
-      "height": 258
+      "x": 576,
+      "y": 614,
+      "width": 448,
+      "height": 267
     },
     "pill": {
       "x": 630,
-      "y": 653,
+      "y": 632,
       "width": 340,
-      "height": 210
+      "height": 231
     },
     "rects": {
       ".sg-pill": [
@@ -4255,237 +3741,164 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 210,
-          "pageX": 630,
-          "pageY": 653
+          "height": 231
         }
       ],
       ".sg-rail.sg-lead": [
         {
           "x": -36,
-          "y": 61,
+          "y": 82,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
         {
           "x": 346,
-          "y": 61,
+          "y": 82,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
         {
           "x": -36,
-          "y": 61,
+          "y": 82,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
         {
           "x": -36,
-          "y": 180,
+          "y": 201,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
         {
           "x": 346,
-          "y": 61,
+          "y": 82,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
         {
           "x": 346,
-          "y": 180,
+          "y": 201,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 115,
-          "pageX": 648,
-          "pageY": 665
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 133,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 145,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
-          "y": 133,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "x": 48,
+          "y": 154,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 169,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
         {
           "x": 266.8515625,
-          "y": 146,
+          "y": 167,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 152,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
         {
           "x": 276.8515625,
-          "y": 146,
+          "y": 167,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
         {
           "x": 18,
-          "y": 187,
+          "y": 208,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
+          "height": 13
         }
       ],
-      ".sg-fail h3": [
+      ".sg-card h3": [
         {
           "x": 18,
           "y": 12,
           "width": 304,
-          "height": 18,
-          "pageX": 648,
-          "pageY": 665
+          "height": 18
         }
       ],
-      ".sg-fail p": [
+      ".sg-reason": [
         {
           "x": 18,
-          "y": 36,
+          "y": 34,
           "width": 304,
-          "height": 51,
-          "pageX": 648,
-          "pageY": 689
+          "height": 17
         }
       ],
-      ".sg-copy": [
+      ".sg-card-text": [
         {
           "x": 18,
-          "y": 99,
+          "y": 57,
+          "width": 304,
+          "height": 51
+        }
+      ],
+      ".sg-primary": [
+        {
+          "x": 18,
+          "y": 120,
           "width": 88,
-          "height": 28,
-          "pageX": 648,
-          "pageY": 752
+          "height": 28
         }
       ],
       ".sg-dismiss": [
         {
           "x": 122,
-          "y": 99,
+          "y": 120,
           "width": 48.1875,
-          "height": 28,
-          "pageX": 752,
-          "pageY": 752
+          "height": 28
         }
       ],
       ".sg-fail-meta": [
         {
           "x": 259.4296875,
-          "y": 99,
+          "y": 120,
           "width": 62.5703125,
-          "height": 28,
-          "pageX": 889.4296875,
-          "pageY": 752
+          "height": 28
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:41",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceReady"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "Couldn’t paste into c11",
+      "reason": "No text field focused",
+      "failMeta": "118 words"
     }
   },
   "light-09-history.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=history",
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=history",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 204,
-      "width": 528,
-      "height": 683
+      "x": 576,
+      "y": 210,
+      "width": 516,
+      "height": 671
     },
     "pill": {
       "x": 630,
@@ -4499,9 +3912,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -4509,9 +3920,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -4519,9 +3928,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -4529,9 +3936,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -4539,9 +3944,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -4549,9 +3952,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -4559,49 +3960,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -4609,19 +3984,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -4629,9 +3992,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -4639,19 +4000,7 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-preview p": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
+          "height": 13
         }
       ],
       ".sg-hist": [
@@ -4659,9 +4008,7 @@
           "x": -36,
           "y": -486,
           "width": 480,
-          "height": 480,
-          "pageX": 594,
-          "pageY": 228
+          "height": 480
         }
       ],
       ".sg-hist header": [
@@ -4669,9 +4016,7 @@
           "x": -35,
           "y": -485,
           "width": 478,
-          "height": 36,
-          "pageX": 595,
-          "pageY": 229
+          "height": 36
         }
       ],
       ".sg-hist footer": [
@@ -4679,9 +4024,7 @@
           "x": -35,
           "y": -35,
           "width": 478,
-          "height": 28,
-          "pageX": 595,
-          "pageY": 679
+          "height": 28
         }
       ],
       ".sg-hrow": [
@@ -4689,97 +4032,73 @@
           "x": -35,
           "y": -421,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 293
+          "height": 117
         },
         {
           "x": -35,
           "y": -304,
           "width": 478,
-          "height": 99,
-          "pageX": 595,
-          "pageY": 410
+          "height": 99
         },
         {
           "x": -35,
           "y": -205,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 509
+          "height": 117
         },
         {
           "x": -35,
           "y": -88,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 626
+          "height": 117
         },
         {
           "x": -35,
           "y": 29,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 743
+          "height": 117
         },
         {
           "x": -35,
           "y": 146,
           "width": 478,
-          "height": 81,
-          "pageX": 595,
-          "pageY": 860
+          "height": 81
         },
         {
           "x": -35,
           "y": 227,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 941
+          "height": 117
         },
         {
           "x": -35,
           "y": 344,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 1058
+          "height": 117
         },
         {
           "x": -35,
           "y": 489,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 1203
+          "height": 117
         },
         {
           "x": -35,
           "y": 606,
           "width": 478,
-          "height": 63,
-          "pageX": 595,
-          "pageY": 1320
+          "height": 63
         },
         {
           "x": -35,
           "y": 669,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 1383
+          "height": 117
         },
         {
           "x": -35,
           "y": 786,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 1500
+          "height": 117
         }
       ],
       ".sg-hday": [
@@ -4787,55 +4106,34 @@
           "x": -35,
           "y": -449,
           "width": 478,
-          "height": 28,
-          "pageX": 595,
-          "pageY": 265
+          "height": 28
         },
         {
           "x": -35,
           "y": 461,
           "width": 478,
-          "height": 28,
-          "pageX": 595,
-          "pageY": 1175
+          "height": 28
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:39",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceListening 0:39"
-    },
-    "fonts": {
-      "sgTime": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
-        }
-      ],
-      "sgMic": [
-        {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
-        }
-      ]
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
     }
   },
-  "light-10-history-hoverrow2.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=history&hoverRow=2",
+  "light-10-history-hover-row.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=history&hoverRow=2",
     "cropBoxCssPx": {
-      "x": 570,
-      "y": 204,
-      "width": 528,
-      "height": 683
+      "x": 576,
+      "y": 210,
+      "width": 516,
+      "height": 671
     },
     "pill": {
       "x": 630,
@@ -4849,9 +4147,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -4859,9 +4155,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -4869,9 +4163,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -4879,9 +4171,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -4889,9 +4179,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -4899,9 +4187,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -4909,49 +4195,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -4959,19 +4219,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -4979,9 +4227,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -4989,19 +4235,7 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-preview p": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
+          "height": 13
         }
       ],
       ".sg-hist": [
@@ -5009,9 +4243,7 @@
           "x": -36,
           "y": -486,
           "width": 480,
-          "height": 480,
-          "pageX": 594,
-          "pageY": 228
+          "height": 480
         }
       ],
       ".sg-hist header": [
@@ -5019,9 +4251,7 @@
           "x": -35,
           "y": -485,
           "width": 478,
-          "height": 36,
-          "pageX": 595,
-          "pageY": 229
+          "height": 36
         }
       ],
       ".sg-hist footer": [
@@ -5029,9 +4259,7 @@
           "x": -35,
           "y": -35,
           "width": 478,
-          "height": 28,
-          "pageX": 595,
-          "pageY": 679
+          "height": 28
         }
       ],
       ".sg-hrow": [
@@ -5039,97 +4267,73 @@
           "x": -35,
           "y": -421,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 293
+          "height": 117
         },
         {
           "x": -35,
           "y": -304,
           "width": 478,
-          "height": 99,
-          "pageX": 595,
-          "pageY": 410
+          "height": 99
         },
         {
           "x": -35,
           "y": -205,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 509
+          "height": 117
         },
         {
           "x": -35,
           "y": -88,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 626
+          "height": 117
         },
         {
           "x": -35,
           "y": 29,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 743
+          "height": 117
         },
         {
           "x": -35,
           "y": 146,
           "width": 478,
-          "height": 81,
-          "pageX": 595,
-          "pageY": 860
+          "height": 81
         },
         {
           "x": -35,
           "y": 227,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 941
+          "height": 117
         },
         {
           "x": -35,
           "y": 344,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 1058
+          "height": 117
         },
         {
           "x": -35,
           "y": 489,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 1203
+          "height": 117
         },
         {
           "x": -35,
           "y": 606,
           "width": 478,
-          "height": 63,
-          "pageX": 595,
-          "pageY": 1320
+          "height": 63
         },
         {
           "x": -35,
           "y": 669,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 1383
+          "height": 117
         },
         {
           "x": -35,
           "y": 786,
           "width": 478,
-          "height": 117,
-          "pageX": 595,
-          "pageY": 1500
+          "height": 117
         }
       ],
       ".sg-hday": [
@@ -5137,50 +4341,1157 @@
           "x": -35,
           "y": -449,
           "width": 478,
-          "height": 28,
-          "pageX": 595,
-          "pageY": 265
+          "height": 28
         },
         {
           "x": -35,
           "y": 461,
           "width": 478,
-          "height": 28,
-          "pageX": 595,
-          "pageY": 1175
+          "height": 28
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:39",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceListening 0:39"
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
+    }
+  },
+  "light-13-countdown.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=countdown&t=0.9",
+    "cropBoxCssPx": {
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
     },
-    "fonts": {
-      "sgTime": [
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
         {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Bold",
-          "isCustomFont": false,
-          "glyphCount": 4
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149
         }
       ],
-      "sgMic": [
+      ".sg-rail.sg-lead": [
         {
-          "familyName": "Menlo",
-          "postScriptName": "Menlo-Regular",
-          "isCustomFont": false,
-          "glyphCount": 22
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 48,
+          "y": 72,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13
         }
       ]
+    },
+    "text": {
+      "placard": "Send",
+      "time": "0.9",
+      "mic": "MacBook Pro Microphone",
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
+    }
+  },
+  "light-14-countdown-canceled.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=countdown&t=0.9&canceled=1",
+    "cropBoxCssPx": {
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 48,
+          "y": 72,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13
+        }
+      ]
+    },
+    "text": {
+      "placard": "No send",
+      "time": "0.9",
+      "mic": "MacBook Pro Microphone",
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
+    }
+  },
+  "light-15-sent.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=sent&hold=1",
+    "cropBoxCssPx": {
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 48,
+          "y": 72,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13
+        }
+      ]
+    },
+    "text": {
+      "placard": "",
+      "time": "0:41",
+      "mic": "MacBook Pro Microphone",
+      "doneHead": "Sent to c11",
+      "doneMeta": "118 words · Return",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
+    }
+  },
+  "light-16-noreturn.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=listening&armed=1&target=noreturn",
+    "cropBoxCssPx": {
+      "x": 576,
+      "y": 696,
+      "width": 448,
+      "height": 185
+    },
+    "pill": {
+      "x": 630,
+      "y": 714,
+      "width": 340,
+      "height": 149
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 0,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 119,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 0,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 119,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 48,
+          "y": 72,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 85,
+          "width": 55.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 85,
+          "width": 45.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 126,
+          "width": 304,
+          "height": 13
+        }
+      ]
+    },
+    "text": {
+      "placard": "No send",
+      "time": "0:39",
+      "mic": "MacBook Pro Microphone",
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
+    }
+  },
+  "light-17-failed-clipboardkept.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=failed&reason=clipboardkept",
+    "cropBoxCssPx": {
+      "x": 576,
+      "y": 597,
+      "width": 448,
+      "height": 284
+    },
+    "pill": {
+      "x": 630,
+      "y": 615,
+      "width": 340,
+      "height": 248
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 248
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 99,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 99,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 99,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 218,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 99,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 218,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 48,
+          "y": 171,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 186,
+          "width": 48.65625,
+          "height": 14
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 184,
+          "width": 55.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 184,
+          "width": 45.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 225,
+          "width": 304,
+          "height": 13
+        }
+      ],
+      ".sg-card h3": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 18
+        }
+      ],
+      ".sg-reason": [
+        {
+          "x": 18,
+          "y": 34,
+          "width": 304,
+          "height": 34
+        }
+      ],
+      ".sg-card-text": [
+        {
+          "x": 18,
+          "y": 74,
+          "width": 304,
+          "height": 51
+        }
+      ],
+      ".sg-primary": [
+        {
+          "x": 18,
+          "y": 137,
+          "width": 88,
+          "height": 28
+        }
+      ],
+      ".sg-dismiss": [
+        {
+          "x": 122,
+          "y": 137,
+          "width": 48.1875,
+          "height": 28
+        }
+      ],
+      ".sg-fail-meta": [
+        {
+          "x": 259.4296875,
+          "y": 137,
+          "width": 62.5703125,
+          "height": 28
+        }
+      ]
+    },
+    "text": {
+      "placard": "",
+      "time": "0:41",
+      "mic": "MacBook Pro Microphone",
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "Couldn’t paste into c11",
+      "reason": "Your newer clipboard was left alone, the text is in History",
+      "failMeta": "118 words"
+    }
+  },
+  "light-18-timedout.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=timedout",
+    "cropBoxCssPx": {
+      "x": 576,
+      "y": 671,
+      "width": 448,
+      "height": 210
+    },
+    "pill": {
+      "x": 630,
+      "y": 689,
+      "width": 340,
+      "height": 174
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 174
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 25,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 25,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 25,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 144,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 25,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 144,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 48,
+          "y": 97,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 112,
+          "width": 48.65625,
+          "height": 14
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 110,
+          "width": 55.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 110,
+          "width": 45.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 151,
+          "width": 304,
+          "height": 13
+        }
+      ],
+      ".sg-card h3": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 18
+        }
+      ],
+      ".sg-reason": [
+        {
+          "x": 18,
+          "y": 34,
+          "width": 304,
+          "height": 17
+        }
+      ],
+      ".sg-primary": [
+        {
+          "x": 18,
+          "y": 63,
+          "width": 109.4921875,
+          "height": 28
+        }
+      ],
+      ".sg-dismiss": [
+        {
+          "x": 143.4921875,
+          "y": 63,
+          "width": 48.1875,
+          "height": 28
+        }
+      ]
+    },
+    "text": {
+      "placard": "",
+      "time": "0:41",
+      "mic": "MacBook Pro Microphone",
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "Transcription timed out",
+      "reason": "Your audio is kept",
+      "failMeta": ""
+    }
+  },
+  "light-19-asrback.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=asrback",
+    "cropBoxCssPx": {
+      "x": 576,
+      "y": 671,
+      "width": 448,
+      "height": 210
+    },
+    "pill": {
+      "x": 630,
+      "y": 689,
+      "width": 340,
+      "height": 174
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 174
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 25,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 25,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 25,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 144,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 25,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 144,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 48,
+          "y": 97,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 112,
+          "width": 48.65625,
+          "height": 14
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 110,
+          "width": 55.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 110,
+          "width": 45.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 151,
+          "width": 304,
+          "height": 13
+        }
+      ],
+      ".sg-card h3": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 18
+        }
+      ],
+      ".sg-reason": [
+        {
+          "x": 18,
+          "y": 34,
+          "width": 304,
+          "height": 17
+        }
+      ],
+      ".sg-primary": [
+        {
+          "x": 18,
+          "y": 63,
+          "width": 109.4921875,
+          "height": 28
+        }
+      ],
+      ".sg-dismiss": [
+        {
+          "x": 143.4921875,
+          "y": 63,
+          "width": 48.1875,
+          "height": 28
+        }
+      ]
+    },
+    "text": {
+      "placard": "",
+      "time": "0:41",
+      "mic": "MacBook Pro Microphone",
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "Speech recognition is back",
+      "reason": "A kept dictation is waiting",
+      "failMeta": ""
+    }
+  },
+  "light-20-micoff.png": {
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=micoff",
+    "cropBoxCssPx": {
+      "x": 576,
+      "y": 671,
+      "width": 448,
+      "height": 210
+    },
+    "pill": {
+      "x": 630,
+      "y": 689,
+      "width": 340,
+      "height": 174
+    },
+    "rects": {
+      ".sg-pill": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 340,
+          "height": 174
+        }
+      ],
+      ".sg-rail.sg-lead": [
+        {
+          "x": -36,
+          "y": 25,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-rail.sg-trail": [
+        {
+          "x": 346,
+          "y": 25,
+          "width": 30,
+          "height": 149
+        }
+      ],
+      ".sg-chip[data-chip=\"history\"]": [
+        {
+          "x": -36,
+          "y": 25,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"copy\"]": [
+        {
+          "x": -36,
+          "y": 144,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"cancel\"]": [
+        {
+          "x": 346,
+          "y": 25,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-chip[data-chip=\"reprocess\"]": [
+        {
+          "x": 346,
+          "y": 144,
+          "width": 30,
+          "height": 30
+        }
+      ],
+      ".sg-trace": [
+        {
+          "x": 48,
+          "y": 97,
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 112,
+          "width": 48.65625,
+          "height": 14
+        }
+      ],
+      ".sg-readout": [
+        {
+          "x": 266.8515625,
+          "y": 110,
+          "width": 55.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-time": [
+        {
+          "x": 276.8515625,
+          "y": 110,
+          "width": 45.1484375,
+          "height": 18
+        }
+      ],
+      ".sg-mic": [
+        {
+          "x": 18,
+          "y": 151,
+          "width": 304,
+          "height": 13
+        }
+      ],
+      ".sg-card h3": [
+        {
+          "x": 18,
+          "y": 12,
+          "width": 304,
+          "height": 18
+        }
+      ],
+      ".sg-reason": [
+        {
+          "x": 18,
+          "y": 34,
+          "width": 304,
+          "height": 17
+        }
+      ],
+      ".sg-primary": [
+        {
+          "x": 18,
+          "y": 63,
+          "width": 183.71875,
+          "height": 28
+        }
+      ],
+      ".sg-dismiss": [
+        {
+          "x": 217.71875,
+          "y": 63,
+          "width": 48.1875,
+          "height": 28
+        }
+      ]
+    },
+    "text": {
+      "placard": "",
+      "time": "0:00",
+      "mic": "No microphone",
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "Microphone access is off",
+      "reason": "Allow Liquid Voice in Privacy & Security",
+      "failMeta": ""
     }
   },
   "light-11-menu-listening.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=listening&menu=1",
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=listening&menu=1",
     "cropBoxCssPx": {
       "x": 1313,
       "y": 1.5,
@@ -5199,9 +5510,7 @@
           "x": 0,
           "y": 0,
           "width": 340,
-          "height": 149,
-          "pageX": 630,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-lead": [
@@ -5209,9 +5518,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 594,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-rail.sg-trail": [
@@ -5219,9 +5526,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 149,
-          "pageX": 976,
-          "pageY": 714
+          "height": 149
         }
       ],
       ".sg-chip[data-chip=\"history\"]": [
@@ -5229,9 +5534,7 @@
           "x": -36,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"copy\"]": [
@@ -5239,9 +5542,7 @@
           "x": -36,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 594,
-          "pageY": 833
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"cancel\"]": [
@@ -5249,9 +5550,7 @@
           "x": 346,
           "y": 0,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 714
+          "height": 30
         }
       ],
       ".sg-chip[data-chip=\"reprocess\"]": [
@@ -5259,49 +5558,23 @@
           "x": 346,
           "y": 119,
           "width": 30,
-          "height": 30,
-          "pageX": 976,
-          "pageY": 833
-        }
-      ],
-      ".sg-top": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-trace-row": [
-        {
-          "x": 18,
-          "y": 72,
-          "width": 304,
-          "height": 50,
-          "pageX": 648,
-          "pageY": 786
-        }
-      ],
-      ".sg-app": [
-        {
-          "x": 18,
-          "y": 84,
-          "width": 20,
-          "height": 20,
-          "pageX": 648,
-          "pageY": 798
+          "height": 30
         }
       ],
       ".sg-trace": [
         {
-          "x": 49.4296875,
+          "x": 48,
           "y": 72,
-          "width": 206,
-          "height": 50,
-          "pageX": 679.4296875,
-          "pageY": 786
+          "width": 154,
+          "height": 50
+        }
+      ],
+      ".sg-placard": [
+        {
+          "x": 212.1953125,
+          "y": 87,
+          "width": 48.65625,
+          "height": 14
         }
       ],
       ".sg-readout": [
@@ -5309,19 +5582,7 @@
           "x": 266.8515625,
           "y": 85,
           "width": 55.1484375,
-          "height": 18,
-          "pageX": 896.8515625,
-          "pageY": 799
-        }
-      ],
-      ".sg-dot": [
-        {
-          "x": 266.8515625,
-          "y": 91,
-          "width": 6,
-          "height": 6,
-          "pageX": 896.8515625,
-          "pageY": 805
+          "height": 18
         }
       ],
       ".sg-time": [
@@ -5329,9 +5590,7 @@
           "x": 276.8515625,
           "y": 85,
           "width": 45.1484375,
-          "height": 18,
-          "pageX": 906.8515625,
-          "pageY": 799
+          "height": 18
         }
       ],
       ".sg-mic": [
@@ -5339,180 +5598,31 @@
           "x": 18,
           "y": 126,
           "width": 304,
-          "height": 13,
-          "pageX": 648,
-          "pageY": 840
-        }
-      ],
-      ".sg-preview p": [
-        {
-          "x": 18,
-          "y": 12,
-          "width": 304,
-          "height": 54,
-          "pageX": 648,
-          "pageY": 726
-        }
-      ],
-      ".sg-menu": [
-        {
-          "x": 683,
-          "y": -686.5,
-          "width": 279.484375,
-          "height": 166,
-          "pageX": 1313,
-          "pageY": 27.5
-        }
-      ],
-      ".sg-mh": [
-        {
-          "x": 688,
-          "y": -681.5,
-          "width": 269.484375,
-          "height": 24,
-          "pageX": 1318,
-          "pageY": 32.5
-        }
-      ],
-      ".sg-mi": [
-        {
-          "x": 688,
-          "y": -646.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 67.5
-        },
-        {
-          "x": 688,
-          "y": -624.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 89.5
-        },
-        {
-          "x": 688,
-          "y": -602.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 111.5
-        },
-        {
-          "x": 688,
-          "y": -580.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 133.5
-        },
-        {
-          "x": 688,
-          "y": -547.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 166.5
+          "height": 13
         }
       ]
     },
     "text": {
+      "placard": "",
       "time": "0:39",
       "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceListening 0:39"
+      "doneHead": "",
+      "doneMeta": "",
+      "cardH3": "",
+      "reason": "",
+      "failMeta": ""
     }
   },
   "light-12-menu-idle.png": {
-    "url": "http://127.0.0.1:8791/signal/index.html?theme=light&state=idle&menu=1",
+    "url": "http://127.0.0.1:8890/signal/index.html?theme=light&state=idle&menu=1",
     "cropBoxCssPx": {
       "x": 1313,
       "y": 1.5,
       "width": 279.484375,
       "height": 192
     },
-    "pill": {
-      "x": 630,
-      "y": 714,
-      "width": 340,
-      "height": 149
-    },
-    "rects": {
-      ".sg-menu": [
-        {
-          "x": 683,
-          "y": -686.5,
-          "width": 279.484375,
-          "height": 166,
-          "pageX": 1313,
-          "pageY": 27.5
-        }
-      ],
-      ".sg-mh": [
-        {
-          "x": 688,
-          "y": -681.5,
-          "width": 269.484375,
-          "height": 24,
-          "pageX": 1318,
-          "pageY": 32.5
-        }
-      ],
-      ".sg-mi": [
-        {
-          "x": 688,
-          "y": -646.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 67.5
-        },
-        {
-          "x": 688,
-          "y": -624.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 89.5
-        },
-        {
-          "x": 688,
-          "y": -602.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 111.5
-        },
-        {
-          "x": 688,
-          "y": -580.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 133.5
-        },
-        {
-          "x": 688,
-          "y": -547.5,
-          "width": 269.484375,
-          "height": 22,
-          "pageX": 1318,
-          "pageY": 166.5
-        }
-      ]
-    },
-    "text": {
-      "time": "0:00",
-      "mic": "MacBook Pro Microphone",
-      "doneText": "Delivered to c11",
-      "failH3": "Couldn’t paste into c11",
-      "failMeta": "118 words",
-      "histFooter": "History · 12 of 247 · Newest firstLiquid Voice",
-      "mh": "Liquid VoiceReady"
-    }
+    "pill": null,
+    "rects": {},
+    "text": {}
   }
 }

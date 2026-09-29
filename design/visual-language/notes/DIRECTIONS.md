@@ -38,7 +38,7 @@ Round 3: corners became a hover affordance, the LISTENING strip went, the timer 
 
 ## Round 5 (2026-09-28): states from the newer branch
 
-After the lock, the parent surface reported states the prototype missed. Added in the Signal grammar: Spoken Send in the trace row (SEND placard, orange drain bar, countdown in the timer; no fifth chip), a Sent outcome, one recovery-card family (timed out, recognition back, mic off, and three delivery-failure reasons), truthful "Pasted into" / "Sent to" wording, and the app icon (ink tile, five white bars, one orange square; three bars at 32 pt and below). Locked on Cairn's recommendations; each has a one-click alternative in the prototype.
+After the lock, the parent surface reported states the prototype missed. Added in the Signal grammar: Spoken Send in the trace row (SEND placard, orange drain bar, countdown in the timer; no fifth chip), a Sent outcome, one recovery-card family (timed out, recognition back, mic off, and three delivery-failure reasons), truthful "Pasted into" / "Sent to" wording, and the app icon (ink tile, five white bars, one orange square; three bars at 32 pt and below). Atin's calls: Spoken Send in the trace row ("Row, sounds good"), no preference on Pasted wording, recognition-back as a light notice row ("sure, great"), icon A unchallenged.
 
 ## Decisions so far
 

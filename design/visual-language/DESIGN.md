@@ -190,7 +190,7 @@ Not prototyped in this pass; Atin locked the overlay and menu bar. The tokens, t
 - Corners are a hover affordance; no "LISTENING" word; mic bottom-centre; timer opposite the app icon. (Atin, round 3)
 - Square corners throughout; brackets outside the box. (Atin, round 4)
 - Assumed and unchallenged: dark by default with the light variant following the system; the delivered line stays; the mic label in every state; the bracket halo stays.
-- Round 5: "Pasted into" and "Sent to" instead of "Delivered to" (Atin: no preference, the state is new); recovery cards for timed out, mic off and failed, and a lighter notice row for recognition-back (Atin, "sure, great"); app icon variant A (unchallenged). Spoken Send's home, trace row or fifth chip, is awaiting Atin's word; the prototype builds both (`?send=chip`).
+- Round 5: "Pasted into" and "Sent to" instead of "Delivered to" (Atin: no preference, the state is new); recovery cards for timed out, mic off and failed, and a lighter notice row for recognition-back (Atin, "sure, great"); app icon variant A (unchallenged). Spoken Send lives in the trace row, not a fifth chip (Atin: "Row, sounds good"); the chip alternative stays in the prototype behind `?send=chip` as an unreviewed reference only.
 
 ## 15. Round 5: Spoken Send, recovery cards, wording, icon
 

@@ -30,6 +30,10 @@ final class BottomOverlayWindowController {
     static let shared = BottomOverlayWindowController()
 
     private var window: NSPanel?
+    /// The pill's floating shadow (DESIGN.md §6): a click-through child panel under the overlay's,
+    /// with the overlay's own visibility, so the transparent margin keeps passing clicks. Kept off
+    /// the start path: presented a main-queue turn after the pill is shown, withdrawn once hidden.
+    let floatShadow = SignalFloatShadow(presentsWithParent: false) { state in BottomOverlayShadowView(state: state) }
     /// Level ticks feed the Signal trace's sampler directly: no view is invalidated per tick.
     private var audioSubscription: AnyCancellable?
     private var spokenSendSubscription: AnyCancellable?
@@ -131,6 +135,7 @@ final class BottomOverlayWindowController {
     func show(audioPublisher: AnyPublisher<CGFloat, Never>, mode: OverlayMode) {
         let startedAt = ProcessInfo.processInfo.systemUptime
         Self.overlayBench("bottom_show_start mode=\(mode.rawValue) windowExists=\(self.window != nil)")
+        let wasParked = self.isParkedOffscreen
         self.cancelInFlightHideForNewPresentation()
         self.presentationGeneration &+= 1
 
@@ -178,6 +183,8 @@ final class BottomOverlayWindowController {
         CATransaction.flush()
         Self.overlayBench("bottom_order_front elapsedMs=\(Self.elapsedMs(since: startedAt))")
         Self.overlayBench("bottom_visible elapsedMs=\(Self.elapsedMs(since: startedAt))")
+        StartPathTrace.overlayShown(visibleMs: Self.elapsedMs(since: startedAt), wasParked: wasParked)
+        self.presentFloatShadowAfterStart(shownAt: startedAt)
 
         self.audioSubscription?.cancel()
         self.audioSubscription = audioPublisher
@@ -300,6 +307,7 @@ final class BottomOverlayWindowController {
         window.alphaValue = 0
         window.setAccessibilityChildren([])
         window.setAccessibilityElement(false)
+        self.withdrawFloatShadowAfterHandoff(generation: currentGeneration)
         self.scheduleParkingAfterHandoff(generation: currentGeneration)
         NotchContentState.shared.setBottomOverlayPresented(false)
         SignalOverlayModel.shared.reset()
@@ -349,6 +357,40 @@ final class BottomOverlayWindowController {
     /// How long a hidden overlay waits before it is parked offscreen. Tests shorten it.
     static var idleParkingDelay: TimeInterval = 8
 
+    /// Whether the panel sits outside every display (parked, or never shown).
+    private var isParkedOffscreen: Bool {
+        guard let window else { return true }
+        return !NSScreen.screens.contains { $0.frame.intersects(window.frame) }
+    }
+
+    /// Orders the pill's shadow in once the start is under way: two main-queue turns after the
+    /// show, which puts it behind the capture start's first main-actor job (queued right after
+    /// the show), so showing the pill never waits on a second window. It can arrive a frame late.
+    private func presentFloatShadowAfterStart(shownAt: TimeInterval) {
+        let generation = self.presentationGeneration
+        DispatchQueue.main.async { [weak self] in
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.presentationGeneration == generation,
+                      NotchContentState.shared.isBottomOverlayPresented
+                else { return }
+                self.floatShadow.present()
+                StartPathTrace.shadowPresented(afterMs: Self.elapsedMs(since: shownAt))
+                Self.overlayBench("bottom_shadow_presented elapsedMs=\(Self.elapsedMs(since: shownAt))")
+            }
+        }
+    }
+
+    /// Takes the hidden pill's shadow out of the window list after the stop pipeline's handoff,
+    /// unless a newer presentation came first; the next show orders only the pill.
+    private func withdrawFloatShadowAfterHandoff(generation: UInt64) {
+        StopPipelineWindowWork.afterHandoff { [weak self] in
+            guard let self, self.presentationGeneration == generation,
+                  !NotchContentState.shared.isBottomOverlayPresented
+            else { return }
+            self.floatShadow.withdraw()
+        }
+    }
+
     func setProcessing(_ processing: Bool) {
         Self.overlayBench("bottom_set_processing processing=\(processing)")
         NotchContentState.shared.setProcessing(processing)
@@ -390,8 +432,29 @@ final class BottomOverlayWindowController {
                 ? .noSend
                 : SignalOverlayModel.placard(indicator: spokenSend.indicator, sendsInApp: spokenSend.sendsInRecordingApp)
         }
+        Self.logTraceSummary(model.trace)
         model.stopRecording(preview: Self.previewAtStop(), placard: placard)
         Self.overlayBench("bottom_recording_stopped placard=\(placard)")
+    }
+
+    /// What the trace drew for the recording that just stopped, so a flat or lively trace can be
+    /// read from the log: windows pushed, windows drawn above the floor, the loudest window, and the
+    /// calibration it ended on (levels are linear in dB: 0 is -55 dBFS, 1 is 0 dBFS).
+    static func logTraceSummary(_ trace: SignalTraceModel) {
+        let stats = trace.stats
+        DebugLogger.shared.info(
+            String(
+                format: "TRACE_SUMMARY windows=%d raised=%d loudest=%.3f floor=%.3f gate=%.3f peak=%.3f sensitivity=%.2f",
+                stats.windows,
+                stats.raised,
+                stats.loudest,
+                trace.quietFloor ?? 0,
+                trace.gate,
+                trace.loudPeak,
+                trace.noiseThreshold
+            ),
+            source: "BottomOverlay"
+        )
     }
 
     /// The dictation's text was handed to the typing service: hold the overlay for its outcome.
@@ -644,6 +707,7 @@ final class BottomOverlayWindowController {
         self.window?.orderFrontRegardless()
         self.window?.contentView?.displayIfNeeded()
         CATransaction.flush()
+        self.presentFloatShadowAfterStart(shownAt: ProcessInfo.processInfo.systemUptime)
         self.noticeReprocessed = false
         // A pointer already resting on the pill gets no hover event until it moves: seed the pause.
         let restingOnPill = pointerInside ?? (self.window?.frame.contains(NSEvent.mouseLocation) ?? false)
@@ -892,12 +956,14 @@ final class BottomOverlayWindowController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = false // SwiftUI handles shadow
+        // No window-server shadow: it would rim the brackets and chips. The pill's floating shadow
+        // is its own click-through panel (SignalFloatShadow), attached below.
+        panel.hasShadow = false
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none
 
-        let contentView = BottomOverlayView()
+        let contentView = BottomOverlayView(floatShadow: self.floatShadow.state)
         let hostingView = BottomOverlayHostingView(rootView: contentView)
 
         // Let SwiftUI determine the size
@@ -914,6 +980,7 @@ final class BottomOverlayWindowController {
         hostingView.display()
 
         self.window = panel
+        self.floatShadow.attach(to: panel)
     }
 
     private var isReleaseTransitionActive: Bool {
@@ -1093,6 +1160,8 @@ final class BottomOverlayWindowController {
 
     private func parkWindowOffscreen() {
         guard let window else { return }
+        // The pill parks alone: its shadow is out of the window list first, never dragged along.
+        self.floatShadow.withdraw()
         window.setAccessibilityChildren([])
         window.setAccessibilityElement(false)
         (window as? BottomOverlayPanel)?.allowsOffscreenParking = true
@@ -1121,6 +1190,8 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
     }
 
     private var menuWindow: NSPanel?
+    /// The card's floating shadow (DESIGN.md §6), in its own click-through panel under the card's.
+    let floatShadow = SignalFloatShadow { state in SignalFloatShadowView(state: state).signalPalette() }
     private var hostingView: NSHostingView<BottomOverlayHistoryMenuView>?
     private var selectorFrameInScreen: CGRect = .zero
     private weak var parentWindow: NSWindow?
@@ -1218,8 +1289,8 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        // No window shadow (DESIGN.md §6): the card's own 1 px edge and flat 2 pt drop rule
-        // separate it from the pill.
+        // No window-server shadow: the card's floating shadow is its own click-through panel
+        // (SignalFloatShadow, DESIGN.md §6), attached below.
         panel.hasShadow = false
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
@@ -1236,11 +1307,13 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
 
         self.hostingView = hostingView
         self.menuWindow = panel
+        self.floatShadow.attach(to: panel)
     }
 
     private func makeMenuContent() -> BottomOverlayHistoryMenuView {
         BottomOverlayHistoryMenuView(
             maxWidth: self.menuMaxWidth,
+            floatShadow: self.floatShadow.state,
             onDismissRequested: { [weak self] in
                 self?.hide()
             }
@@ -1322,6 +1395,8 @@ private struct BottomOverlayHistoryMenuView: View {
     @ObservedObject private var historyStore = TranscriptionHistoryStore.shared
 
     let maxWidth: CGFloat
+    /// The card panel's floating shadow, which the card reports its box to.
+    let floatShadow: SignalFloatShadow.State
     let onDismissRequested: () -> Void
 
     private static let maxEntriesShown = 12
@@ -1340,6 +1415,7 @@ private struct BottomOverlayHistoryMenuView: View {
                 BottomOverlayHistoryMenuController.shared.isHovered = hovering
             }
         )
+        .signalFloatShadowSource(self.floatShadow)
         .padding(SignalTheme.Metrics.windowInsets)
         .signalPalette()
     }

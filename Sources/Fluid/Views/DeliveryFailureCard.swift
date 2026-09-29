@@ -19,6 +19,9 @@ final class DeliveryFailureOverlayController {
     static let microphoneSettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
 
     private var panel: NSPanel?
+    /// The card's floating shadow (DESIGN.md §6), in its own click-through panel under the card's;
+    /// it follows the card's alpha, so the dismiss fade takes it along.
+    let floatShadow = SignalFloatShadow { state in SignalFloatShadowView(state: state).signalPalette() }
     private var hostingView: NSHostingView<DeliveryFailureCardView>?
     private var dismissTask: Task<Void, Never>?
     private var generation: UInt64 = 0
@@ -152,7 +155,8 @@ final class DeliveryFailureOverlayController {
             microphoneName: BottomOverlayWindowController.cachedMicrophoneName(current: SignalOverlayModel.shared.microphoneName),
             onPrimary: primary,
             onDismiss: { [weak self] in self?.hide() },
-            onHoverChanged: { [weak self] hovering in self?.hoverChanged(hovering) }
+            onHoverChanged: { [weak self] hovering in self?.hoverChanged(hovering) },
+            floatShadow: self.floatShadow.state
         )
         self.present(view, avoidingOverlay: !overlayYielded)
     }
@@ -171,6 +175,8 @@ final class DeliveryFailureOverlayController {
             self.createPanel()
         }
         guard let panel = self.panel else { return }
+        // The new card reports its own surface when it lays out; never cast the last card's.
+        self.floatShadow.state.surface = nil
         let hostingView = NSHostingView(rootView: rootView)
         hostingView.wantsLayer = true
         hostingView.layer?.backgroundColor = .clear
@@ -281,11 +287,14 @@ final class DeliveryFailureOverlayController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = false // Flat: the pill's 1 px edge and 2 pt drop rule, as in the overlay.
+        // No window-server shadow: the card's floating shadow is its own click-through panel
+        // (SignalFloatShadow, DESIGN.md §6), attached below.
+        panel.hasShadow = false
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none
         panel.isMovableByWindowBackground = false
         self.panel = panel
+        self.floatShadow.attach(to: panel)
     }
 
     private func positionPanel(avoidingOverlay: Bool) {
@@ -327,6 +336,9 @@ struct DeliveryFailureCardView: View {
     let onPrimary: () -> Void
     let onDismiss: () -> Void
     let onHoverChanged: (Bool) -> Void
+    /// The card panel's floating shadow, which this card reports its grown pill to. Only the
+    /// card's own panel passes it; a render or another host reports nowhere.
+    var floatShadow: SignalFloatShadow.State?
 
     @ObservedObject private var historyStore = TranscriptionHistoryStore.shared
     @ObservedObject private var historyCard = BottomOverlayHistoryMenuController.shared
@@ -403,6 +415,7 @@ struct DeliveryFailureCardView: View {
                     onDismiss: self.onDismiss
                 )
             }
+            .signalFloatShadowSource(self.floatShadow)
 
             SignalRail(height: geometry.railHeight) {
                 self.chip("cancel", "xmark", "Dismiss", enabled: true, action: self.onDismiss)

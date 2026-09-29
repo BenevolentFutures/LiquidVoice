@@ -7,7 +7,8 @@ import SwiftUI
 //
 // Square solid surfaces, 1 px rules, square-ended ink bars, SF Mono for every number and label,
 // and one colour, international orange, only for something live or actionable. No radius, no
-// gradients, no blur, no glow, no materials. Dark is the default; light is print on paper and
+// gradients, no glow, no materials, and one blur: the soft floating shadow under the pill and
+// cards (DESIGN.md §6, Atin 2026-09-29), drawn by SignalFloatShadow. Dark is the default; light is print on paper and
 // follows the system appearance.
 
 enum SignalTheme {
@@ -27,6 +28,9 @@ enum SignalTheme {
         let chip: Color
         /// The flat, unblurred 2 pt drop rule under the pill and cards.
         let drop: Color
+        /// The soft floating shadow under the pill and cards (DESIGN.md §6, Atin 2026-09-29):
+        /// neutral black, lighter on paper.
+        let floatShadow: Color
         /// Trace bars.
         let ink: Color
         /// The 1 px rule behind the trace.
@@ -58,6 +62,7 @@ enum SignalTheme {
             edge: SignalTheme.rgb(0x2C2E33),
             chip: SignalTheme.rgb(0x1A1B1F),
             drop: Color.black.opacity(0.35),
+            floatShadow: Color.black.opacity(0.32),
             ink: .white,
             midline: SignalTheme.rgb(0x2C2E33),
             text: Color.white.opacity(0.92),
@@ -80,6 +85,7 @@ enum SignalTheme {
             edge: SignalTheme.rgb(0x111214),
             chip: SignalTheme.rgb(0xF2F2F4),
             drop: SignalTheme.rgb(0x111214),
+            floatShadow: Color.black.opacity(0.16),
             ink: SignalTheme.rgb(0x111214),
             midline: SignalTheme.rgb(0xD3D4D8),
             text: SignalTheme.rgb(0x111214),
@@ -193,6 +199,12 @@ enum SignalTheme {
         static let pillPaddingHorizontal: CGFloat = 18
         static let edgeWidth: CGFloat = 1
         static let dropRule: CGFloat = 2
+        /// The floating shadow (DESIGN.md §6, Atin 2026-09-29): blur radius and downward offset,
+        /// and the margin its click-through panel keeps around the surface's panel so the blur
+        /// is never clipped.
+        static let floatShadowRadius: CGFloat = 12
+        static let floatShadowY: CGFloat = 5
+        static let floatShadowMargin: CGFloat = 32
         /// The failed card's top rule.
         static let failedTopRule: CGFloat = 2
 

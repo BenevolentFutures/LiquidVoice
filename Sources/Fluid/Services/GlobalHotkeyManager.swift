@@ -2433,6 +2433,7 @@ final class GlobalHotkeyManager: NSObject {
     /// finished, a hold release counts as arriving during a start, so it is latched rather than
     /// lost (see HoldReleaseStopLatch.trackStart).
     private func performStartingHotkeyAction(_ action: @escaping @MainActor () async -> HotkeyCaptureStartTask?) {
+        StartPathTrace.hotkeyPressed()
         self.holdReleaseStopLatch.trackStart(action)
     }
 

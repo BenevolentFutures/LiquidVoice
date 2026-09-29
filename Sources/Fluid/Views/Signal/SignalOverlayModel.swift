@@ -44,6 +44,8 @@ final class SignalOverlayModel: ObservableObject {
     @Published var inspectionHover: String?
     /// Holds Spoken Send's placard for renders and inspection (the prototype's `?armed=1`).
     @Published var inspectionPlacard: SignalPlacard?
+    /// Holds the transcribing sweep at a fraction of its period (renders and inspection).
+    @Published var inspectionSweepProgress: Double?
 
     /// The last recording's facts, for a failure card about it.
     private(set) var lastRecording: (duration: TimeInterval, endedAt: Date)?
@@ -243,9 +245,14 @@ struct SignalOverlayGeometry: Equatable {
         self.previewLines > 0
     }
 
-    /// Where the delivered statement goes: the preview area when there is one of at least 54.
+    /// The top area: the preview's lines. The outcome statement and the notice take a compact,
+    /// one-line form when it is shorter than 54 (the small size).
     var topAreaHeight: CGFloat {
-        self.showsPreview ? max(self.previewHeight, 54) : 0
+        self.previewHeight
+    }
+
+    var isCompactTop: Bool {
+        self.topAreaHeight < 54
     }
 
     var pillHeight: CGFloat {

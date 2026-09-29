@@ -3166,7 +3166,7 @@ enum SignalRenderStage {
         ("02-listening-hover", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionHover = "pill" }),
         ("03-listening-hover-cancel", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionHover = "cancel" }),
         ("04-listening-armed", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionPlacard = .send }),
-        ("05-transcribing", { SignalRenderStage.listening(); SignalRenderStage.stop(); NotchContentState.shared.setProcessing(true); SignalOverlayModel.shared.beginTranscribing() }),
+        ("05-transcribing", { SignalRenderStage.listening(); SignalRenderStage.stop(); NotchContentState.shared.setProcessing(true); SignalOverlayModel.shared.beginTranscribing(); SignalOverlayModel.shared.inspectionSweepProgress = 0.45 }),
         ("06-pasted", { SignalRenderStage.listening(); SignalRenderStage.stop(); SignalOverlayModel.shared.showDelivered(SignalDelivery(appName: "c11", words: 118, method: .paste, sentReturn: false)) }),
         ("13-countdown", { SignalRenderStage.listening(); SignalOverlayModel.shared.inspectionPlacard = .send; SignalOverlayModel.shared.startSendCountdown(duration: 1.5, at: Date().addingTimeInterval(-0.55)) }),
         ("14-countdown-canceled", {
@@ -3216,6 +3216,7 @@ enum SignalRenderStage {
         let model = SignalOverlayModel.shared
         model.inspectionHover = nil
         model.inspectionPlacard = nil
+        model.inspectionSweepProgress = nil
         model.reset()
     }
 
@@ -3260,5 +3261,170 @@ enum SignalRenderStage {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let data = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
         try data.write(to: url)
+    }
+}
+
+/// The Signal overlay's behavior: the trace sampler, the geometry, the truthful wording, which
+/// chips act when, and the delivered hold (quiet: no window reaches the screen).
+@MainActor
+final class SignalOverlayBehaviorTests: XCTestCase {
+    override func tearDown() {
+        TypingService.dictationOutcomeHandler = { outcome in
+            BottomOverlayWindowController.shared.dictationDeliveryFinished(outcome)
+        }
+        SignalRenderStage.reset()
+        super.tearDown()
+    }
+
+    func testTheTraceTakesTwelveSamplesASecondAndScrollsThroughSilence() {
+        let trace = SignalTraceModel(barCount: 39, noiseThreshold: 0.4)
+        trace.begin(at: 100)
+        // One second of silence: twelve pushes, every bar at the 2 pt floor, still scrolling.
+        trace.advance(to: 101)
+        XCTAssertEqual(trace.lastPush, 101, accuracy: 0.0001)
+        XCTAssertTrue(trace.current.allSatisfy { $0 == 2 })
+        // A loud level inside the next window becomes the newest bar once the window closes.
+        trace.ingest(level: 1, at: 101.02)
+        XCTAssertEqual(trace.current.last, 2, "no push before the window closes")
+        trace.advance(to: 101 + 1.0 / 12 + 0.001)
+        XCTAssertGreaterThan(trace.current.last ?? 0, 2)
+        // Heights snap to even points; the morph runs 60 ms, then the frame clock may pause.
+        let shown = trace.shownHeight(at: 38, now: trace.lastPush + 0.03)
+        XCTAssertEqual(shown.truncatingRemainder(dividingBy: 2), 0)
+        XCTAssertTrue(trace.isMorphing(at: trace.lastPush + 0.03))
+        XCTAssertFalse(trace.isMorphing(at: trace.lastPush + 0.07))
+        // Stop: every bar to the floor within 60 ms, and nothing pushes after.
+        trace.stop(at: 102)
+        XCTAssertEqual(trace.shownHeight(at: 38, now: 102.07), 2)
+        let pushed = trace.lastPush
+        trace.advance(to: 110)
+        XCTAssertEqual(trace.lastPush, pushed)
+        XCTAssertEqual(SignalTraceModel.snapped(3.1), 4)
+        XCTAssertEqual(SignalTraceModel.snapped(0.4), 2)
+    }
+
+    func testTheMediumPillIsTheDesignedGeometry() {
+        let medium = SignalOverlayGeometry.forSize(.medium)
+        XCTAssertEqual(medium.pillWidth, 340)
+        XCTAssertEqual(medium.pillHeight, 149)
+        XCTAssertEqual(medium.railHeight, 149)
+        XCTAssertEqual(medium.traceBars, 39, "round 5: 39 bars beside the Spoken Send placard")
+        XCTAssertEqual(SignalTraceModel.width(forBars: 39), 154)
+        // Every other size keeps the rows and only reserves fewer or more preview lines.
+        XCTAssertEqual(SignalOverlayGeometry.forSize(.small).pillHeight, 149 - 36)
+        XCTAssertTrue(SignalOverlayGeometry.forSize(.small).isCompactTop)
+        XCTAssertFalse(medium.isCompactTop)
+        XCTAssertGreaterThanOrEqual(SignalOverlayGeometry.forSize(.pill).railHeight, 90)
+    }
+
+    func testTheOutcomeNamesOnlyWhatWasDone() {
+        XCTAssertEqual(SignalDelivery(appName: "c11", words: 118, method: .paste, sentReturn: false).headline, "Pasted into c11")
+        XCTAssertEqual(SignalDelivery(appName: "TextEdit", words: 3, method: .keystrokes, sentReturn: false).headline, "Typed into TextEdit")
+        XCTAssertEqual(SignalDelivery(appName: "Notes", words: 3, method: .accessibility, sentReturn: false).headline, "Inserted into Notes")
+        let sent = SignalDelivery(appName: "c11", words: 118, method: .paste, sentReturn: true)
+        XCTAssertEqual(sent.headline, "Sent to c11")
+        XCTAssertEqual(sent.meta, "118 words · Return")
+        XCTAssertEqual(SignalDelivery(appName: nil, words: 1, method: .paste, sentReturn: false).headline, "Pasted")
+        XCTAssertEqual(TypingService.deliveryMethod(for: .clipboardToPID), .paste)
+        XCTAssertEqual(TypingService.deliveryMethod(for: .characterByCharacter), .keystrokes)
+        XCTAssertEqual(TypingService.deliveryMethod(for: .accessibility), .accessibility)
+    }
+
+    func testChipsNeverActDuringTheDeliveredHold() {
+        let delivered = BottomOverlayView.Display.delivered(SignalDelivery(appName: "c11", words: 2, method: .paste, sentReturn: false))
+        for role in [BottomOverlayView.ChipRole.always, .historyAction] {
+            XCTAssertTrue(BottomOverlayView.isChipInert(role, display: delivered))
+            XCTAssertFalse(BottomOverlayView.isChipInert(role, display: .listening))
+        }
+        // Stopped: Copy and Reprocess wait for the final pass; History and Cancel still work.
+        XCTAssertTrue(BottomOverlayView.isChipInert(.historyAction, display: .stopped))
+        XCTAssertFalse(BottomOverlayView.isChipInert(.always, display: .stopped))
+        // Transcribing: they dim instead.
+        XCTAssertFalse(BottomOverlayView.isChipEnabled(.historyAction, display: .transcribing, hasHistory: true))
+        XCTAssertTrue(BottomOverlayView.isChipEnabled(.historyAction, display: .listening, hasHistory: true))
+        XCTAssertFalse(BottomOverlayView.isChipEnabled(.historyAction, display: .listening, hasHistory: false))
+    }
+
+    func testSpokenSendPlacardAndSweepSteps() {
+        XCTAssertEqual(SignalOverlayModel.placard(indicator: .hidden, sendsInApp: true), SignalPlacard.none)
+        XCTAssertEqual(SignalOverlayModel.placard(indicator: .armed, sendsInApp: true), .send)
+        XCTAssertEqual(SignalOverlayModel.placard(indicator: .countingDown, sendsInApp: true), .send)
+        XCTAssertEqual(SignalOverlayModel.placard(indicator: .armed, sendsInApp: false), .noReturn)
+        XCTAssertEqual(SignalOverlayModel.placard(indicator: .canceled, sendsInApp: true), .noSend)
+        let drain = SignalDrain(startedAt: Date(timeIntervalSinceReferenceDate: 0), duration: 1.5)
+        XCTAssertEqual(drain.remaining(at: Date(timeIntervalSinceReferenceDate: 0.6)), 0.9, accuracy: 0.0001)
+        var canceled = drain
+        canceled.frozenRemaining = 0.9
+        XCTAssertEqual(canceled.remaining(at: Date(timeIntervalSinceReferenceDate: 5)), 0.9)
+        XCTAssertFalse(canceled.isRunning)
+
+        let steps = SignalSweepView.steps(traceWidth: 154, reducesMotion: false)
+        XCTAssertTrue(steps.allSatisfy { ($0.x - 1).truncatingRemainder(dividingBy: 4) == 0 }, "stepped on the 4 pt pitch")
+        XCTAssertEqual(steps.first?.time, 0)
+        XCTAssertEqual(SignalSweepView.steps(traceWidth: 154, reducesMotion: true).count, 4, "reduced motion holds four positions")
+    }
+
+    func testThePreviewKeepsTheNewestWords() {
+        let font = SignalTheme.Typography.preview.nsFont
+        let text = (1...80).map { "word\($0)" }.joined(separator: " ")
+        let fitted = SignalTextFitting.newestWords(of: text, wasCut: false, font: font, width: 304, lines: 3)
+        XCTAssertTrue(fitted.hasPrefix("…"))
+        XCTAssertTrue(fitted.hasSuffix("word80"))
+        XCTAssertLessThanOrEqual(SignalTextFitting.lineCount(fitted, font: font, width: 304), 3)
+        XCTAssertEqual(SignalTextFitting.newestWords(of: "short", wasCut: false, font: font, width: 304, lines: 3), "short")
+    }
+
+    /// The hold never starts before the outcome, shows it once the paste is posted, then fades and
+    /// parks; the margin still paints nothing once hidden, and ignoresMouseEvents is never set.
+    func testTheDeliveredHoldShowsTheOutcomeThenDismisses() async throws {
+        let controller = BottomOverlayWindowController.shared
+        let model = SignalOverlayModel.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        controller.markRecordingStopped()
+        XCTAssertEqual(model.phase, .stopped)
+
+        controller.awaitDelivery(traceID: 4242, appName: "c11", words: 7, failureReported: false)
+        XCTAssertEqual(model.phase, .stopped, "no outcome yet: the hold has not begun")
+
+        // Another dictation's outcome is ignored.
+        controller.dictationDeliveryFinished(DictationDeliveryOutcome(traceID: 1, result: .dispatched, method: .paste, sentReturn: false))
+        XCTAssertEqual(model.phase, .stopped)
+
+        controller.dictationDeliveryFinished(DictationDeliveryOutcome(traceID: 4242, result: .dispatched, method: .paste, sentReturn: false))
+        XCTAssertEqual(model.phase, .delivered(SignalDelivery(appName: "c11", words: 7, method: .paste, sentReturn: false)))
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented)
+        XCTAssertEqual(controller.windowStateForTests?.alpha, 1)
+
+        // 1.2 s hold, 120 ms fade, then hidden: alpha 0, nothing painted, never ignoresMouseEvents.
+        try await Task.sleep(nanoseconds: 1_600_000_000)
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented)
+        let hidden = try XCTUnwrap(controller.windowStateForTests)
+        XCTAssertEqual(hidden.alpha, 0)
+        XCTAssertFalse(hidden.ignoresMouse)
+        XCTAssertFalse(controller.contentPaintsPixelsForTests())
+        XCTAssertEqual(model.phase, .idle)
+    }
+
+    /// A failed paste hands the overlay to the recovery card at once (a cut), so the card reads as
+    /// the pill growing; a live recording is never taken over.
+    func testAFailedPasteYieldsToTheCardButALiveRecordingDoesNot() async throws {
+        let controller = BottomOverlayWindowController.shared
+        controller.prepare()
+        await Task.yield()
+        controller.show(audioPublisher: Just(CGFloat.zero).eraseToAnyPublisher(), mode: .dictation)
+        XCTAssertFalse(controller.yieldToCard(), "a live recording stays; the card sits above it")
+        XCTAssertTrue(NotchContentState.shared.isBottomOverlayPresented)
+
+        controller.markRecordingStopped()
+        controller.awaitDelivery(traceID: 77, appName: "c11", words: 3, failureReported: false)
+        controller.dictationDeliveryFinished(DictationDeliveryOutcome(traceID: 77, result: .recoverableFailure(.pasteNotLanded), method: nil, sentReturn: false))
+        XCTAssertEqual(SignalOverlayModel.shared.phase, .stopped, "waits for the card, never shows an outcome")
+        XCTAssertEqual(controller.pendingDeliveryAppName, "c11")
+        XCTAssertTrue(controller.yieldToCard())
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(NotchContentState.shared.isBottomOverlayPresented, "a cut, no 120 ms fade")
+        XCTAssertEqual(controller.windowStateForTests?.alpha, 0)
     }
 }

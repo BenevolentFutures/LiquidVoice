@@ -15,6 +15,9 @@ struct SignalTraceView: View {
     let isSweeping: Bool
     /// Spoken Send's countdown: the trace draws flat under the drain bar.
     var drain: SignalDrain?
+    /// Draws the sweep at this fraction of its period inside the Canvas instead of animating it
+    /// (renders and inspection: an offscreen renderer draws no Core Animation layer).
+    var staticSweepProgress: Double?
     var showsAgeRuler = true
 
     @Environment(\.signalPalette) private var palette
@@ -42,7 +45,7 @@ struct SignalTraceView: View {
         }
         .frame(width: self.width, height: self.height)
         .overlay(alignment: .topLeading) {
-            if self.isSweeping {
+            if self.isSweeping, self.staticSweepProgress == nil {
                 SignalSweep(traceWidth: self.width, reducesMotion: self.reduceMotion)
                     .frame(width: self.width, height: SignalTheme.Metrics.traceHeight)
                     .allowsHitTesting(false)
@@ -79,6 +82,15 @@ struct SignalTraceView: View {
             context.fill(
                 Path(CGRect(x: x, y: mid - barHeight / 2, width: metrics.barWidth, height: barHeight)),
                 with: .color(color)
+            )
+        }
+
+        if self.isSweeping, let progress = self.staticSweepProgress {
+            let steps = SignalSweepView.steps(traceWidth: self.width, reducesMotion: false)
+            let x = steps.last(where: { $0.time <= progress })?.x ?? steps[0].x
+            context.fill(
+                Path(CGRect(x: x, y: mid - metrics.sweepHeight / 2, width: metrics.sweepWidth, height: metrics.sweepHeight)),
+                with: .color(self.palette.accent)
             )
         }
 

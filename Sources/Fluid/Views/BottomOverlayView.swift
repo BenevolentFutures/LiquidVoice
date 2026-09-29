@@ -454,7 +454,7 @@ final class BottomOverlayWindowController {
         self.cancelDeliveryHold()
         self.nextHideIsCut = true
         Self.overlayBench("bottom_yield_to_card")
-        NotchOverlayManager.shared.hide()
+        self.hideThroughOwner()
         return true
     }
 
@@ -485,7 +485,17 @@ final class BottomOverlayWindowController {
               SignalOverlayModel.shared.isPostStop
         else { return }
         Self.overlayBench("bottom_hold_end reason=\(reason)")
-        NotchOverlayManager.shared.hide()
+        self.hideThroughOwner()
+    }
+
+    /// Hides through NotchOverlayManager when it presented the overlay (its bookkeeping follows),
+    /// else directly.
+    private func hideThroughOwner() {
+        if NotchOverlayManager.shared.isBottomOverlayVisible {
+            NotchOverlayManager.shared.hide()
+        } else {
+            self.hide()
+        }
     }
 
     private func cancelDeliveryHold() {

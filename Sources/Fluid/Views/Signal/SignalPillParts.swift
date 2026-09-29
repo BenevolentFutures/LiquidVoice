@@ -48,6 +48,7 @@ struct SignalTraceRow: View {
     let isLive: Bool
     let isSweeping: Bool
     var drain: SignalDrain?
+    var staticSweepProgress: Double?
     let mark: SignalRecordMark
     var placard: SignalPlacard = .none
     let timer: SignalTimerReadout
@@ -71,7 +72,13 @@ struct SignalTraceRow: View {
             .padding(.top, metrics.traceMidline - metrics.targetIcon / 2)
             .help("Dictation target app")
 
-            SignalTraceView(model: self.trace, isLive: self.isLive, isSweeping: self.isSweeping, drain: self.drain)
+            SignalTraceView(
+                model: self.trace,
+                isLive: self.isLive,
+                isSweeping: self.isSweeping,
+                drain: self.drain,
+                staticSweepProgress: self.staticSweepProgress
+            )
                 .padding(.leading, metrics.traceLeadingGap)
 
             Spacer(minLength: metrics.placardLeadingGap)
@@ -193,30 +200,49 @@ struct SignalPreview: View {
     }
 }
 
-/// Delivered: the orange stamp, the headline, and the word count, in place of the preview.
+/// The outcome: the orange stamp, the headline, and the word count, in place of the preview.
+/// Compact (a one-line preview area): a small stamp and one line.
 struct SignalDeliveredStatement: View {
     let delivery: SignalDelivery
+    var isCompact = false
     @Environment(\.signalPalette) private var palette
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "checkmark")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(self.palette.onAccent)
-                .frame(width: SignalTheme.Metrics.deliveredStamp, height: SignalTheme.Metrics.deliveredStamp)
-                .background(self.palette.accent)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(self.delivery.headline)
-                    .font(SignalTheme.Typography.deliveredHeadline.font)
-                    .foregroundStyle(self.palette.text)
-                    .lineLimit(1)
-                    .frame(height: SignalTheme.Typography.deliveredHeadline.lineHeight)
-                SignalMonoLabel(text: self.delivery.meta, color: self.palette.text2)
-                    .frame(height: 14)
+        Group {
+            if self.isCompact {
+                HStack(spacing: 8) {
+                    self.stamp(size: 16, glyph: 9)
+                    Text(self.delivery.headline)
+                        .font(SignalTheme.Typography.failedHeadline.font)
+                        .foregroundStyle(self.palette.text)
+                        .lineLimit(1)
+                    SignalMonoLabel(text: self.delivery.meta, color: self.palette.text2)
+                }
+            } else {
+                HStack(spacing: 14) {
+                    self.stamp(size: SignalTheme.Metrics.deliveredStamp, glyph: 15)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(self.delivery.headline)
+                            .font(SignalTheme.Typography.deliveredHeadline.font)
+                            .foregroundStyle(self.palette.text)
+                            .lineLimit(1)
+                            .frame(height: SignalTheme.Typography.deliveredHeadline.lineHeight)
+                        SignalMonoLabel(text: self.delivery.meta, color: self.palette.text2)
+                            .frame(height: 14)
+                    }
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
+    }
+
+    private func stamp(size: CGFloat, glyph: CGFloat) -> some View {
+        Image(systemName: "checkmark")
+            .font(.system(size: glyph, weight: .bold))
+            .foregroundStyle(self.palette.onAccent)
+            .frame(width: size, height: size)
+            .background(self.palette.accent)
     }
 }
 

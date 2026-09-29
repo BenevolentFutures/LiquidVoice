@@ -67,7 +67,7 @@ struct BottomOverlayView: View {
 
     // MARK: Chips
 
-    private enum ChipRole {
+    enum ChipRole {
         /// History and Cancel: live whenever the overlay is (not during the delivered hold).
         case always
         /// Copy and Reprocess: live only while listening or on a notice; dimmed while transcribing.
@@ -80,19 +80,28 @@ struct BottomOverlayView: View {
 
     /// Inert: the chip looks at rest but acts on nothing. During the delivered hold no chip may
     /// re-fire a paste or copy; Copy and Reprocess wait until the final pass is done.
-    private func isInert(_ role: ChipRole) -> Bool {
-        switch self.display {
+    static func isChipInert(_ role: ChipRole, display: Display) -> Bool {
+        switch display {
         case .delivered, .idle: return true
         case .stopped: return role == .historyAction
         case .listening, .transcribing, .notice: return false
         }
     }
 
-    private func isEnabled(_ role: ChipRole) -> Bool {
+    /// Disabled (dimmed): Copy and Reprocess without history, and while transcribing.
+    static func isChipEnabled(_ role: ChipRole, display: Display, hasHistory: Bool) -> Bool {
         switch role {
         case .always: return true
-        case .historyAction: return self.hasHistory && self.display != .transcribing
+        case .historyAction: return hasHistory && display != .transcribing
         }
+    }
+
+    private func isInert(_ role: ChipRole) -> Bool {
+        Self.isChipInert(role, display: self.display)
+    }
+
+    private func isEnabled(_ role: ChipRole) -> Bool {
+        Self.isChipEnabled(role, display: self.display, hasHistory: self.hasHistory)
     }
 
     private func chipHover(_ id: String) -> (Bool) -> Void {
@@ -290,11 +299,12 @@ struct BottomOverlayView: View {
     private func topArea(_ geometry: SignalOverlayGeometry, display: Display) -> some View {
         switch display {
         case let .delivered(delivery):
-            SignalDeliveredStatement(delivery: delivery)
+            SignalDeliveredStatement(delivery: delivery, isCompact: geometry.isCompactTop)
         case .notice:
             SignalNoticeRow(
                 message: self.contentState.aiProcessingFailureMessage,
                 canRetry: self.contentState.canRetryAIProcessingFailure,
+                isCompact: geometry.isCompactTop,
                 onRetry: {
                     self.perform {
                         self.contentState.clearAIProcessingFailure()
@@ -372,6 +382,7 @@ struct BottomOverlayView: View {
             isLive: display == .listening && self.model.trace.isLive,
             isSweeping: display == .transcribing,
             drain: drain,
+            staticSweepProgress: self.model.inspectionSweepProgress,
             mark: mark,
             placard: self.placard,
             timer: timer

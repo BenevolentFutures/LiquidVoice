@@ -174,27 +174,44 @@ struct SignalCardBody: View {
 struct SignalNoticeRow: View {
     let message: String
     let canRetry: Bool
+    var isCompact = false
     let onRetry: () -> Void
     let onDismiss: () -> Void
     @Environment(\.signalPalette) private var palette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(self.message)
-                .font(SignalTheme.Typography.failedHeadline.font)
-                .foregroundStyle(self.palette.text)
-                .lineLimit(1)
-                .frame(height: SignalTheme.Typography.failedHeadline.lineHeight)
-            HStack(spacing: 16) {
+        if self.isCompact {
+            HStack(spacing: 12) {
+                self.messageText
+                Spacer(minLength: 4)
                 if self.canRetry {
-                    Button("Try Again", action: self.onRetry)
-                        .buttonStyle(SignalPrimaryButtonStyle())
+                    Button("Try Again", action: self.onRetry).buttonStyle(SignalTextButtonStyle())
                 }
-                Button("Dismiss", action: self.onDismiss)
-                    .buttonStyle(SignalTextButtonStyle())
+                Button("Dismiss", action: self.onDismiss).buttonStyle(SignalTextButtonStyle())
             }
-            .frame(height: SignalTheme.Metrics.buttonHeight)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                self.messageText
+                    .frame(height: SignalTheme.Typography.failedHeadline.lineHeight)
+                HStack(spacing: 16) {
+                    if self.canRetry {
+                        Button("Try Again", action: self.onRetry)
+                            .buttonStyle(SignalPrimaryButtonStyle())
+                    }
+                    Button("Dismiss", action: self.onDismiss)
+                        .buttonStyle(SignalTextButtonStyle())
+                }
+                .frame(height: SignalTheme.Metrics.buttonHeight)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var messageText: some View {
+        Text(self.message)
+            .font(SignalTheme.Typography.failedHeadline.font)
+            .foregroundStyle(self.palette.text)
+            .lineLimit(1)
     }
 }

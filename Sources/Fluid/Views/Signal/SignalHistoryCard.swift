@@ -13,7 +13,6 @@ struct SignalHistoryCard: View {
     var now = Date()
     /// Holds a row inverted for renders and inspection (the prototype's `?hoverRow=`), 1-based.
     var inspectionHoverRow: Int?
-    var isBracketForced = false
     /// Renders (ImageRenderer draws no scroll view): the rows clipped to the list's height instead.
     var isStatic = false
     let onPick: (TranscriptionHistoryEntry) -> Void
@@ -36,7 +35,8 @@ struct SignalHistoryCard: View {
         .frame(width: self.metrics.historyWidth - 2)
         .padding(1)
         .signalSurface()
-        .signalBracket(.card, visible: self.isHovered || self.isBracketForced)
+        // No bracket on the card as a whole: it is not clickable; its rows invert on hover
+        // (DESIGN.md §7, Atin 2026-09-29).
         .onHover { hovering in
             self.isHovered = hovering
             self.onHoverChanged(hovering)

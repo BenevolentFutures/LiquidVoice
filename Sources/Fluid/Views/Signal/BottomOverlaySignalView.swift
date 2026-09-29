@@ -314,10 +314,21 @@ struct BottomOverlayView: View {
         }
     }
 
+    /// The pill's bracket: under the pointer, and only while the pill is clickable as a whole
+    /// (SEND shows and a click cancels the Return). Brackets mark only what you can click.
+    static func showsPillBracket(isClickable: Bool, isHovered: Bool) -> Bool {
+        isClickable && isHovered
+    }
+
     private func pill(_ geometry: SignalOverlayGeometry) -> some View {
         let display = self.display
-        let pillBracket = (self.isHoveringOverlay && self.hoveredChips.isEmpty && !self.historyCard.isHovered
-            && self.isInteractive) || self.model.inspectionHover == "pill"
+        // Brackets mark only what you can click (DESIGN.md §7, Atin 2026-09-29). The pill is
+        // clickable as a whole only while SEND shows and a click cancels the Return.
+        let pillBracket = Self.showsPillBracket(
+            isClickable: self.canCancelSend || self.model.inspectionPlacard == .send,
+            isHovered: (self.isHoveringOverlay && self.hoveredChips.isEmpty && !self.historyCard.isHovered && self.isInteractive)
+                || self.model.inspectionHover == "pill"
+        )
         return SignalPill(
             geometry: geometry,
             topHeight: geometry.topAreaHeight,

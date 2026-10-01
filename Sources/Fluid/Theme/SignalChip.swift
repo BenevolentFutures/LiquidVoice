@@ -40,6 +40,7 @@ struct SignalChip: View {
             palette: self.palette
         ))
         .disabled(!self.isLive)
+        .signalClickTarget(isActive: self.isLive)
         .signalBracket(.chip, visible: (self.isHovered || self.isHoverForced) && self.isLive)
         .onHover { hovering in
             let hovering = hovering && self.isLive
@@ -127,7 +128,6 @@ private struct SignalChipFace<Label: View>: View {
                 .allowsHitTesting(false)
         }
         .contentShape(Rectangle())
-        .signalClickTarget()
         .animation(.linear(duration: SignalTheme.Motion.chipPress), value: self.isInverted)
         .animation(.linear(duration: SignalTheme.Motion.chipPress), value: self.isConfirming)
         .onChange(of: self.isPressed) { _, pressed in

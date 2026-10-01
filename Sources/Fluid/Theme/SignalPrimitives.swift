@@ -152,11 +152,12 @@ final class SignalClickTargets {
 }
 
 extension View {
-    /// Reports this button's frame as a click target (`SignalClickTargetsKey`).
-    func signalClickTarget() -> some View {
+    /// Reports this button's frame as a click target (`SignalClickTargetsKey`). A dimmed or inert
+    /// button (`isActive` false) acts on nothing, so a double-click there still resets the position.
+    func signalClickTarget(isActive: Bool = true) -> some View {
         self.background {
             GeometryReader { proxy in
-                Color.clear.preference(key: SignalClickTargetsKey.self, value: [proxy.frame(in: .global)])
+                Color.clear.preference(key: SignalClickTargetsKey.self, value: isActive ? [proxy.frame(in: .global)] : [])
             }
         }
     }

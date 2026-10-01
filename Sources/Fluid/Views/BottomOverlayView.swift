@@ -1157,10 +1157,10 @@ final class BottomOverlayWindowController {
         UserDefaults.standard.removeObject(forKey: Self.dragPositionYFractionKey)
     }
 
-    /// A mouse-down in the overlay's hosting view, at `point` (its coordinates, top-left origin).
+    /// A mouse-up in the overlay's hosting view, at `point` (its coordinates, top-left origin).
     /// A double-click anywhere but on a button returns the overlay to its default anchor; the
     /// buttons and the drag see the same click through SwiftUI, never delayed.
-    func overlayMouseDown(clickCount: Int, at point: CGPoint) {
+    func overlayMouseUp(clickCount: Int, at point: CGPoint) {
         let state = NotchContentState.shared
         guard state.isBottomOverlayPresented, !state.isBottomOverlayDismissing, !SignalOverlayModel.shared.isFading else { return }
         guard SignalClickTargets.isPositionResetClick(clickCount: clickCount, at: point, targets: self.clickTargets.rects) else { return }
@@ -1608,12 +1608,14 @@ struct PromptSelectorAnchorReader: NSViewRepresentable {
 /// to be carved out of hit-testing: a click on a transparent pixel passes to the app beneath.
 /// It detects the overlay's double-click (reset position) in AppKit after SwiftUI has seen the
 /// click, so a single click on a chip acts at once instead of waiting out a SwiftUI double-tap.
+/// The reset runs on the double-click's mouse-up, as the SwiftUI gesture did: moving the window
+/// under a held button would turn the next jitter into a drag that commits the old spot again.
 private final class BottomOverlayHostingView: NSHostingView<BottomOverlayView> {
-    override func mouseDown(with event: NSEvent) {
-        super.mouseDown(with: event)
+    override func mouseUp(with event: NSEvent) {
+        super.mouseUp(with: event)
         guard event.clickCount == 2 else { return }
         let local = self.convert(event.locationInWindow, from: nil)
         let point = self.isFlipped ? local : CGPoint(x: local.x, y: self.bounds.height - local.y)
-        BottomOverlayWindowController.shared.overlayMouseDown(clickCount: event.clickCount, at: point)
+        BottomOverlayWindowController.shared.overlayMouseUp(clickCount: event.clickCount, at: point)
     }
 }

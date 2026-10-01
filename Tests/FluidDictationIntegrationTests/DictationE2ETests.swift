@@ -3695,6 +3695,12 @@ final class SignalOverlayBehaviorTests: XCTestCase {
     /// Double-click resets the overlay's position in AppKit, away from its buttons, so no SwiftUI
     /// double-tap holds back a chip's single click (the ~350 ms History lag, 2026-10-01).
     func testADoubleClickResetsThePositionOnlyAwayFromButtons() {
+        // Listening with a history, so all four chips are live: a dimmed or inert chip acts on
+        // nothing and is not a target.
+        let savedHistory = TranscriptionHistoryStore.shared.makeBackupPayload()
+        TranscriptionHistoryStore.shared.restore(from: SignalRenderStage.sampleHistory)
+        SignalRenderStage.listening()
+        defer { TranscriptionHistoryStore.shared.restore(from: savedHistory) }
         let targets = SignalClickTargets()
         let host = NSHostingView(rootView: BottomOverlayView(clickTargets: targets))
         host.frame = CGRect(origin: .zero, size: host.fittingSize)
@@ -3710,6 +3716,11 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         XCTAssertFalse(SignalClickTargets.isPositionResetClick(clickCount: 1, at: pillCentre, targets: targets.rects), "a single click never resets")
         XCTAssertFalse(SignalClickTargets.isPositionResetClick(clickCount: 2, at: historyChip, targets: targets.rects), "a double-click on a chip is the chip's")
         XCTAssertFalse(SignalClickTargets.isPositionResetClick(clickCount: 3, at: pillCentre, targets: targets.rects))
+
+        // Idle (the delivered hold, a hidden overlay): every chip is inert, so none is a target.
+        SignalRenderStage.reset()
+        host.layoutSubtreeIfNeeded()
+        XCTAssertTrue(targets.rects.isEmpty, "inert chips act on nothing")
     }
 
     /// A card for another dictation never takes over a held outcome, and a failure that is not a

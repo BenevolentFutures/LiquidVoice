@@ -19,6 +19,8 @@ class NotchContentState: ObservableObject {
     private static let maxStoredTranscriptionCharacters = SettingsStore.transcriptionPreviewCharLimitRange.upperBound
 
     @Published var transcriptionText: String = ""
+    /// Words in the whole live text so far, for the pill's live word count (round 6).
+    @Published private(set) var liveWordCount = 0
     @Published var mode: OverlayMode = .dictation
     @Published var promptPickerMode: SettingsStore.PromptMode = .dictate
     @Published var isProcessing: Bool = false // AI processing state
@@ -113,11 +115,21 @@ class NotchContentState: ObservableObject {
 
     /// Update transcription and recompute cached lines
     func updateTranscription(_ text: String) {
+        self.updateLiveWordCount(text)
         let boundedText = Self.tailCharacters(in: text, maxCharacters: Self.maxStoredTranscriptionCharacters)
         guard boundedText != self.transcriptionText else { return }
 
         self.transcriptionText = boundedText
         self.recomputeTranscriptionLines()
+    }
+
+    /// Counts the whole live text (not the stored tail). A status word written into the text while
+    /// processing ("Transcribing") keeps the last count.
+    private func updateLiveWordCount(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !SignalOverlayModel.statusWords.contains(trimmed) else { return }
+        let count = SignalOverlayModel.wordCount(trimmed)
+        if count != self.liveWordCount { self.liveWordCount = count }
     }
 
     /// Recompute cached transcription lines (called only when text changes)

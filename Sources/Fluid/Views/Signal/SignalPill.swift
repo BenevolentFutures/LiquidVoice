@@ -1,15 +1,14 @@
 import SwiftUI
 
-/// The pill (DESIGN.md §4): a square surface with a 1 px edge and the flat 2 pt drop rule.
-/// Rows top to bottom: padding 12, the top area (preview, delivered statement, notice, or a
-/// card's grown body), gap 6, the 50 pt trace row, gap 4, the 13 pt mic row, padding 10.
+/// The pill (DESIGN.md §4, round 6): a square surface with a 1 px edge and the flat 2 pt drop rule.
+/// Rows top to bottom: padding 10, the top area (preview, delivered statement, notice, or a
+/// card's grown body), gap 6, the 38 pt trace row, gap 4, the 16 pt foot row, padding 8.
 struct SignalPill<Top: View>: View {
     let geometry: SignalOverlayGeometry
-    /// The top area's height: the preview area, or the card body (115) for a grown pill.
+    /// The top area's height: the preview area, or a card's body for a grown pill.
     let topHeight: CGFloat
     let traceRow: SignalTraceRow
-    let micText: String
-    var micEmphasized = false
+    let foot: SignalFootRow
     var marksFailure = false
     var isBracketVisible = false
     @ViewBuilder let top: Top
@@ -26,7 +25,7 @@ struct SignalPill<Top: View>: View {
             }
             self.traceRow
             Color.clear.frame(height: metrics.micGap)
-            SignalMicRow(text: self.micText, isEmphasized: self.micEmphasized)
+            self.foot
                 .frame(width: self.geometry.innerWidth)
         }
         .padding(.top, metrics.pillPaddingTop)

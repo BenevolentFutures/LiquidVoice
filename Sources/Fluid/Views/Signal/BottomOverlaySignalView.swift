@@ -339,7 +339,12 @@ struct BottomOverlayView: View {
             geometry: geometry,
             topHeight: geometry.topAreaHeight,
             traceRow: self.traceRow(geometry, display: display),
-            micText: self.micText,
+            foot: SignalFootRow(
+                icon: self.contentState.targetAppIcon ?? self.activeAppMonitor.activeAppIcon ?? self.lastResolvedAppIcon,
+                micText: self.micText,
+                wordCount: self.wordCount(display),
+                placard: self.placard
+            ),
             isBracketVisible: pillBracket
         ) {
             self.topArea(geometry, display: display)
@@ -474,16 +479,32 @@ struct BottomOverlayView: View {
         }
         return SignalTraceRow(
             geometry: geometry,
-            icon: self.contentState.targetAppIcon ?? self.activeAppMonitor.activeAppIcon ?? self.lastResolvedAppIcon,
             trace: self.model.trace,
             isLive: display == .listening && self.model.trace.isLive,
             isSweeping: display == .transcribing,
             drain: drain,
             staticSweepProgress: self.model.inspectionSweepProgress,
             mark: mark,
-            placard: self.placard,
             timer: timer
         )
+    }
+
+    /// The live word count at the foot row's left end (round 6, Atin 2026-10-01): while the
+    /// dictation is live, stopped, transcribing or counting down; hidden where the same number
+    /// already shows (Pasted, Sent, a card) and on a notice. Nothing while there is no live text
+    /// (the streaming preview off, a reprocess), rather than a "0 WORDS" that never moves.
+    private func wordCount(_ display: Display) -> Int? {
+        Self.wordCount(display: display, live: self.contentState.liveWordCount, frozen: self.model.frozenWordCount)
+    }
+
+    static func wordCount(display: Display, live: Int, frozen: Int?) -> Int? {
+        let count: Int
+        switch display {
+        case .listening: count = live
+        case .stopped, .transcribing: count = frozen ?? live
+        case .delivered, .notice, .noticeRow, .idle: return nil
+        }
+        return count > 0 ? count : nil
     }
 
     // MARK: Text

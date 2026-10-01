@@ -123,7 +123,7 @@ struct SignalTraceView: View {
         let samplesPerSecond = Int(metrics.samplesPerSecond)
         for age in stride(from: 0, to: count, by: 3) {
             let x = self.width - metrics.barWidth / 2 - 0.5 - CGFloat(age) * metrics.barPitch
-            let tick: CGFloat = age % samplesPerSecond == 0 ? 4 : 2
+            let tick = age % samplesPerSecond == 0 ? metrics.rulerMajorTick : metrics.rulerMinorTick
             context.fill(
                 Path(CGRect(x: x, y: metrics.traceHeight + 1, width: 1, height: tick)),
                 with: .color(self.palette.graticule)

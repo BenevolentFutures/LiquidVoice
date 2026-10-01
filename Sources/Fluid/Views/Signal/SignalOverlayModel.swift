@@ -31,6 +31,9 @@ final class SignalOverlayModel: ObservableObject {
     @Published private(set) var frozenDuration: TimeInterval?
     /// The preview as it stood at the stop, so later clears of the live text never blank it.
     @Published private(set) var frozenPreview = ""
+    /// The live word count as it stood at the stop (round 6), so clearing the live text never
+    /// zeroes it while the final pass runs.
+    @Published private(set) var frozenWordCount: Int?
     /// The microphone in use, shown bottom-centre in every visible state.
     @Published var microphoneName = ""
     /// Fading out (120 ms linear); controls are inert.
@@ -73,6 +76,7 @@ final class SignalOverlayModel: ObservableObject {
         self.recordingStartedAt = nil
         self.frozenDuration = frozenDuration ?? 0
         self.frozenPreview = ""
+        self.frozenWordCount = nil
         self.sendDrain = nil
         self.stopPlacard = .none
         self.isFading = false
@@ -100,6 +104,7 @@ final class SignalOverlayModel: ObservableObject {
         self.recordingStartedAt = date
         self.frozenDuration = nil
         self.frozenPreview = ""
+        self.frozenWordCount = nil
         self.isFading = false
         self.phase = .listening
     }
@@ -113,6 +118,7 @@ final class SignalOverlayModel: ObservableObject {
         let duration = self.recordingStartedAt.map { max(0, date.timeIntervalSince($0)) } ?? 0
         self.frozenDuration = duration
         self.frozenPreview = preview
+        self.frozenWordCount = NotchContentState.shared.liveWordCount
         self.lastRecording = (duration, date)
         self.phase = .stopped
     }
@@ -251,7 +257,7 @@ struct SignalDelivery: Equatable {
     }
 }
 
-/// The pill's geometry for each overlay size. Medium is DESIGN.md §4 exactly (340 x 149); the
+/// The pill's geometry for each overlay size. Medium is DESIGN.md §4 exactly (340 x 130); the
 /// other sizes keep the same rows and change only how many preview lines are reserved and the
 /// width (provisional: DESIGN.md designs the medium pill only).
 struct SignalOverlayGeometry: Equatable {
@@ -272,20 +278,19 @@ struct SignalOverlayGeometry: Equatable {
         SignalTheme.Metrics.self
     }
 
-    /// The preview area: 3 lines of 18 in medium (54). The delivered statement and the AI
-    /// failure row need at least 54, so the area never drops below it once anything shows there.
+    /// The preview area: 3 lines of 16 in medium (48).
     var previewHeight: CGFloat {
         CGFloat(self.previewLines) * self.metrics.previewLineHeight
     }
 
     /// The top area: the preview's lines, and at least one line, which the outcome statement and
-    /// the notice need. They take a compact one-line form when it is shorter than 54.
+    /// the notice need. They take a compact one-line form when it is shorter than 48.
     var topAreaHeight: CGFloat {
         max(self.previewHeight, self.metrics.previewLineHeight)
     }
 
     var isCompactTop: Bool {
-        self.topAreaHeight < 54
+        self.topAreaHeight < 3 * self.metrics.previewLineHeight
     }
 
     var pillHeight: CGFloat {
@@ -303,12 +308,10 @@ struct SignalOverlayGeometry: Equatable {
         self.metrics.recordSquare + self.metrics.readoutGap + self.metrics.timerBoxWidth
     }
 
-    /// Bars that fit the row `[icon 20] 10 [trace] >=8 [placard] 6 [readout]` (DESIGN.md §15): 39
-    /// in the 340 pill, 3.25 s of history.
+    /// Bars that fit the row `[trace] >=12 [readout]` (round 6: the icon moved to the foot row and
+    /// the SEND placard to its right end, so the trace takes their room).
     var traceBars: Int {
-        let fixed = self.metrics.targetIcon + self.metrics.traceLeadingGap + self.metrics.placardLeadingGap
-            + self.metrics.placardWidth + self.metrics.placardTrailingGap + self.readoutWidth
-        return SignalTraceModel.barCount(forWidth: self.innerWidth - fixed)
+        SignalTraceModel.barCount(forWidth: self.innerWidth - self.metrics.traceReadoutGap - self.readoutWidth)
     }
 
     /// Rails are the pill's height and hold three 30 pt slots.

@@ -7,7 +7,7 @@ import Foundation
 /// - Voice-gated: a level above the gate (the calibrated quiet floor plus the Sensitivity share)
 ///   marks the voice on, and it stays on for a 250 ms hangover, so the trace does not stutter
 ///   between words. Only then does the advance clock run; in silence the trace holds still.
-/// - Continuous: the advance clock pushes one bar every 83.3 ms (12 a second, 39 bars hold 3.25 s
+/// - Continuous: the advance clock pushes one bar every 83.3 ms (12 a second; round 6's 63 bars hold 5.25 s
 ///   of speech), and between pushes every bar slides left by the elapsed fraction of the 4 pt
 ///   pitch (`scrollFraction`), driven by the frame clock, instead of jumping a pitch at once.
 /// - Eased: each drawn bar eases toward its target height (about 135 ms to settle), unsnapped;
@@ -91,7 +91,7 @@ final class SignalTraceModel {
     static let floor = SignalTheme.Metrics.minBarHeight
     static let ceiling = SignalTheme.Metrics.maxBarHeight
 
-    init(barCount: Int = 39, noiseThreshold: CGFloat = 0.4) {
+    init(barCount: Int = 63, noiseThreshold: CGFloat = 0.4) {
         self.barCount = barCount
         self.noiseThreshold = noiseThreshold
         self.current = Array(repeating: Self.floor, count: barCount)
@@ -272,7 +272,7 @@ final class SignalTraceModel {
     }
 
     /// The four printed opacity steps by age (0 = newest), as fractions of the trace so a shorter
-    /// trace keeps the same proportions (round 5: 39 bars).
+    /// trace keeps the same proportions (round 6: 63 bars in the medium pill).
     static func bandOpacity(age: Int, of count: Int) -> Double {
         let fraction = Double(age) / Double(max(count, 1))
         switch fraction {

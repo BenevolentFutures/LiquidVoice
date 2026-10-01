@@ -154,6 +154,12 @@ enum SignalTheme {
                 : .systemFont(ofSize: self.size, weight: self.weight.nsWeight)
         }
 
+        /// One line of `text` set in this role, its tracking included, rounded up to whole points.
+        func width(of text: String) -> CGFloat {
+            let attributes: [NSAttributedString.Key: Any] = [.font: self.nsFont, .kern: self.tracking]
+            return (text as NSString).size(withAttributes: attributes).width.rounded(.up)
+        }
+
         /// Extra space between lines so a wrapped paragraph advances by `lineHeight`.
         var lineSpacing: CGFloat {
             let natural = NSLayoutManager().defaultLineHeight(for: self.nsFont)
@@ -162,10 +168,11 @@ enum SignalTheme {
     }
 
     enum Typography {
-        /// "0:38", right-aligned in a box reserved for "99:59".
-        static let timer = TypeRole(size: 15, weight: .semibold, isMono: true, lineHeight: 18, tracking: 0)
-        /// The microphone, bottom-centre of the pill.
-        static let micLabel = TypeRole(size: 10.5, weight: .medium, isMono: true, lineHeight: 13, tracking: 0.63)
+        /// "0:38", right-aligned in a box reserved for "99:59" (round 6: 15 -> 14).
+        static let timer = TypeRole(size: 14, weight: .semibold, isMono: true, lineHeight: 18, tracking: 0)
+        /// The microphone, bottom-centre of the pill beside the target-app icon (round 6: 10.5/13 ->
+        /// 10/16). The live word count at the foot row's left end uses the same role.
+        static let micLabel = TypeRole(size: 10, weight: .medium, isMono: true, lineHeight: 16, tracking: 0.6)
         /// Spoken Send's placard: "SEND" / "NO SEND" (round 5).
         static let placard = TypeRole(size: 10.5, weight: .semibold, isMono: true, lineHeight: 14, tracking: 0.63)
         /// "118 WORDS", "0:41 · 118 WORDS · C11".
@@ -176,17 +183,20 @@ enum SignalTheme {
         static let historyTime = TypeRole(size: 10, weight: .medium, isMono: true, lineHeight: 14, tracking: 0.4)
         /// Table header, day rows, title block, menu header.
         static let tableLabel = TypeRole(size: 10, weight: .medium, isMono: true, lineHeight: 12, tracking: 0.6)
-        /// "Sent to c11".
-        static let deliveredHeadline = TypeRole(size: 16, weight: .semibold, isMono: false, lineHeight: 20, tracking: 0)
-        /// The live preview, head-truncated so the newest words stay visible.
-        static let preview = TypeRole(size: 13.5, weight: .medium, isMono: false, lineHeight: 18, tracking: 0)
-        /// "Couldn't paste into c11".
-        static let failedHeadline = TypeRole(size: 13.5, weight: .semibold, isMono: false, lineHeight: 18, tracking: 0)
-        /// Transcripts in the failed card and the history card.
-        static let transcript = TypeRole(size: 13, weight: .regular, isMono: false, lineHeight: 17, tracking: 0)
+        /// "Sent to c11" (round 6: 16/20 -> 15/19).
+        static let deliveredHeadline = TypeRole(size: 15, weight: .semibold, isMono: false, lineHeight: 19, tracking: 0)
+        /// The live preview, head-truncated so the newest words stay visible (round 6: 13.5/18 -> 12.5/16).
+        static let preview = TypeRole(size: 12.5, weight: .medium, isMono: false, lineHeight: 16, tracking: 0)
+        /// "Couldn't paste into c11", and the notice row's headline (round 6: 13.5/18 -> 12.5/16).
+        static let failedHeadline = TypeRole(size: 12.5, weight: .semibold, isMono: false, lineHeight: 16, tracking: 0)
+        /// The transcript in a failed card (round 6: 13/17 -> 12/16).
+        static let transcript = TypeRole(size: 12, weight: .regular, isMono: false, lineHeight: 16, tracking: 0)
+        /// Transcripts in the history card.
         static let historyTranscript = TypeRole(size: 13, weight: .regular, isMono: false, lineHeight: 18, tracking: 0)
-        /// A recovery card's reason line: at most two lines.
-        static let reason = TypeRole(size: 13, weight: .regular, isMono: false, lineHeight: 17, tracking: 0)
+        /// A recovery card's or notice row's reason line: at most two lines (round 6: 13/17 -> 12/16).
+        static let reason = TypeRole(size: 12, weight: .regular, isMono: false, lineHeight: 16, tracking: 0)
+        /// The notice row's inline actions, Reprocess (semibold) and Dismiss (medium) (round 6).
+        static let inlineAction = TypeRole(size: 12, weight: .medium, isMono: false, lineHeight: 16, tracking: 0)
         /// Copy (semibold) and Dismiss (medium) in the failed card.
         static let button = TypeRole(size: 13, weight: .semibold, isMono: false, lineHeight: 28, tracking: 0)
         static let textButton = TypeRole(size: 13, weight: .medium, isMono: false, lineHeight: 28, tracking: 0)
@@ -195,16 +205,20 @@ enum SignalTheme {
     // MARK: - Geometry
 
     enum Metrics {
-        // Pill (DESIGN.md §4): 340 x 149, square.
+        // Pill (DESIGN.md §4, round 6, Atin 2026-10-01): 340 x 130, square. Rows: padding 10 ·
+        // preview 48 · gap 6 · trace row 38 · gap 4 · foot 16 · padding 8.
         static let pillWidth: CGFloat = 340
-        static let pillPaddingTop: CGFloat = 12
-        static let previewLineHeight: CGFloat = 18
+        static let pillPaddingTop: CGFloat = 10
+        static let previewLineHeight: CGFloat = 16
         static let previewGap: CGFloat = 6
-        static let traceRowHeight: CGFloat = 50
+        static let traceRowHeight: CGFloat = 38
+        /// The gap above the foot row.
         static let micGap: CGFloat = 4
-        static let micRowHeight: CGFloat = 13
-        static let pillPaddingBottom: CGFloat = 10
-        static let pillPaddingHorizontal: CGFloat = 18
+        /// The foot row: the target-app icon and the microphone (centred as a pair), the live word
+        /// count at its left end, Spoken Send's placard at its right end.
+        static let micRowHeight: CGFloat = 16
+        static let pillPaddingBottom: CGFloat = 8
+        static let pillPaddingHorizontal: CGFloat = 12
         static let edgeWidth: CGFloat = 1
         static let dropRule: CGFloat = 2
         /// The margin the floating shadow's click-through panel keeps around the surface's panel,
@@ -224,17 +238,18 @@ enum SignalTheme {
         /// + halo 1 = 5.5), 8 at the bottom, where the bracket also clears the 2 pt drop rule (7.5).
         static let windowInsets = EdgeInsets(top: 6, leading: 6, bottom: 8, trailing: 6)
 
-        // Trace row: icon, trace, record square, timer.
-        static let targetIcon: CGFloat = 20
+        // Trace row (round 6): the trace from the left edge, at least 12 pt, then the readout (record
+        // square and timer) flush right.
         static let recordSquare: CGFloat = 6
         static let recordSquareOutline: CGFloat = 1.5
         static let readoutGap: CGFloat = 4
-        /// Spoken Send's placard (round 5): 10 pt after the icon to the trace, at least 8 pt from
-        /// the trace to the placard, 6 pt from the placard to the square.
-        static let traceLeadingGap: CGFloat = 10
-        static let placardLeadingGap: CGFloat = 8
-        static let placardTrailingGap: CGFloat = 6
-        /// The placard's reserved width: "NO SEND", seven SF Mono characters with their tracking.
+        static let traceReadoutGap: CGFloat = 12
+        // Foot row (round 6): the target-app icon, 7 pt, the microphone (at most 160 wide).
+        static let targetIcon: CGFloat = 16
+        static let footGap: CGFloat = 7
+        static let micMaxWidth: CGFloat = 160
+        /// Spoken Send's placard's reserved width at the foot row's right end: "NO SEND", seven SF
+        /// Mono characters with their tracking.
         static let placardWidth: CGFloat = {
             let role = Typography.placard
             let advance = ("0" as NSString).size(withAttributes: [.font: role.nsFont]).width
@@ -244,17 +259,21 @@ enum SignalTheme {
         // Voice trace.
         static let barWidth: CGFloat = 2
         static let barPitch: CGFloat = 4
-        static let traceHeight: CGFloat = 44
-        static let rulerHeight: CGFloat = 6
-        static let traceMidline: CGFloat = 22
+        // Round 6: a 34 pt trace (bars to 30, midline 17) over a 4 pt age ruler (ticks 2 and 3).
+        static let traceHeight: CGFloat = 34
+        static let rulerHeight: CGFloat = 4
+        static let traceMidline: CGFloat = 17
         static let minBarHeight: CGFloat = 2
-        static let maxBarHeight: CGFloat = 40
+        static let maxBarHeight: CGFloat = 30
+        static let rulerMinorTick: CGFloat = 2
+        static let rulerMajorTick: CGFloat = 3
         static let writeHeadBars = 6
         static let sweepWidth: CGFloat = 24
         static let sweepHeight: CGFloat = 4
         static let samplesPerSecond: Double = 12
 
-        // Failed card body.
+        // Failed card body. The action row sits 10 pt below the text above it (round 6).
+        static let cardActionsGap: CGFloat = 10
         static let copyButtonWidth: CGFloat = 88
         static let buttonHeight: CGFloat = 28
         static let deliveredStamp: CGFloat = 30

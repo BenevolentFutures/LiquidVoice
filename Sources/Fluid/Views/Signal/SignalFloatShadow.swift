@@ -174,9 +174,9 @@ struct SignalFloatShadowView: View {
             var shadow = context
             shadow.addFilter(.shadow(
                 color: self.palette.floatShadow,
-                radius: SignalTheme.Metrics.floatShadowRadius,
+                radius: self.palette.floatShadowRadius,
                 x: 0,
-                y: SignalTheme.Metrics.floatShadowY,
+                y: self.palette.floatShadowY,
                 options: .shadowOnly
             ))
             shadow.fill(rect, with: .color(.black))

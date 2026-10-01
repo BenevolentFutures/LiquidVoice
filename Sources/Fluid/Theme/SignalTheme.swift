@@ -29,8 +29,12 @@ enum SignalTheme {
         /// The flat, unblurred 2 pt drop rule under the pill and cards.
         let drop: Color
         /// The soft floating shadow under the pill and cards (DESIGN.md §6, Atin 2026-09-29):
-        /// neutral black, lighter on paper.
+        /// neutral black, lighter on paper. Dark floats more (Atin, 2026-10-01): deeper, wider,
+        /// further down.
         let floatShadow: Color
+        /// The floating shadow's blur radius and downward offset, per appearance.
+        let floatShadowRadius: CGFloat
+        let floatShadowY: CGFloat
         /// Trace bars.
         let ink: Color
         /// The 1 px rule behind the trace.
@@ -62,7 +66,9 @@ enum SignalTheme {
             edge: SignalTheme.rgb(0x2C2E33),
             chip: SignalTheme.rgb(0x1A1B1F),
             drop: Color.black.opacity(0.35),
-            floatShadow: Color.black.opacity(0.32),
+            floatShadow: Color.black.opacity(0.55),
+            floatShadowRadius: 18,
+            floatShadowY: 9,
             ink: .white,
             midline: SignalTheme.rgb(0x2C2E33),
             text: Color.white.opacity(0.92),
@@ -86,6 +92,8 @@ enum SignalTheme {
             chip: SignalTheme.rgb(0xF2F2F4),
             drop: SignalTheme.rgb(0x111214),
             floatShadow: Color.black.opacity(0.16),
+            floatShadowRadius: 12,
+            floatShadowY: 5,
             ink: SignalTheme.rgb(0x111214),
             midline: SignalTheme.rgb(0xD3D4D8),
             text: SignalTheme.rgb(0x111214),
@@ -199,12 +207,11 @@ enum SignalTheme {
         static let pillPaddingHorizontal: CGFloat = 18
         static let edgeWidth: CGFloat = 1
         static let dropRule: CGFloat = 2
-        /// The floating shadow (DESIGN.md §6, Atin 2026-09-29): blur radius and downward offset,
-        /// and the margin its click-through panel keeps around the surface's panel so the blur
-        /// is never clipped.
-        static let floatShadowRadius: CGFloat = 12
-        static let floatShadowY: CGFloat = 5
-        static let floatShadowMargin: CGFloat = 32
+        /// The margin the floating shadow's click-through panel keeps around the surface's panel,
+        /// so the blur is never clipped (DESIGN.md §6). The radius and offset are per appearance
+        /// (`Palette.floatShadowRadius`, `floatShadowY`); the deepest, dark's radius 18 at y 9,
+        /// stays well inside 48 pt.
+        static let floatShadowMargin: CGFloat = 48
         /// The failed card's top rule.
         static let failedTopRule: CGFloat = 2
 
@@ -260,7 +267,8 @@ enum SignalTheme {
         static let historyIndexColumn: CGFloat = 68
         static let historyFooter: CGFloat = 28
         static let historyPaddingHorizontal: CGFloat = 19
-        static let historyGapAboveChip: CGFloat = 6
+        /// The history card sits this far above the overlay's visible top (DESIGN.md §4).
+        static let historyGapAboveOverlay: CGFloat = 6
 
         // Screen placement: bottom-centre, 50 pt above the visible bottom.
         static let screenBottomOffset: CGFloat = 50

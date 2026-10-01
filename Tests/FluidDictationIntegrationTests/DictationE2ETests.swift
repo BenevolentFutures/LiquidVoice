@@ -3073,7 +3073,7 @@ final class SignalOverlayRenderTests: XCTestCase {
         }
     }
 
-    func testHistoryCardRendersAboveTheHistoryChip() throws {
+    func testHistoryCardRendersCentredAboveTheOverlay() throws {
         for appearance in [NSAppearance.Name.darkAqua, .aqua] {
             let theme = appearance == .darkAqua ? "dark" : "light"
             for (name, hoverRow) in [("09-history", nil), ("10-history-hover-row", 2)] as [(String, Int?)] {
@@ -3091,10 +3091,10 @@ final class SignalOverlayRenderTests: XCTestCase {
                     isStatic: true,
                     onPick: { _ in }
                 )
-                // The card's box sits 6 pt above the History chip, on its leading edge. The card
-                // view's bottom margin (8) and the overlay's top margin (6) overlap by 8.
+                // The card's box sits 6 pt above the overlay, centred on it (Atin, 2026-10-01). The
+                // card view's bottom margin (8) and the overlay's top margin (6) overlap by 8.
                 let insets = SignalTheme.Metrics.windowInsets
-                let composite = VStack(alignment: .leading, spacing: -insets.bottom) {
+                let composite = VStack(alignment: .center, spacing: -insets.bottom) {
                     card.padding(insets).signalPalette()
                     BottomOverlayView()
                 }
@@ -3641,6 +3641,77 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         XCTAssertEqual(height(12), 480, accuracy: 1, "capped at 480; the list scrolls")
     }
 
+    /// The history card centres on the overlay (DESIGN.md §4, Atin 2026-10-01), 6 pt above its
+    /// visible top, not on the History chip's leading edge; the screen's visible frame clamps it.
+    func testTheHistoryCardCentresOnTheOverlay() {
+        let insets = SignalTheme.Metrics.windowInsets
+        let panel = CGSize(width: 480 + insets.leading + insets.trailing, height: 300 + insets.top + insets.bottom)
+        let overlay = CGRect(x: 700, y: 80, width: 412, height: 149)
+        let screen = CGRect(x: 0, y: 0, width: 1800, height: 1100)
+        let frame = BottomOverlayHistoryMenuController.cardFrame(panelSize: panel, overlayFrame: overlay, gap: 6, insets: insets, visibleFrame: screen)
+        XCTAssertEqual(frame.midX, overlay.midX, accuracy: 0.5, "centred on the overlay")
+        XCTAssertEqual(frame.minY + insets.bottom, overlay.maxY + 6, "the card's box 6 pt above the overlay's top")
+        XCTAssertEqual(frame.size, panel)
+
+        // A recovery card grows the pill upward: the card clears it.
+        let grown = CGRect(x: 700, y: 80, width: 412, height: 231)
+        let overGrown = BottomOverlayHistoryMenuController.cardFrame(panelSize: panel, overlayFrame: grown, gap: 6, insets: insets, visibleFrame: screen)
+        XCTAssertEqual(overGrown.minY + insets.bottom, grown.maxY + 6)
+
+        // An overlay dragged to the screen's left edge: the card stays 8 pt inside.
+        let atEdge = CGRect(x: 0, y: 80, width: 412, height: 149)
+        let clamped = BottomOverlayHistoryMenuController.cardFrame(panelSize: panel, overlayFrame: atEdge, gap: 6, insets: insets, visibleFrame: screen)
+        XCTAssertEqual(clamped.minX, 8)
+        let top = CGRect(x: 700, y: 1000, width: 412, height: 149)
+        let clampedTop = BottomOverlayHistoryMenuController.cardFrame(panelSize: panel, overlayFrame: top, gap: 6, insets: insets, visibleFrame: screen)
+        XCTAssertEqual(clampedTop.maxY, screen.maxY - 8)
+
+        // The overlay's content rect (top-left origin in its hosting view) maps to the screen.
+        let window = NSPanel(contentRect: NSRect(x: 600, y: 72, width: 424, height: 163), styleMask: [.borderless], backing: .buffered, defer: true)
+        window.contentView = NSHostingView(rootView: Color.clear)
+        let anchor = SignalOverlayAnchor()
+        anchor.frameInContent = CGRect(x: 6, y: 6, width: 412, height: 149)
+        XCTAssertEqual(anchor.frameInScreen(window: window), CGRect(x: 606, y: 80, width: 412, height: 149))
+        XCTAssertEqual(SignalOverlayAnchor().frameInScreen(window: window), .zero, "not laid out yet")
+    }
+
+    /// HISTORY_OPEN times the click on the History chip to its action, and the action to the card.
+    func testHistoryOpenSummaryLine() {
+        XCTAssertEqual(
+            BottomOverlayHistoryMenuController.openSummary(clickToActionMs: 4, actionToShownMs: 9, actionToVisibleMs: 12, trigger: .leftMouseUp),
+            "HISTORY_OPEN click_to_action_ms=4 action_to_shown_ms=9 action_to_visible_ms=12 trigger=mouseUp"
+        )
+        XCTAssertEqual(
+            BottomOverlayHistoryMenuController.openSummary(clickToActionMs: nil, actionToShownMs: 9, actionToVisibleMs: 12, trigger: nil),
+            "HISTORY_OPEN click_to_action_ms=- action_to_shown_ms=9 action_to_visible_ms=12 trigger=none"
+        )
+        XCTAssertNil(BottomOverlayHistoryMenuController.clickToActionMs(trigger: nil, actionAt: 10))
+        let keyDown = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 9.5, windowNumber: 0, context: nil, characters: "a", charactersIgnoringModifiers: "a", isARepeat: false, keyCode: 0)
+        XCTAssertNil(BottomOverlayHistoryMenuController.clickToActionMs(trigger: keyDown, actionAt: 10), "only a mouse click is timed")
+        let mouseUp = NSEvent.mouseEvent(with: .leftMouseUp, location: .zero, modifierFlags: [], timestamp: 9.65, windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)
+        XCTAssertEqual(BottomOverlayHistoryMenuController.clickToActionMs(trigger: mouseUp, actionAt: 10), 350)
+    }
+
+    /// Double-click resets the overlay's position in AppKit, away from its buttons, so no SwiftUI
+    /// double-tap holds back a chip's single click (the ~350 ms History lag, 2026-10-01).
+    func testADoubleClickResetsThePositionOnlyAwayFromButtons() {
+        let targets = SignalClickTargets()
+        let host = NSHostingView(rootView: BottomOverlayView(clickTargets: targets))
+        host.frame = CGRect(origin: .zero, size: host.fittingSize)
+        host.layoutSubtreeIfNeeded()
+        let chip = SignalTheme.Metrics.chip
+        XCTAssertEqual(targets.rects.filter { $0.width == chip && $0.height == chip }.count, 4, "the four chips report themselves")
+
+        let insets = SignalTheme.Metrics.windowInsets
+        let geometry = SignalOverlayGeometry.forSize(SettingsStore.shared.overlaySize)
+        let pillCentre = CGPoint(x: insets.leading + chip + SignalTheme.Metrics.railGap + geometry.pillWidth / 2, y: insets.top + geometry.railHeight - geometry.pillHeight / 2)
+        let historyChip = CGPoint(x: insets.leading + chip / 2, y: insets.top + chip / 2)
+        XCTAssertTrue(SignalClickTargets.isPositionResetClick(clickCount: 2, at: pillCentre, targets: targets.rects))
+        XCTAssertFalse(SignalClickTargets.isPositionResetClick(clickCount: 1, at: pillCentre, targets: targets.rects), "a single click never resets")
+        XCTAssertFalse(SignalClickTargets.isPositionResetClick(clickCount: 2, at: historyChip, targets: targets.rects), "a double-click on a chip is the chip's")
+        XCTAssertFalse(SignalClickTargets.isPositionResetClick(clickCount: 3, at: pillCentre, targets: targets.rects))
+    }
+
     /// A card for another dictation never takes over a held outcome, and a failure that is not a
     /// dictation's (a history paste) never does either.
     func testALateCardForAnotherDictationDoesNotTakeOverTheHold() async {
@@ -4032,6 +4103,21 @@ final class SignalFloatShadowTests: XCTestCase {
         }
     }
 
+    /// Dark floats more (Atin, 2026-10-01): black 0.55, radius 18, y 9; light stays 0.16, 12, 5.
+    /// The shadow panel's margin holds the deepest blur.
+    func testTheFloatingShadowIsPerAppearanceAndNeverClipped() {
+        let dark = SignalTheme.Palette.dark
+        let light = SignalTheme.Palette.light
+        XCTAssertEqual(dark.floatShadowRadius, 18)
+        XCTAssertEqual(dark.floatShadowY, 9)
+        XCTAssertEqual(light.floatShadowRadius, 12)
+        XCTAssertEqual(light.floatShadowY, 5)
+        XCTAssertEqual(SignalFloatShadow.margin, 48)
+        for palette in [dark, light] {
+            XCTAssertGreaterThanOrEqual(SignalFloatShadow.margin, 2 * palette.floatShadowRadius + palette.floatShadowY)
+        }
+    }
+
     func testTheShadowPanelIsNeverClampedOntoAScreen() {
         let panel = SignalFloatShadow.Panel(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: true)
         let parked = NSRect(x: 100_000, y: 100_000, width: 488, height: 227)
@@ -4057,9 +4143,10 @@ final class SignalFloatShadowTests: XCTestCase {
         let floatShadow = SignalFloatShadow { state in SignalFloatShadowView(state: state) }
         floatShadow.attach(to: parent)
         defer { floatShadow.detach() }
-        XCTAssertEqual(floatShadow.panelForTests.frame, NSRect(x: -32, y: -32, width: 264, height: 164))
+        let margin = SignalFloatShadow.margin
+        XCTAssertEqual(floatShadow.panelForTests.frame, NSRect(x: 0, y: 0, width: 200, height: 100).insetBy(dx: -margin, dy: -margin))
         parent.setFrame(NSRect(x: 10, y: 20, width: 300, height: 120), display: false)
-        XCTAssertEqual(floatShadow.panelForTests.frame, NSRect(x: -22, y: -12, width: 364, height: 184), "follows a resize")
+        XCTAssertEqual(floatShadow.panelForTests.frame, NSRect(x: 10, y: 20, width: 300, height: 120).insetBy(dx: -margin, dy: -margin), "follows a resize")
         await withCheckedContinuation { continuation in
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = SignalTheme.Motion.dismiss
@@ -4074,7 +4161,7 @@ final class SignalFloatShadowTests: XCTestCase {
         try await self.mainTurns()
         XCTAssertEqual(floatShadow.panelForTests.alphaValue, 1)
         parent.setFrameOrigin(NSPoint(x: 100_000, y: 100_000))
-        XCTAssertEqual(floatShadow.panelForTests.frame.origin, NSPoint(x: 100_000 - 32, y: 100_000 - 32), "follows a move, parked included")
+        XCTAssertEqual(floatShadow.panelForTests.frame.origin, NSPoint(x: 100_000 - margin, y: 100_000 - margin), "follows a move, parked included")
     }
 
     private static func pixels(_ view: some View, size: CGSize) throws -> (cg: CGImage, alphaAt: (Int, Int) -> UInt8) {

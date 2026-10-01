@@ -127,6 +127,7 @@ private struct SignalChipFace<Label: View>: View {
                 .allowsHitTesting(false)
         }
         .contentShape(Rectangle())
+        .signalClickTarget()
         .animation(.linear(duration: SignalTheme.Motion.chipPress), value: self.isInverted)
         .animation(.linear(duration: SignalTheme.Motion.chipPress), value: self.isConfirming)
         .onChange(of: self.isPressed) { _, pressed in

@@ -40,6 +40,7 @@ struct SignalChip: View {
             palette: self.palette
         ))
         .disabled(!self.isLive)
+        .signalClickTarget(isActive: self.isLive)
         .signalBracket(.chip, visible: (self.isHovered || self.isHoverForced) && self.isLive)
         .onHover { hovering in
             let hovering = hovering && self.isLive

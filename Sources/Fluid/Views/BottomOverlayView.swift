@@ -34,6 +34,8 @@ final class BottomOverlayWindowController {
     /// with the overlay's own visibility, so the transparent margin keeps passing clicks. Kept off
     /// the start path: presented a main-queue turn after the pill is shown, withdrawn once hidden.
     let floatShadow = SignalFloatShadow(presentsWithParent: false) { state in BottomOverlayShadowView(state: state) }
+    /// Where the overlay's buttons are, for the hosting view's double-click (SignalClickTargets).
+    let clickTargets = SignalClickTargets()
     /// Level ticks feed the Signal trace's sampler directly: no view is invalidated per tick.
     private var audioSubscription: AnyCancellable?
     private var spokenSendSubscription: AnyCancellable?
@@ -966,7 +968,7 @@ final class BottomOverlayWindowController {
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none
 
-        let contentView = BottomOverlayView(floatShadow: self.floatShadow.state)
+        let contentView = BottomOverlayView(floatShadow: self.floatShadow.state, clickTargets: self.clickTargets)
         let hostingView = BottomOverlayHostingView(rootView: contentView)
 
         // Let SwiftUI determine the size
@@ -1155,6 +1157,17 @@ final class BottomOverlayWindowController {
         UserDefaults.standard.removeObject(forKey: Self.dragPositionYFractionKey)
     }
 
+    /// A mouse-up in the overlay's hosting view, at `point` (its coordinates, top-left origin).
+    /// A double-click anywhere but on a button returns the overlay to its default anchor; the
+    /// buttons and the drag see the same click through SwiftUI, never delayed.
+    func overlayMouseUp(clickCount: Int, at point: CGPoint) {
+        let state = NotchContentState.shared
+        guard state.isBottomOverlayPresented, !state.isBottomOverlayDismissing, !SignalOverlayModel.shared.isFading else { return }
+        guard SignalClickTargets.isPositionResetClick(clickCount: clickCount, at: point, targets: self.clickTargets.rects) else { return }
+        DebugLogger.shared.info("OVERLAY_POSITION reset=double-click", source: "BottomOverlay")
+        self.resetDraggedPositionToDefault()
+    }
+
     /// Double-click: forget the dragged position and return to the default anchor.
     func resetDraggedPositionToDefault() {
         self.clearSavedDragPosition()
@@ -1196,40 +1209,91 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
     /// The card's floating shadow (DESIGN.md §6), in its own click-through panel under the card's.
     let floatShadow = SignalFloatShadow { state in SignalFloatShadowView(state: state).signalPalette() }
     private var hostingView: NSHostingView<BottomOverlayHistoryMenuView>?
+    /// The History chip, so a click on it toggles the card instead of dismissing it first.
     private var selectorFrameInScreen: CGRect = .zero
+    /// The overlay's visible content (the pill between its rails, a recovery card's grown pill
+    /// included) in screen coordinates: the card centres on it and opens above its top.
+    private var overlayFrameInScreen: CGRect = .zero
     private weak var parentWindow: NSWindow?
     private var menuMaxWidth: CGFloat = 480
-    private var menuGap: CGFloat = 6
+    /// The width the hosted root view was built with: it is rebuilt only when that changes.
+    private var builtMaxWidth: CGFloat?
+    private var menuGap: CGFloat = SignalTheme.Metrics.historyGapAboveOverlay
     private var pendingPositionWorkItem: DispatchWorkItem?
 
     private init() {}
 
-    func updateAnchor(selectorFrameInScreen: CGRect, parentWindow: NSWindow?, maxWidth: CGFloat, menuGap: CGFloat) {
+    func updateAnchor(
+        selectorFrameInScreen: CGRect,
+        overlayFrameInScreen: CGRect,
+        parentWindow: NSWindow?,
+        maxWidth: CGFloat,
+        menuGap: CGFloat = SignalTheme.Metrics.historyGapAboveOverlay
+    ) {
         guard selectorFrameInScreen.width > 0, selectorFrameInScreen.height > 0 else { return }
 
-        let resolvedMaxWidth = max(maxWidth, 280)
-        let widthChanged = abs(self.menuMaxWidth - resolvedMaxWidth) > 0.5
-
         self.selectorFrameInScreen = selectorFrameInScreen
+        // Without the overlay's frame (not laid out yet), the chip stands in for it.
+        self.overlayFrameInScreen = overlayFrameInScreen.width > 0 && overlayFrameInScreen.height > 0
+            ? overlayFrameInScreen
+            : selectorFrameInScreen
         self.parentWindow = parentWindow
-        self.menuMaxWidth = resolvedMaxWidth
+        self.menuMaxWidth = max(maxWidth, 280)
         self.menuGap = max(menuGap, 0)
 
         if self.menuWindow?.isVisible == true {
-            if widthChanged {
-                self.updateMenuContent()
-            }
+            self.updateMenuContentIfNeeded()
             self.attachToParentWindowIfNeeded()
             self.scheduleMenuPositionUpdate()
         }
     }
 
-    func toggleFromTap() {
+    /// The History chip's action. `trigger` is the click that fired it (a Button acts on mouse-up,
+    /// and `NSApp.currentEvent` is still that event when the action runs, even when the gesture
+    /// system held the action back), so the log shows the click's real wait.
+    func toggleFromTap(trigger: NSEvent? = NSApp.currentEvent) {
         if self.menuWindow?.isVisible == true {
             self.hide()
             return
         }
+        let actionAt = ProcessInfo.processInfo.systemUptime
         self.showMenuIfPossible()
+        guard self.isOpen else { return }
+        let shownAt = ProcessInfo.processInfo.systemUptime
+        let clickToActionMs = Self.clickToActionMs(trigger: trigger, actionAt: actionAt)
+        // The card reaches the screen with this turn's commit: measured on the next main turn.
+        DispatchQueue.main.async {
+            let visibleAt = ProcessInfo.processInfo.systemUptime
+            DebugLogger.shared.info(
+                Self.openSummary(
+                    clickToActionMs: clickToActionMs,
+                    actionToShownMs: Int(((shownAt - actionAt) * 1000).rounded()),
+                    actionToVisibleMs: Int(((visibleAt - actionAt) * 1000).rounded()),
+                    trigger: trigger?.type
+                ),
+                source: "HistoryCard"
+            )
+        }
+    }
+
+    /// From the click that fired the action to the action, when that click is known: a left mouse
+    /// up or down whose timestamp is on the same uptime clock.
+    static func clickToActionMs(trigger: NSEvent?, actionAt: TimeInterval) -> Int? {
+        guard let trigger, trigger.type == .leftMouseUp || trigger.type == .leftMouseDown else { return nil }
+        return Int(((actionAt - trigger.timestamp) * 1000).rounded())
+    }
+
+    /// `HISTORY_OPEN` (Release info level): one line per opening of the history card.
+    static func openSummary(clickToActionMs: Int?, actionToShownMs: Int, actionToVisibleMs: Int, trigger: NSEvent.EventType?) -> String {
+        let triggerName: String
+        switch trigger {
+        case .leftMouseUp: triggerName = "mouseUp"
+        case .leftMouseDown: triggerName = "mouseDown"
+        case .none: triggerName = "none"
+        case let .some(other): triggerName = "event\(other.rawValue)"
+        }
+        return "HISTORY_OPEN click_to_action_ms=\(clickToActionMs.map(String.init) ?? "-") " +
+            "action_to_shown_ms=\(actionToShownMs) action_to_visible_ms=\(actionToVisibleMs) trigger=\(triggerName)"
     }
 
     func hide() {
@@ -1270,7 +1334,7 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
         guard self.selectorFrameInScreen.width > 0, self.selectorFrameInScreen.height > 0 else { return }
 
         self.createWindowIfNeeded()
-        self.updateMenuContent()
+        self.updateMenuContentIfNeeded()
         self.attachToParentWindowIfNeeded()
         self.updateMenuSizeAndPosition()
         self.menuWindow?.orderFrontRegardless()
@@ -1300,6 +1364,7 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
         panel.animationBehavior = .none
 
         let hostingView = NSHostingView(rootView: self.makeMenuContent())
+        self.builtMaxWidth = self.menuMaxWidth
         let fittingSize = hostingView.fittingSize
         hostingView.frame = NSRect(origin: .zero, size: fittingSize)
         hostingView.wantsLayer = true
@@ -1323,8 +1388,12 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
         )
     }
 
-    private func updateMenuContent() {
-        self.hostingView?.rootView = self.makeMenuContent()
+    /// The root view depends only on the width (the rows follow the history store), so it is
+    /// rebuilt only when the width changes, never on every opening.
+    private func updateMenuContentIfNeeded() {
+        guard let hostingView = self.hostingView, self.builtMaxWidth != self.menuMaxWidth else { return }
+        self.builtMaxWidth = self.menuMaxWidth
+        hostingView.rootView = self.makeMenuContent()
     }
 
     private func attachToParentWindowIfNeeded() {
@@ -1346,38 +1415,16 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
         let fittingSize = hostingView.fittingSize
         guard fittingSize.width > 0, fittingSize.height > 0 else { return }
 
-        // Anchored to the history chip's leading edge, `menuGap` (6 pt) above it (DESIGN.md §4).
-        // The panel keeps a transparent bracket margin around the card.
-        let insets = SignalTheme.Metrics.windowInsets
-        let preferredX = self.selectorFrameInScreen.minX - insets.leading
-        let preferredY = self.selectorFrameInScreen.maxY + self.menuGap - insets.bottom
-
         let screen = self.parentWindow?.screen
-            ?? NSScreen.screens.first(where: { $0.frame.contains(NSPoint(x: self.selectorFrameInScreen.midX, y: self.selectorFrameInScreen.midY)) })
+            ?? NSScreen.screens.first(where: { $0.frame.contains(NSPoint(x: self.overlayFrameInScreen.midX, y: self.overlayFrameInScreen.midY)) })
             ?? NSScreen.main
-
-        var targetX = preferredX
-        var targetY = preferredY
-
-        if let screen {
-            let visible = screen.visibleFrame
-            let horizontalInset: CGFloat = 8
-            let verticalInset: CGFloat = 8
-
-            if fittingSize.width < visible.width - (horizontalInset * 2) {
-                targetX = max(visible.minX + horizontalInset, min(preferredX, visible.maxX - fittingSize.width - horizontalInset))
-            } else {
-                targetX = visible.minX + horizontalInset
-            }
-
-            if fittingSize.height < visible.height - (verticalInset * 2) {
-                targetY = max(visible.minY + verticalInset, min(preferredY, visible.maxY - fittingSize.height - verticalInset))
-            } else {
-                targetY = visible.minY + verticalInset
-            }
-        }
-
-        let targetFrame = NSRect(x: targetX, y: targetY, width: fittingSize.width, height: fittingSize.height)
+        let targetFrame = Self.cardFrame(
+            panelSize: fittingSize,
+            overlayFrame: self.overlayFrameInScreen,
+            gap: self.menuGap,
+            insets: SignalTheme.Metrics.windowInsets,
+            visibleFrame: screen?.visibleFrame
+        )
         let currentFrame = menuWindow.frame
         let frameTolerance: CGFloat = 0.5
         let isSameFrame =
@@ -1389,6 +1436,38 @@ final class BottomOverlayHistoryMenuController: ObservableObject {
         if !isSameFrame {
             menuWindow.setFrame(targetFrame, display: false)
         }
+    }
+}
+
+extension BottomOverlayHistoryMenuController {
+    /// Where the card's panel goes (DESIGN.md §4): its card centred on the overlay's horizontal
+    /// centre, `gap` above the overlay's visible top (a recovery card's grown pill included), then
+    /// kept 8 pt inside the screen's visible frame. The panel carries the transparent bracket
+    /// margin (`insets`) around the card, symmetric left and right, so centring the panel centres
+    /// the card; its bottom margin hangs below the card.
+    static func cardFrame(
+        panelSize: CGSize,
+        overlayFrame: CGRect,
+        gap: CGFloat,
+        insets: EdgeInsets,
+        visibleFrame: CGRect?
+    ) -> NSRect {
+        var x = overlayFrame.midX - panelSize.width / 2
+        var y = overlayFrame.maxY + gap - insets.bottom
+        if let visible = visibleFrame {
+            let inset: CGFloat = 8
+            if panelSize.width < visible.width - inset * 2 {
+                x = max(visible.minX + inset, min(x, visible.maxX - panelSize.width - inset))
+            } else {
+                x = visible.minX + inset
+            }
+            if panelSize.height < visible.height - inset * 2 {
+                y = max(visible.minY + inset, min(y, visible.maxY - panelSize.height - inset))
+            } else {
+                y = visible.minY + inset
+            }
+        }
+        return NSRect(x: x.rounded(), y: y.rounded(), width: panelSize.width, height: panelSize.height)
     }
 }
 
@@ -1525,6 +1604,18 @@ struct PromptSelectorAnchorReader: NSViewRepresentable {
     }
 }
 
-/// The recording overlay's hosting view. Signal draws no blurred shadow, so no margin needs to
-/// be carved out of hit-testing: a click on a transparent pixel passes to the app beneath.
-private final class BottomOverlayHostingView: NSHostingView<BottomOverlayView> {}
+/// The recording overlay's hosting view. Its floating shadow is another panel, so no margin needs
+/// to be carved out of hit-testing: a click on a transparent pixel passes to the app beneath.
+/// It detects the overlay's double-click (reset position) in AppKit after SwiftUI has seen the
+/// click, so a single click on a chip acts at once instead of waiting out a SwiftUI double-tap.
+/// The reset runs on the double-click's mouse-up, as the SwiftUI gesture did: moving the window
+/// under a held button would turn the next jitter into a drag that commits the old spot again.
+private final class BottomOverlayHostingView: NSHostingView<BottomOverlayView> {
+    override func mouseUp(with event: NSEvent) {
+        super.mouseUp(with: event)
+        guard event.clickCount == 2 else { return }
+        let local = self.convert(event.locationInWindow, from: nil)
+        let point = self.isFlipped ? local : CGPoint(x: local.x, y: self.bounds.height - local.y)
+        BottomOverlayWindowController.shared.overlayMouseUp(clickCount: event.clickCount, at: point)
+    }
+}

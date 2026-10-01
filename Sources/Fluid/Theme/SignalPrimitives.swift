@@ -125,6 +125,44 @@ extension View {
     }
 }
 
+// MARK: - Click targets
+
+/// Where a surface's own buttons are (chips, card and notice actions), in its hosting view's
+/// coordinates (top-left origin). The overlay's double-click-to-reset lives in AppKit, not in a
+/// SwiftUI double-tap gesture: a parent `onTapGesture(count: 2)` makes every child Button wait
+/// out the double-click interval before it acts (measured at ~350 ms on the History chip). So a
+/// double-click resets the position only where it does not land on one of these.
+struct SignalClickTargetsKey: PreferenceKey {
+    static let defaultValue: [CGRect] = []
+
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
+/// The overlay's click targets as last laid out. A reference, not view state: it is written
+/// from a preference change and read by the hosting view on a mouse-down.
+final class SignalClickTargets {
+    var rects: [CGRect] = []
+
+    /// A double-click resets the overlay's position (DESIGN.md §4) unless it lands on a button.
+    static func isPositionResetClick(clickCount: Int, at point: CGPoint, targets: [CGRect]) -> Bool {
+        clickCount == 2 && !targets.contains { $0.contains(point) }
+    }
+}
+
+extension View {
+    /// Reports this button's frame as a click target (`SignalClickTargetsKey`). A dimmed or inert
+    /// button (`isActive` false) acts on nothing, so a double-click there still resets the position.
+    func signalClickTarget(isActive: Bool = true) -> some View {
+        self.background {
+            GeometryReader { proxy in
+                Color.clear.preference(key: SignalClickTargetsKey.self, value: isActive ? [proxy.frame(in: .global)] : [])
+            }
+        }
+    }
+}
+
 // MARK: - Card buttons
 
 /// A recovery card's primary action (DESIGN.md §15): a solid orange square button, at least
@@ -141,6 +179,7 @@ struct SignalPrimaryButtonStyle: ButtonStyle {
             .frame(height: SignalTheme.Metrics.buttonHeight)
             .background(configuration.isPressed ? self.palette.invBackground : self.palette.accent)
             .contentShape(Rectangle())
+            .signalClickTarget()
             .animation(.linear(duration: SignalTheme.Motion.chipPress), value: configuration.isPressed)
     }
 }
@@ -156,6 +195,7 @@ struct SignalTextButtonStyle: ButtonStyle {
             .foregroundStyle(configuration.isPressed ? self.palette.accent : self.palette.text)
             .frame(height: SignalTheme.Metrics.buttonHeight)
             .contentShape(Rectangle())
+            .signalClickTarget()
     }
 }
 

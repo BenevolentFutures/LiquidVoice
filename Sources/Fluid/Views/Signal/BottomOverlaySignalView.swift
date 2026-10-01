@@ -28,6 +28,9 @@ struct BottomOverlayView: View {
     /// Where the History chip is on screen, for the card's anchor. A reference, not view state:
     /// the anchor reader reports it during view updates, which must not invalidate the view.
     @State private var historyChipAnchor = SignalChipAnchor()
+    /// Where the overlay's visible content (the pill between its rails) is on screen: the history
+    /// card centres on it.
+    @State private var overlayAnchor = SignalOverlayAnchor()
     @State private var lastResolvedAppIcon: NSImage?
     @State private var dragStartMouseLocation: NSPoint?
     @State private var dragStartWindowOrigin: NSPoint?
@@ -35,9 +38,12 @@ struct BottomOverlayView: View {
     /// The overlay panel's floating shadow, which the pill reports its box to. Only the overlay's
     /// own panel passes it; a render or another host reports nowhere.
     private let floatShadow: SignalFloatShadow.State?
+    /// The overlay panel's click targets, for its AppKit double-click (SignalClickTargets).
+    private let clickTargets: SignalClickTargets?
 
-    init(floatShadow: SignalFloatShadow.State? = nil) {
+    init(floatShadow: SignalFloatShadow.State? = nil, clickTargets: SignalClickTargets? = nil) {
         self.floatShadow = floatShadow
+        self.clickTargets = clickTargets
     }
 
     /// What the pill shows, from the controller's phase and the shared flags.
@@ -153,9 +159,9 @@ struct BottomOverlayView: View {
             self.perform {
                 BottomOverlayHistoryMenuController.shared.updateAnchor(
                     selectorFrameInScreen: self.historyChipAnchor.frameInScreen,
+                    overlayFrameInScreen: self.overlayAnchor.frameInScreen(window: self.historyChipAnchor.window),
                     parentWindow: self.historyChipAnchor.window,
-                    maxWidth: SignalTheme.Metrics.historyWidth,
-                    menuGap: SignalTheme.Metrics.historyGapAboveChip
+                    maxWidth: SignalTheme.Metrics.historyWidth
                 )
                 BottomOverlayHistoryMenuController.shared.toggleFromTap()
             }
@@ -264,18 +270,19 @@ struct BottomOverlayView: View {
                 self.reprocessChip
             }
         }
+        .signalOverlayAnchor(self.overlayAnchor)
         .onHover { hovering in
             // A notice row's timer waits while the pointer is over the pill or its rails.
             BottomOverlayWindowController.shared.noticeHoverChanged(hovering)
         }
         .padding(SignalTheme.Metrics.windowInsets)
-        // Whole-surface drag with position memory; double-click returns to the default anchor.
-        // Both sit on the parent so the chips' own taps win where they overlap.
-        .onTapGesture(count: 2) {
-            guard self.isInteractive else { return }
-            BottomOverlayWindowController.shared.resetDraggedPositionToDefault()
-        }
+        // Whole-surface drag with position memory. Double-click (back to the default anchor) is
+        // detected in AppKit by the overlay's hosting view, away from the buttons reported here:
+        // a SwiftUI double-tap on this parent made every chip wait ~350 ms before acting.
         .gesture(self.windowDragGesture)
+        .onPreferenceChange(SignalClickTargetsKey.self) { [clickTargets] rects in
+            clickTargets?.rects = rects
+        }
         .signalPalette()
         // A hiding or hidden overlay must never act on a click meant for the app beneath it.
         .allowsHitTesting(self.isInteractive)
@@ -553,6 +560,32 @@ struct BottomOverlayView: View {
                     BottomOverlayWindowController.shared.commitDraggedPosition()
                 }
             }
+    }
+}
+
+/// The overlay's visible content (the pill between its rails) in its hosting view, top-left
+/// origin, converted to the screen when the history card opens. Read through SwiftUI geometry,
+/// not an NSView: a platform view behind the rails would draw as a placeholder in the renders.
+final class SignalOverlayAnchor {
+    var frameInContent: CGRect = .zero
+
+    func frameInScreen(window: NSWindow?) -> CGRect {
+        guard let window, let content = window.contentView, self.frameInContent.width > 0 else { return .zero }
+        var rect = self.frameInContent
+        if !content.isFlipped {
+            rect.origin.y = content.bounds.height - rect.maxY
+        }
+        return window.convertToScreen(content.convert(rect, to: nil))
+    }
+}
+
+extension View {
+    func signalOverlayAnchor(_ anchor: SignalOverlayAnchor) -> some View {
+        self.onGeometryChange(for: CGRect.self) { proxy in
+            proxy.frame(in: .global)
+        } action: { frame in
+            anchor.frameInContent = frame
+        }
     }
 }
 

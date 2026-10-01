@@ -346,6 +346,8 @@ struct DeliveryFailureCardView: View {
     @State private var hoveredChips: Set<String> = []
     @State private var isCopyConfirming = false
     @State private var historyChipAnchor = SignalChipAnchor()
+    /// The grown pill between its rails on screen: the history card centres on it.
+    @State private var overlayAnchor = SignalOverlayAnchor()
     @State private var trace = SignalTraceModel()
 
     private var geometry: SignalOverlayGeometry {
@@ -362,13 +364,12 @@ struct DeliveryFailureCardView: View {
         HStack(alignment: .bottom, spacing: SignalTheme.Metrics.railGap) {
             SignalRail(height: geometry.railHeight) {
                 self.chip("history", "clock.arrow.circlepath", self.hasHistory ? "Recent Dictations" : "No saved dictation history available", enabled: self.hasHistory, latched: self.historyCard.isOpen) {
-                    // The history card clears the grown pill: 6 pt above it, not above the chip.
-                    let growth = self.pillHeight(geometry, cardHeight) - geometry.railHeight
+                    // The history card clears the grown pill: centred on it, 6 pt above its top.
                     BottomOverlayHistoryMenuController.shared.updateAnchor(
                         selectorFrameInScreen: self.historyChipAnchor.frameInScreen,
+                        overlayFrameInScreen: self.overlayAnchor.frameInScreen(window: self.historyChipAnchor.window),
                         parentWindow: self.historyChipAnchor.window,
-                        maxWidth: SignalTheme.Metrics.historyWidth,
-                        menuGap: SignalTheme.Metrics.historyGapAboveChip + max(0, growth)
+                        maxWidth: SignalTheme.Metrics.historyWidth
                     )
                     BottomOverlayHistoryMenuController.shared.toggleFromTap()
                 }
@@ -429,6 +430,7 @@ struct DeliveryFailureCardView: View {
                 }
             }
         }
+        .signalOverlayAnchor(self.overlayAnchor)
         .onHover { hovering in
             self.isHovered = hovering
             self.onHoverChanged(hovering)
@@ -442,12 +444,6 @@ struct DeliveryFailureCardView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(self.content.headline)
-    }
-
-    private func pillHeight(_ geometry: SignalOverlayGeometry, _ cardHeight: CGFloat) -> CGFloat {
-        let metrics = SignalTheme.Metrics.self
-        return metrics.pillPaddingTop + cardHeight + metrics.previewGap + metrics.traceRowHeight + metrics.micGap
-            + metrics.micRowHeight + metrics.pillPaddingBottom
     }
 
     private func chip(

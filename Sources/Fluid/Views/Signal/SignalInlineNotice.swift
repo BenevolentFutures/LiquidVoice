@@ -116,6 +116,7 @@ private struct SignalTextActionStyle: ButtonStyle {
             .padding(.horizontal, 4)
             .background(pressed ? self.palette.invBackground : Color.clear)
             .contentShape(Rectangle())
+            .signalClickTarget()
             .animation(.linear(duration: SignalTheme.Motion.chipPress), value: pressed)
     }
 }

@@ -3698,6 +3698,10 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         XCTAssertEqual(state.liveWordCount, 0)
 
         XCTAssertEqual(BottomOverlayView.wordCount(display: .listening, live: 12, frozen: nil), 12)
+        // No live text (the streaming preview off, the first moments, a reprocess): no count,
+        // never a "0 WORDS" that stays for the whole dictation.
+        XCTAssertNil(BottomOverlayView.wordCount(display: .listening, live: 0, frozen: nil))
+        XCTAssertNil(BottomOverlayView.wordCount(display: .transcribing, live: 0, frozen: nil))
         XCTAssertEqual(BottomOverlayView.wordCount(display: .transcribing, live: 0, frozen: 118), 118, "frozen at the stop")
         XCTAssertEqual(BottomOverlayView.wordCount(display: .stopped, live: 7, frozen: nil), 7)
         XCTAssertNil(BottomOverlayView.wordCount(display: .delivered(SignalDelivery(appName: "c11", words: 118, method: .paste, sentReturn: false)), live: 118, frozen: 118))
@@ -3745,7 +3749,7 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         let leftRail = targets.rects.filter { $0.width == chip && $0.minX == insets.leading }
         XCTAssertEqual(leftRail.count, 2, "History and Copy")
         let historyFrame = try XCTUnwrap(leftRail.min { $0.minY < $1.minY })
-        XCTAssertEqual(historyFrame.minY, insets.top + geometry.railHeight - geometry.pillHeight + 23, "spaced evenly down the rail (round 6)")
+        XCTAssertEqual(historyFrame.minY, insets.top + geometry.railHeight - geometry.pillHeight + SignalRail<EmptyView, EmptyView, EmptyView>.gap(height: geometry.railHeight), "spaced evenly down the rail (round 6)")
         let historyChip = CGPoint(x: historyFrame.midX, y: historyFrame.midY)
         XCTAssertTrue(SignalClickTargets.isPositionResetClick(clickCount: 2, at: pillCentre, targets: targets.rects))
         XCTAssertFalse(SignalClickTargets.isPositionResetClick(clickCount: 1, at: pillCentre, targets: targets.rects), "a single click never resets")

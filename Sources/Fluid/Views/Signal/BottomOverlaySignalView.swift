@@ -491,17 +491,20 @@ struct BottomOverlayView: View {
 
     /// The live word count at the foot row's left end (round 6, Atin 2026-10-01): while the
     /// dictation is live, stopped, transcribing or counting down; hidden where the same number
-    /// already shows (Pasted, Sent, a card) and on a notice.
+    /// already shows (Pasted, Sent, a card) and on a notice. Nothing while there is no live text
+    /// (the streaming preview off, a reprocess), rather than a "0 WORDS" that never moves.
     private func wordCount(_ display: Display) -> Int? {
         Self.wordCount(display: display, live: self.contentState.liveWordCount, frozen: self.model.frozenWordCount)
     }
 
     static func wordCount(display: Display, live: Int, frozen: Int?) -> Int? {
+        let count: Int
         switch display {
-        case .listening: return live
-        case .stopped, .transcribing: return frozen ?? live
+        case .listening: count = live
+        case .stopped, .transcribing: count = frozen ?? live
         case .delivered, .notice, .noticeRow, .idle: return nil
         }
+        return count > 0 ? count : nil
     }
 
     // MARK: Text

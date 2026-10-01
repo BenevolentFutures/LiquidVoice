@@ -161,8 +161,9 @@ struct SignalFootRow: View {
                     color: self.isMicEmphasized ? self.palette.text : self.palette.text2
                 )
                     .truncationMode(.tail)
-                    // Its own width, at most 160, so the icon and the name centre as a pair.
-                    .frame(width: min(metrics.micMaxWidth, role.width(of: self.micText.uppercased())))
+                    // Its own width (plus 1 pt so SwiftUI's measure never truncates a name that
+                    // fits), at most 160, so the icon and the name centre as a pair.
+                    .frame(width: min(metrics.micMaxWidth, role.width(of: self.micText.uppercased()) + 1))
                     .help("Microphone")
             }
 
@@ -286,8 +287,10 @@ struct SignalRail<Top: View, Middle: View, Bottom: View>: View {
         .padding(.vertical, gap)
         .frame(width: chip, height: self.height)
         .overlay {
+            // Reserved and empty: in the shorter sizes it overlaps the chips, so it takes no clicks.
             self.middle
                 .frame(width: chip, height: chip)
+                .allowsHitTesting(false)
         }
     }
 

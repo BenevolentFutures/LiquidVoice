@@ -53,12 +53,13 @@ struct SignalCardContent: Equatable {
         return size.height > lineHeight * 1.5 ? 2 : 1
     }
 
-    /// The grown top area: 79 pt for a one-line card, 136 for a failed paste, 153 with a two-line
-    /// reason, so the pill is 174 / 231 / 248 tall and everything below the card stays put.
+    /// The grown top area (round 6): 74 pt for a one-line card, 128 for a failed paste, 144 with a
+    /// two-line reason, so the pill is 156 / 210 / 226 tall and everything below the card stays put.
     func height(width: CGFloat) -> CGFloat {
         let reason = CGFloat(self.reasonLines(width: width)) * SignalTheme.Typography.reason.lineHeight
         let transcript: CGFloat = self.transcript == nil ? 0 : 6 + 3 * SignalTheme.Typography.transcript.lineHeight
-        return SignalTheme.Typography.failedHeadline.lineHeight + 4 + reason + transcript + 12 + SignalTheme.Metrics.buttonHeight
+        return SignalTheme.Typography.failedHeadline.lineHeight + 4 + reason + transcript
+            + SignalTheme.Metrics.cardActionsGap + SignalTheme.Metrics.buttonHeight
     }
 }
 
@@ -134,7 +135,7 @@ struct SignalCardBody: View {
                 }
             }
             .frame(height: SignalTheme.Metrics.buttonHeight)
-            .padding(.top, 12)
+            .padding(.top, SignalTheme.Metrics.cardActionsGap)
         }
         .frame(width: self.width, height: self.content.height(width: self.width), alignment: .topLeading)
         .accessibilityElement(children: .contain)
@@ -172,7 +173,7 @@ struct SignalCardBody: View {
 }
 
 /// The AI-enhancement failure, in the preview area (provisional: DESIGN.md does not cover it): the
-/// message, then Try Again (orange, when it can retry) and Dismiss. 54 pt, like the preview.
+/// message, then Try Again (orange, when it can retry) and Dismiss. 48 pt, like the preview.
 struct SignalNoticeRow: View {
     let message: String
     let canRetry: Bool
@@ -193,7 +194,7 @@ struct SignalNoticeRow: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
                 self.messageText
                     .frame(height: SignalTheme.Typography.failedHeadline.lineHeight)
                 HStack(spacing: 16) {

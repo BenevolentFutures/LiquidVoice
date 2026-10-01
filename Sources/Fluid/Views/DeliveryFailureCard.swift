@@ -397,15 +397,17 @@ struct DeliveryFailureCardView: View {
                 topHeight: cardHeight,
                 traceRow: SignalTraceRow(
                     geometry: geometry,
-                    icon: self.icon,
                     trace: self.trace,
                     isLive: false,
                     isSweeping: false,
                     mark: self.content.isMicrophoneOff ? .closed : .none,
                     timer: .frozen(self.content.isMicrophoneOff ? "0:00" : self.timerText, dim: self.content.isMicrophoneOff)
                 ),
-                micText: self.content.isMicrophoneOff ? "No microphone" : (self.microphoneName.isEmpty ? "Microphone" : self.microphoneName),
-                micEmphasized: self.content.isMicrophoneOff,
+                foot: SignalFootRow(
+                    icon: self.icon,
+                    micText: self.content.isMicrophoneOff ? "No microphone" : (self.microphoneName.isEmpty ? "Microphone" : self.microphoneName),
+                    isMicEmphasized: self.content.isMicrophoneOff
+                ),
                 // No bracket on the card as a whole: it is not clickable; its buttons and chips are
                 // (DESIGN.md §7, Atin 2026-09-29).
                 marksFailure: true

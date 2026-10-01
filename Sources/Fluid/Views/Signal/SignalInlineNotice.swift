@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// A notice row (DESIGN.md §15): news that needs no rescue, in the pill's reserved preview slot,
-/// the way Pasted swaps in. Three 18 pt rows: the headline (Pro 13.5 semibold), the reason (Pro 13,
-/// `text-2`), then inline text actions, **Reprocess** (Pro 13 semibold in `accent` with a 12 pt
-/// glyph, no fill) · **Dismiss** (Pro 13 medium, `text-2`). Each action draws its own outside
+/// the way Pasted swaps in. Three 16 pt rows (round 6): the headline (Pro 12.5 semibold), the reason
+/// (Pro 12, `text-2`), then inline text actions, **Reprocess** (Pro 12 semibold in `accent` with a
+/// 12 pt glyph, no fill) · **Dismiss** (Pro 12 medium, `text-2`). Each action draws its own outside
 /// bracket on hover, like a chip, and the pill's bracket yields; a press inverts it.
 struct SignalInlineNotice: View {
     let notice: SignalNotice
@@ -15,7 +15,7 @@ struct SignalInlineNotice: View {
 
     @Environment(\.signalPalette) private var palette
 
-    static let rowHeight: CGFloat = 18
+    static let rowHeight: CGFloat = 16
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -110,7 +110,7 @@ private struct SignalTextActionStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed
         configuration.label
-            .font(.system(size: 13, weight: self.isAccent ? .semibold : .medium))
+            .font(.system(size: SignalTheme.Typography.inlineAction.size, weight: self.isAccent ? .semibold : .medium))
             .foregroundStyle(pressed ? self.palette.invForeground : (self.isAccent ? self.palette.accent : self.palette.text2))
             .frame(height: SignalInlineNotice.rowHeight)
             .padding(.horizontal, 4)

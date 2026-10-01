@@ -9,7 +9,8 @@ enum SignalRecordMark: Equatable {
     case none
 }
 
-/// Spoken Send's placard in the trace row (DESIGN.md §15): empty at rest, its width reserved.
+/// Spoken Send's placard at the foot row's right end (DESIGN.md §15, round 6): empty at rest, its
+/// width reserved.
 enum SignalPlacard: Equatable {
     case none
     /// The phrase was heard; Return follows the paste. Orange.
@@ -38,19 +39,17 @@ enum SignalTimerReadout: Equatable {
     case countdown(SignalDrain)
 }
 
-/// The trace row (DESIGN.md §4, §11, §15): `[icon 20] 10 [trace] [placard 7 ch] 6 [square 6] 4
-/// [timer 5 ch]`, all centred on the trace's midline. The icon keeps the shape the OS gives it;
-/// its frame, the placard's and the timer's are reserved whatever they show.
+/// The trace row (DESIGN.md §4, §11, round 6): `[trace] >=12 [square 6] 4 [timer 5 ch]`, the trace
+/// from the left edge and the readout flush right, centred on the trace's midline. The timer's box
+/// is reserved whatever it shows. The target-app icon and Spoken Send's placard live in the foot row.
 struct SignalTraceRow: View {
     let geometry: SignalOverlayGeometry
-    let icon: NSImage?
     let trace: SignalTraceModel
     let isLive: Bool
     let isSweeping: Bool
     var drain: SignalDrain?
     var staticSweepProgress: Double?
     let mark: SignalRecordMark
-    var placard: SignalPlacard = .none
     let timer: SignalTimerReadout
 
     @Environment(\.signalPalette) private var palette
@@ -58,20 +57,6 @@ struct SignalTraceRow: View {
     var body: some View {
         let metrics = SignalTheme.Metrics.self
         HStack(alignment: .top, spacing: 0) {
-            Group {
-                if let icon = self.icon {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .interpolation(.high)
-                        .aspectRatio(contentMode: .fit)
-                } else {
-                    Color.clear
-                }
-            }
-            .frame(width: metrics.targetIcon, height: metrics.targetIcon)
-            .padding(.top, metrics.traceMidline - metrics.targetIcon / 2)
-            .help("Dictation target app")
-
             SignalTraceView(
                 model: self.trace,
                 isLive: self.isLive,
@@ -79,15 +64,8 @@ struct SignalTraceRow: View {
                 drain: self.drain,
                 staticSweepProgress: self.staticSweepProgress
             )
-                .padding(.leading, metrics.traceLeadingGap)
 
-            Spacer(minLength: metrics.placardLeadingGap)
-
-            SignalMonoLabel(text: self.placard.text, role: SignalTheme.Typography.placard, color: self.placardColor)
-                .fixedSize()
-                .frame(width: metrics.placardWidth, height: SignalTheme.Typography.placard.lineHeight, alignment: .trailing)
-                .padding(.top, metrics.traceMidline - SignalTheme.Typography.placard.lineHeight / 2)
-                .help("Spoken Send")
+            Spacer(minLength: metrics.traceReadoutGap)
 
             HStack(spacing: metrics.readoutGap) {
                 self.recordSquare
@@ -97,17 +75,8 @@ struct SignalTraceRow: View {
             }
             .frame(height: SignalTheme.Typography.timer.lineHeight)
             .padding(.top, metrics.traceMidline - SignalTheme.Typography.timer.lineHeight / 2)
-            .padding(.leading, metrics.placardTrailingGap)
         }
         .frame(width: self.geometry.innerWidth, height: metrics.traceRowHeight, alignment: .top)
-    }
-
-    private var placardColor: Color {
-        switch self.placard {
-        case .none, .send: self.palette.accent
-        case .noSend: self.palette.text
-        case .noReturn: self.palette.textDim
-        }
     }
 
     @ViewBuilder
@@ -154,27 +123,77 @@ struct SignalTraceRow: View {
     }
 }
 
-/// The microphone, mono uppercase, bottom-centre, the same in every visible state.
-struct SignalMicRow: View {
-    let text: String
+/// The foot row (DESIGN.md §4, round 6, Atin 2026-10-01): the target-app icon (16 pt) and the
+/// microphone, centred as a pair, the same in every visible state; the live word count at the left
+/// end and Spoken Send's placard at the right end, both absolute so the pair never moves.
+struct SignalFootRow: View {
+    let icon: NSImage?
+    let micText: String
     /// NO MICROPHONE reads in full ink.
-    var isEmphasized = false
+    var isMicEmphasized = false
+    /// "118 WORDS" while a dictation is live, stopped, transcribing or counting down; nil hides it.
+    var wordCount: Int?
+    var placard: SignalPlacard = .none
+
     @Environment(\.signalPalette) private var palette
 
     var body: some View {
-        SignalMonoLabel(
-            text: self.text,
-            role: SignalTheme.Typography.micLabel,
-            color: self.isEmphasized ? self.palette.text : self.palette.text2
-        )
-            .truncationMode(.tail)
-            .frame(maxWidth: .infinity)
-            .frame(height: SignalTheme.Metrics.micRowHeight)
-            .help("Microphone")
+        let metrics = SignalTheme.Metrics.self
+        let role = SignalTheme.Typography.micLabel
+        ZStack {
+            HStack(spacing: metrics.footGap) {
+                Group {
+                    if let icon = self.icon {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: .fit)
+                    } else {
+                        Color.clear
+                    }
+                }
+                .frame(width: metrics.targetIcon, height: metrics.targetIcon)
+                .help("Dictation target app")
+
+                SignalMonoLabel(
+                    text: self.micText,
+                    role: role,
+                    color: self.isMicEmphasized ? self.palette.text : self.palette.text2
+                )
+                    .truncationMode(.tail)
+                    // Its own width, at most 160, so the icon and the name centre as a pair.
+                    .frame(width: min(metrics.micMaxWidth, role.width(of: self.micText.uppercased())))
+                    .help("Microphone")
+            }
+
+            HStack(spacing: 0) {
+                SignalMonoLabel(text: self.wordCount.map(Self.wordCountText) ?? "", role: role, color: self.palette.text2)
+                    .fixedSize()
+                    .help("Words so far")
+                Spacer(minLength: 0)
+                SignalMonoLabel(text: self.placard.text, role: SignalTheme.Typography.placard, color: self.placardColor)
+                    .fixedSize()
+                    .frame(width: metrics.placardWidth, alignment: .trailing)
+                    .help("Spoken Send")
+            }
+        }
+        .frame(height: metrics.micRowHeight)
+    }
+
+    static func wordCountText(_ count: Int) -> String {
+        count == 1 ? "1 word" : "\(count) words"
+    }
+
+    private var placardColor: Color {
+        switch self.placard {
+        case .none, .send: self.palette.accent
+        case .noSend: self.palette.text
+        case .noReturn: self.palette.textDim
+        }
     }
 }
 
-/// The live preview: SF Pro 13.5 medium on an 18 pt line, head-truncated so the newest words stay
+/// The live preview: SF Pro 12.5 medium on a 16 pt line, head-truncated so the newest words stay
 /// visible; dimmed and frozen while transcribing.
 struct SignalPreview: View {
     let text: String
@@ -193,7 +212,7 @@ struct SignalPreview: View {
             .lineLimit(self.lines)
             .truncationMode(.head)
             .fixedSize(horizontal: false, vertical: true)
-            // CSS centres each line in its 18 pt box: half the extra leading sits above line one.
+            // CSS centres each line in its 16 pt box: half the extra leading sits above line one.
             .padding(.top, role.lineSpacing / 2)
             .frame(width: self.width, height: self.height, alignment: .topLeading)
             .clipped()
@@ -246,8 +265,10 @@ struct SignalDeliveredStatement: View {
     }
 }
 
-/// A rail: 30 pt chips in three slots, top at the pill's top corner, bottom at its bottom
-/// corner, the middle slot centred between them (reserved, so nothing shifts).
+/// A rail (round 6, Atin 2026-10-01): its two chips spaced evenly down the rail (`space-evenly`:
+/// 23 pt above, between and below on the 130 pt rail) instead of pinned to the pill's corners. The
+/// middle slot (the retired Spoken Send chip's) is reserved at the rail's centre and takes no
+/// part in the spacing, as in the prototype.
 struct SignalRail<Top: View, Middle: View, Bottom: View>: View {
     let height: CGFloat
     @ViewBuilder let top: Top
@@ -255,15 +276,25 @@ struct SignalRail<Top: View, Middle: View, Bottom: View>: View {
     @ViewBuilder let bottom: Bottom
 
     var body: some View {
+        let chip = SignalTheme.Metrics.chip
+        let gap = Self.gap(height: self.height)
         VStack(spacing: 0) {
             self.top
             Spacer(minLength: 0)
-            self.middle
-                .frame(width: SignalTheme.Metrics.chip, height: SignalTheme.Metrics.chip)
-            Spacer(minLength: 0)
             self.bottom
         }
-        .frame(width: SignalTheme.Metrics.chip, height: self.height)
+        .padding(.vertical, gap)
+        .frame(width: chip, height: self.height)
+        .overlay {
+            self.middle
+                .frame(width: chip, height: chip)
+        }
+    }
+
+    /// The even gap above the top chip and below the bottom one: the rail's free height split three
+    /// ways, on whole points (the gap between takes the remainder).
+    static func gap(height: CGFloat) -> CGFloat {
+        max(0, ((height - 2 * SignalTheme.Metrics.chip) / 3).rounded(.down))
     }
 }
 

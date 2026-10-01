@@ -2972,15 +2972,16 @@ final class SignalOverlayRenderTests: XCTestCase {
         super.tearDown()
     }
 
-    /// Recovery cards (DESIGN.md §15): the pill grows upward to 174 (one-line card), 231 (failed)
-    /// or 248 (two-line reason); the rails and the rows below the card stay where the overlay's are.
+    /// Recovery cards (DESIGN.md §15, round 6): the pill grows upward to 156 (one-line card), 210
+    /// (failed) or 226 (two-line reason); the rails and the rows below the card stay where the
+    /// overlay's are.
     func testRecoveryCardsGrowThePillUpward() throws {
         let transcript = "Okay, take a look at the retry admission path in the queue worker. When the same job ID lands twice inside the lease window we are admitting both and the second one clobbers the first one's checkpoint so I think the fix is to key the admission set."
         let cards: [(String, SignalCardContent, CGFloat)] = [
-            ("07-failed", SignalCardContent(headline: "Couldn\u{2019}t paste into c11", reason: "No text field focused", transcript: transcript, primary: .copy, meta: "118 words"), 231),
-            ("17-failed-clipboardkept", SignalCardContent(headline: "Couldn\u{2019}t paste into c11", reason: DeliveryFailureOverlayController.reasonText(failure: .pasteNotLanded, clipboard: .newerClipboardCopy, inHistory: true), transcript: transcript, primary: .copy, meta: "118 words"), 248),
-            ("18-timedout", SignalCardContent(headline: "Transcription timed out", reason: "Your audio is kept", primary: .reprocess), 174),
-            ("20-micoff", SignalCardContent(headline: "Microphone access is off", reason: "Allow Liquid Voice in Privacy & Security", primary: .openSystemSettings, isMicrophoneOff: true), 174),
+            ("07-failed", SignalCardContent(headline: "Couldn\u{2019}t paste into c11", reason: "No text field focused", transcript: transcript, primary: .copy, meta: "118 words"), 210),
+            ("17-failed-clipboardkept", SignalCardContent(headline: "Couldn\u{2019}t paste into c11", reason: DeliveryFailureOverlayController.reasonText(failure: .pasteNotLanded, clipboard: .newerClipboardCopy, inHistory: true), transcript: transcript, primary: .copy, meta: "118 words"), 226),
+            ("18-timedout", SignalCardContent(headline: "Transcription timed out", reason: "Your audio is kept", primary: .reprocess), 156),
+            ("20-micoff", SignalCardContent(headline: "Microphone access is off", reason: "Allow Liquid Voice in Privacy & Security", primary: .openSystemSettings, isMicrophoneOff: true), 156),
         ]
         for appearance in [NSAppearance.Name.darkAqua, .aqua] {
             let theme = appearance == .darkAqua ? "dark" : "light"
@@ -2994,7 +2995,8 @@ final class SignalOverlayRenderTests: XCTestCase {
                     onDismiss: {},
                     onHoverChanged: { _ in }
                 )
-                XCTAssertEqual(content.height(width: 304) + 12 + 6 + 50 + 4 + 13 + 10, pillHeight, "\(name)")
+                // Padding 10 · card · gap 6 · trace row 38 · gap 4 · foot 16 · padding 8.
+                XCTAssertEqual(content.height(width: 316) + 10 + 6 + 38 + 4 + 16 + 8, pillHeight, "\(name)")
                 let rep = try SignalRenderStage.render(card, appearance: appearance)
                 XCTAssertEqual(rep.size.height, pillHeight + 14 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
                 if let folder = self.outputFolder {
@@ -3118,7 +3120,7 @@ final class SignalOverlayRenderTests: XCTestCase {
                 let rep = try SignalRenderStage.render(BottomOverlayView(), appearance: appearance)
                 // Rails (30 + 6) either side of the 340 pill, plus the 6 pt bracket margin.
                 XCTAssertEqual(rep.size.width, 6 + 30 + 6 + 340 + 6 + 30 + 6 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
-                XCTAssertEqual(rep.size.height, 149 + 14 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
+                XCTAssertEqual(rep.size.height, 130 + 14 + 2 * SignalRenderStage.backdropMargin, "\(theme) \(name)")
                 if let folder = self.outputFolder {
                     try SignalRenderStage.write(rep, to: folder.appendingPathComponent("\(theme)-\(name).png"))
                 }
@@ -3514,12 +3516,19 @@ final class SignalOverlayBehaviorTests: XCTestCase {
     func testTheMediumPillIsTheDesignedGeometry() {
         let medium = SignalOverlayGeometry.forSize(.medium)
         XCTAssertEqual(medium.pillWidth, 340)
-        XCTAssertEqual(medium.pillHeight, 149)
-        XCTAssertEqual(medium.railHeight, 149)
-        XCTAssertEqual(medium.traceBars, 39, "round 5: 39 bars beside the Spoken Send placard")
-        XCTAssertEqual(SignalTraceModel.width(forBars: 39), 154)
+        // Round 6 (Atin, 2026-10-01): 10 · preview 48 · 6 · trace row 38 · 4 · foot 16 · 8.
+        XCTAssertEqual(medium.pillHeight, 130)
+        XCTAssertEqual(medium.railHeight, 130)
+        XCTAssertEqual(medium.innerWidth, 316)
+        // The trace takes the icon's and the placard's room: trace + >=12 + readout = 316.
+        XCTAssertEqual(medium.traceBars, 63, "round 6: 63 bars, 5.25 s")
+        XCTAssertEqual(SignalTraceModel.width(forBars: 63), 250)
+        XCTAssertGreaterThanOrEqual(316 - 250 - medium.readoutWidth, 12)
+        XCTAssertLessThan(316 - 250 - medium.readoutWidth, 16, "no room left for another bar")
+        // Rails: two chips spaced evenly on the 130 pt rail, 23 pt above and below, 24 between.
+        XCTAssertEqual(SignalRail<EmptyView, EmptyView, EmptyView>.gap(height: 130), 23)
         // Every other size keeps the rows and only reserves fewer or more preview lines.
-        XCTAssertEqual(SignalOverlayGeometry.forSize(.small).pillHeight, 149 - 36)
+        XCTAssertEqual(SignalOverlayGeometry.forSize(.small).pillHeight, 130 - 32)
         XCTAssertTrue(SignalOverlayGeometry.forSize(.small).isCompactTop)
         XCTAssertFalse(medium.isCompactTop)
         XCTAssertGreaterThanOrEqual(SignalOverlayGeometry.forSize(.pill).railHeight, 90)
@@ -3675,6 +3684,28 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         XCTAssertEqual(SignalOverlayAnchor().frameInScreen(window: window), .zero, "not laid out yet")
     }
 
+    /// The live word count (round 6, Atin 2026-10-01): the whole live text, not the stored tail;
+    /// status words keep the count; it shows while live, stopped, transcribing or counting down.
+    func testTheLiveWordCountCountsTheWholeTextAndHidesOnOutcomes() {
+        let state = NotchContentState.shared
+        defer { state.updateTranscription("") }
+        let long = Array(repeating: "word", count: 400).joined(separator: " ")
+        state.updateTranscription(long)
+        XCTAssertEqual(state.liveWordCount, 400, "counts past the 800-character stored tail")
+        state.updateTranscription("Transcribing")
+        XCTAssertEqual(state.liveWordCount, 400, "a status word keeps the count")
+        state.updateTranscription("")
+        XCTAssertEqual(state.liveWordCount, 0)
+
+        XCTAssertEqual(BottomOverlayView.wordCount(display: .listening, live: 12, frozen: nil), 12)
+        XCTAssertEqual(BottomOverlayView.wordCount(display: .transcribing, live: 0, frozen: 118), 118, "frozen at the stop")
+        XCTAssertEqual(BottomOverlayView.wordCount(display: .stopped, live: 7, frozen: nil), 7)
+        XCTAssertNil(BottomOverlayView.wordCount(display: .delivered(SignalDelivery(appName: "c11", words: 118, method: .paste, sentReturn: false)), live: 118, frozen: 118))
+        XCTAssertNil(BottomOverlayView.wordCount(display: .noticeRow(.recognitionBack), live: 0, frozen: nil))
+        XCTAssertEqual(SignalFootRow.wordCountText(1), "1 word")
+        XCTAssertEqual(SignalFootRow.wordCountText(53), "53 words")
+    }
+
     /// HISTORY_OPEN times the click on the History chip to its action, and the action to the card.
     func testHistoryOpenSummaryLine() {
         XCTAssertEqual(
@@ -3694,7 +3725,7 @@ final class SignalOverlayBehaviorTests: XCTestCase {
 
     /// Double-click resets the overlay's position in AppKit, away from its buttons, so no SwiftUI
     /// double-tap holds back a chip's single click (the ~350 ms History lag, 2026-10-01).
-    func testADoubleClickResetsThePositionOnlyAwayFromButtons() {
+    func testADoubleClickResetsThePositionOnlyAwayFromButtons() throws {
         // Listening with a history, so all four chips are live: a dimmed or inert chip acts on
         // nothing and is not a target.
         let savedHistory = TranscriptionHistoryStore.shared.makeBackupPayload()
@@ -3711,7 +3742,11 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         let insets = SignalTheme.Metrics.windowInsets
         let geometry = SignalOverlayGeometry.forSize(SettingsStore.shared.overlaySize)
         let pillCentre = CGPoint(x: insets.leading + chip + SignalTheme.Metrics.railGap + geometry.pillWidth / 2, y: insets.top + geometry.railHeight - geometry.pillHeight / 2)
-        let historyChip = CGPoint(x: insets.leading + chip / 2, y: insets.top + chip / 2)
+        let leftRail = targets.rects.filter { $0.width == chip && $0.minX == insets.leading }
+        XCTAssertEqual(leftRail.count, 2, "History and Copy")
+        let historyFrame = try XCTUnwrap(leftRail.min { $0.minY < $1.minY })
+        XCTAssertEqual(historyFrame.minY, insets.top + geometry.railHeight - geometry.pillHeight + 23, "spaced evenly down the rail (round 6)")
+        let historyChip = CGPoint(x: historyFrame.midX, y: historyFrame.midY)
         XCTAssertTrue(SignalClickTargets.isPositionResetClick(clickCount: 2, at: pillCentre, targets: targets.rects))
         XCTAssertFalse(SignalClickTargets.isPositionResetClick(clickCount: 1, at: pillCentre, targets: targets.rects), "a single click never resets")
         XCTAssertFalse(SignalClickTargets.isPositionResetClick(clickCount: 2, at: historyChip, targets: targets.rects), "a double-click on a chip is the chip's")
@@ -4145,7 +4180,7 @@ final class SignalFloatShadowTests: XCTestCase {
         XCTAssertNotNil(shadow.parent, "attached under the card's panel")
         XCTAssertTrue(shadow.ignoresMouseEvents)
         let surface = try XCTUnwrap(cards.floatShadow.state.surface, "the card reports its grown pill")
-        XCTAssertEqual(surface.height, 174, "the one-line card: the pill grown upward to 174")
+        XCTAssertEqual(surface.height, 156, "the one-line card: the pill grown upward to 156")
         XCTAssertEqual(surface.minX, SignalTheme.Metrics.windowInsets.leading + SignalTheme.Metrics.chip + SignalTheme.Metrics.railGap)
     }
 
@@ -4185,8 +4220,8 @@ final class SignalFloatShadowTests: XCTestCase {
 
     func testTheShadowPaintsOnlyOutsideTheSurfaceAndNothingWhileHidden() throws {
         let margin = SignalFloatShadow.margin
-        let surface = CGRect(x: 42, y: 6, width: 340, height: 149)
-        let size = CGSize(width: 424 + 2 * margin, height: 163 + 2 * margin)
+        let surface = CGRect(x: 42, y: 6, width: 340, height: 130)
+        let size = CGSize(width: 424 + 2 * margin, height: 144 + 2 * margin)
         let state = SignalFloatShadow.State()
         state.surface = surface
 
@@ -4222,7 +4257,7 @@ final class SignalFloatShadowTests: XCTestCase {
             SignalRenderStage.reset()
             SignalRenderStage.listening()
             let pillShadow = SignalFloatShadow.State()
-            pillShadow.surface = CGRect(x: 42, y: 6, width: 340, height: 149)
+            pillShadow.surface = CGRect(x: 42, y: 6, width: 340, height: 130)
             let card = DeliveryFailureCardView(
                 content: SignalCardContent(headline: "Couldn\u{2019}t paste into c11", reason: "No text field focused", transcript: transcript, primary: .copy, meta: "118 words"),
                 icon: NSWorkspace.shared.icon(forFile: "/Applications/c11.app"),
@@ -4233,7 +4268,7 @@ final class SignalFloatShadowTests: XCTestCase {
                 onHoverChanged: { _ in }
             )
             let cardShadow = SignalFloatShadow.State()
-            cardShadow.surface = CGRect(x: 42, y: 6, width: 340, height: 231)
+            cardShadow.surface = CGRect(x: 42, y: 6, width: 340, height: 210)
             let surfaces: [(String, AnyView, SignalFloatShadow.State)] = [
                 ("01-listening", AnyView(BottomOverlayView()), pillShadow),
                 ("07-failed", AnyView(card), cardShadow),

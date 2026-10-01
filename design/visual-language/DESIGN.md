@@ -1,8 +1,8 @@
 # Liquid Voice visual language: Signal
 
-**Status: locked by Atin, 2026-09-28** ("Awesome. This looks great. Let's go."), after four rounds on the recording overlay; **round 5 (same day) added the states the newer branch has** (Spoken Send, timeouts, recognition recovery, microphone permission, delivery-failure reasons, truthful wording, the app icon), see section 15. This document is the binding design for the native build. Where it and the prototype disagree, the prototype wins and this file gets fixed.
+**Status: locked by Atin, 2026-09-28** ("Awesome. This looks great. Let's go."), after four rounds on the recording overlay; **round 5 (same day) added the states the newer branch has** (Spoken Send, timeouts, recognition recovery, microphone permission, delivery-failure reasons, truthful wording, the app icon), see section 15; **round 6 (2026-10-01) made the pill shorter and gave the trace the room** (section 16). This document is the binding design for the native build. Where it and the prototype disagree, the prototype wins and this file gets fixed.
 
-**Binding prototype:** [`prototypes/signal/index.html`](prototypes/signal/index.html) (tokens, native mapping and round history in [`prototypes/signal/DIRECTION.md`](prototypes/signal/DIRECTION.md)). Open it with [`prototypes/serve.sh`](prototypes/serve.sh) or double-click the self-contained copy [`prototypes/signal/standalone.html`](prototypes/signal/standalone.html). Keys: 1–6 pick a state, hold Space to talk, P plays a dictation, T toggles appearance, D toggles the age ruler.
+**Binding prototype:** [`prototypes/signal/round6.html`](prototypes/signal/round6.html) for the overlay's layout since round 6 (its top CSS block "ROUND 6" lists every number; `?layout=r5` or L shows round 5), and [`prototypes/signal/index.html`](prototypes/signal/index.html) for everything else (tokens, native mapping and round history in [`prototypes/signal/DIRECTION.md`](prototypes/signal/DIRECTION.md)). Open it with [`prototypes/serve.sh`](prototypes/serve.sh) or double-click the self-contained copy [`prototypes/signal/standalone.html`](prototypes/signal/standalone.html). Keys: 1–6 pick a state, hold Space to talk, P plays a dictation, T toggles appearance, D toggles the age ruler.
 
 **Reference only, archived:** [Obsidian](prototypes/obsidian/index.html) (depth) and [Lumen](prototypes/lumen/index.html) (light). The current app's anatomy before this work: [`notes/overlay-anatomy.md`](notes/overlay-anatomy.md). Round history and decisions: [`notes/DIRECTIONS.md`](notes/DIRECTIONS.md).
 
@@ -43,32 +43,34 @@ Two families. **SF Pro Text/Display** for anything read as prose. **SF Mono** (`
 
 | Role | Face | Size / line | Weight | Notes |
 |---|---|---|---|---|
-| Timer | Mono | 15 / 18 | semibold | right-aligned in a box reserved for "99:59" |
-| Mic label | Mono | 10.5 / 13 | medium, UPPERCASE | bottom-centre of the pill |
+| Timer | Mono | 14 / 18 | semibold | right-aligned in a box reserved for "99:59" (Atin, 2026-10-01, round 6) |
+| Mic label, live word count | Mono | 10 / 16 | medium, UPPERCASE | the foot row: mic centred beside the app icon, word count at its left end (Atin, 2026-10-01, round 6) |
 | Meta (history, delivered, failed) | Mono | 10.5 / 14–15 | medium, UPPERCASE | "0:41 · 118 WORDS · C11" |
 | History index / time | Mono | 11.5 / 17 and 10 / 14 | semibold / medium | "01" over "3:04 PM" |
 | Table header, day rows, title block, menu header | Mono | 10 | medium, UPPERCASE | |
-| Delivered headline | Pro | 16 / 20 | semibold | "Delivered to c11" |
-| Live preview | Pro | 13.5 / 18 | medium | 3 lines, head-truncated so the newest words stay visible |
-| Failed headline | Pro | 13.5 / 18 | semibold | "Couldn't paste into c11" |
-| Transcripts (card, table) | Pro | 13 / 17–18 | regular | clamped to 3 and 4 lines |
-| Menu rows, Copy, Dismiss | Pro | 13 | regular / semibold / medium | |
+| Delivered headline | Pro | 15 / 19 | semibold | "Pasted into c11" (Atin, 2026-10-01, round 6) |
+| Live preview | Pro | 12.5 / 16 | medium | 3 lines, head-truncated so the newest words stay visible (Atin, 2026-10-01, round 6) |
+| Card and notice headline | Pro | 12.5 / 16 | semibold | "Couldn't paste into c11", "Speech recognition is back" (Atin, 2026-10-01, round 6) |
+| Card reason, card transcript, notice reason and actions | Pro | 12 / 16 | regular (actions medium, Reprocess semibold) | (Atin, 2026-10-01, round 6) |
+| Transcripts in the history table | Pro | 13 / 18 | regular | clamped to 4 lines |
+| Menu rows, a card's primary button and Dismiss | Pro | 13 | regular / semibold / medium | |
 
-Nothing inside the overlay is smaller than 10 pt mono uppercase; prose never drops below 13 pt.
+Nothing inside the overlay is smaller than 10 pt mono uppercase; prose inside the pill never drops below 12 pt (Atin, 2026-10-01, round 6), and the history card and menu keep 13.
 
 ## 4. Spacing and geometry
 
 | Token | Value |
 |---|---|
-| Pill | 340 × 149 pt, square |
-| Pill rows, top to bottom | padding 12 · preview 54 · gap 6 · trace row 50 (44 trace + 6 ruler) · gap 4 · mic 13 · padding 10 |
-| Pill padding, horizontal | 18 |
-| Recovery cards | the pill grown **upward** to 174 (+25, one-line card), 231 (+82, failed with its transcript) or 248 (+99, failed with a two-line reason); its bottom rows, rails and chips do not move |
-| Rails | 149 tall, bottom-aligned, 6 pt out from the pill; chips at the pill's top and bottom corners |
+| Pill | 340 × 130 pt, square (Atin, 2026-10-01, round 6) |
+| Pill rows, top to bottom | padding 10 · preview 48 · gap 6 · trace row 38 (34 trace + 4 ruler) · gap 4 · foot 16 · padding 8 = 130 (was 149) (Atin, 2026-10-01, round 6) |
+| Pill padding, horizontal | 12 (was 18), so the content is 316 wide (Atin, 2026-10-01, round 6) |
+| Recovery cards | the pill grown **upward** to 156 (+26, one-line card), 210 (+80, failed with its transcript) or 226 (+96, failed with a two-line reason); its bottom rows, rails and chips do not move (Atin, 2026-10-01, round 6) |
+| Rails | 130 tall, bottom-aligned, 6 pt out from the pill; the two chips spaced evenly down the rail (23 pt above, 24 between, 23 below), no longer pinned to the pill's corners; the retired middle slot stays reserved at the centre (Atin, 2026-10-01, round 6) |
 | Chip | 30 × 30, square, no edge at rest |
-| Trace | 39 bars, 2 pt wide on a 4 pt pitch, 154 × 44, min 2 / max 40 tall, mirrored about a 1 px midline; 12 bars per second of voice, so 3.25 s of speech (52 bars before the Spoken Send placard was reserved); silence adds none (§8) |
-| Trace row | target-app icon 20 pt (left) · trace · Spoken Send placard (7 ch reserved, empty at rest) · orange square 6 pt · timer (right), all centred on the midline |
-| Age ruler | static ticks at bar centres 1 pt below the trace: 2 pt every 0.25 s, 4 pt every 1 s; its 6 pt is reserved even when hidden |
+| Trace | 63 bars, 2 pt wide on a 4 pt pitch, 250 × 34, min 2 / max 30 tall, mirrored about a 1 px midline at 17; 12 bars per second of voice, so 5.25 s of speech (39 in round 5); silence adds none (§8) (Atin, 2026-10-01, round 6) |
+| Trace row | trace from the left edge · at least 12 pt · orange square 6 pt · 4 · timer (5 ch reserved), the square and timer flush right, all centred on the midline. The trace takes the room the icon and the placard left: trace + 12 + readout fill the 316 pt content (Atin, 2026-10-01, round 6) |
+| Foot row | 16 tall: target-app icon 16 pt · 7 · microphone (at most 160 wide, tail-truncated), centred as a pair; the live word count ("53 WORDS") at the left end and Spoken Send's placard (7 ch reserved, empty at rest) at the right end, both pinned so the pair never moves (Atin, 2026-10-01, round 6) |
+| Age ruler | static ticks at bar centres 1 pt below the trace: 2 pt every 0.25 s, 3 pt every 1 s; its 4 pt is reserved even when hidden (Atin, 2026-10-01, round 6) |
 | History card | 480 wide, ≤ 480 tall, square, 1 px edge; 36 pt header, 28 pt day rows, 68 pt index column, 28 pt title-block footer; centred on the overlay, 6 pt above its visible top (a recovery card's grown pill included), clamped 8 pt inside the screen's visible frame (Atin, 2026-10-01) |
 | Copy button | 88 × 28, square |
 | Delivered stamp | 30 × 30, square |
@@ -121,22 +123,24 @@ No springs. Everything is deliberate; the trace's bar heights are the one soft e
 
 ## 9. Anatomy of each overlay state
 
+Round 6 (Atin, 2026-10-01, round 6):
+
 ```
-┌──────────────────────────────────────────────┐
-│ …scheduler when you are done give me a one   │  preview, 3 lines, head-truncated
-│ line summary and the diff stat and if the    │
-│ suite takes longer than a minute tell me     │
-│ [c11]  ▏▎▍▌▏▎││▎▏··········▎│▍│▌▎▍  ■  0:38 │  trace row: icon · trace · square · timer
-│        ╵ ╵ ╵ │ ╵ ╵ ╵ │ ╵ ╵ ╵ │ ╵ ╵ ╵ │        │  age ruler (D toggles; height reserved)
-│            MACBOOK PRO MICROPHONE            │  mic, centred, in every visible state
-└──────────────────────────────────────────────┘
+┌────────────────────────────────────────────┐
+│ …scheduler when you are done give me a one │  preview, 3 lines of 16, head-truncated
+│ line summary and the diff stat and if the  │
+│ suite takes longer than a minute tell me   │
+│ ▏▎▍▌▏▎││▎▏···········▎│▍│▌▎▍▏▎▍▌▎▍  ■ 0:38 │  trace row: trace · square · timer
+│ ╵ ╵ ╵ │ ╵ ╵ ╵ │ ╵ ╵ ╵ │ ╵ ╵ ╵ │ ╵ ╵ ╵       │  age ruler (height reserved)
+│ 53 WORDS  [c11] MACBOOK PRO MICROPHONE SEND│  foot: words · icon + mic, centred · placard
+└────────────────────────────────────────────┘
 ```
 
 1. **Idle.** Hidden. The menu bar mark shows three bars.
-2. **Listening.** Live preview above. Trace live, the newest 6 bars orange (the write head). Solid orange square and a running timer at the right end of the trace row, opposite the target-app icon. Mic label bottom-centre. Chips at rest (solid squares, no edge). Menu bar: bars plus a solid square.
+2. **Listening.** Live preview above. Trace live, the newest 6 bars orange (the write head). Solid orange square and a running timer flush right in the trace row. The foot row: the target-app icon and the mic label centred as a pair, the live word count at its left end (also while stopped, transcribing and counting down; not on Pasted, Sent, a card or a notice, where the count shows elsewhere or means nothing) (Atin, 2026-10-01, round 6). Chips at rest (solid squares, no edge), spaced evenly down the rails. Menu bar: bars plus a solid square.
 3. **Transcribing.** Preview frozen and dimmed. Bars flat at 2 pt with the orange sweep crossing every 1.05 s. The square goes hollow, the timer freezes at the final duration. Copy and Reprocess dim. **No status word.** Menu bar: bars plus an outlined square.
 4. **Pasted** (was "Delivered"). The preview area swaps to the orange stamp, "Pasted into c11" and "118 WORDS" in mono. Trace flat, timer frozen (the duration appears once, here). Held 0.6 s, then dismissed. The paste was posted, not verified, hence the word.
-5. **Failed → Copy.** The pill grows upward (82 pt, 99 with a two-line reason): an orange 2 pt top rule, "Couldn't paste into c11", one reason line ("No text field focused" / "The text is on your clipboard" / "Your newer clipboard was left alone, the text is in History"), the transcript clamped to 3 lines, a solid orange **Copy** (becomes "✓ Copied" at the same width for 1.4 s), **Dismiss**, and "118 WORDS". Trace row, mic row, rails and chips do not move. Stays until dismissed, the next dictation, or 10 s (the countdown pauses while the pointer is over the card and resumes with 4 s when it leaves); it then fades out over 120 ms linear like the pill (a cut under reduced motion).
+5. **Failed → Copy.** The pill grows upward (80 pt, 96 with a two-line reason; round 6): an orange 2 pt top rule, "Couldn't paste into c11", one reason line ("No text field focused" / "The text is on your clipboard" / "Your newer clipboard was left alone, the text is in History"), the transcript clamped to 3 lines, a solid orange **Copy** (becomes "✓ Copied" at the same width for 1.4 s), **Dismiss**, and "118 WORDS". Trace row, foot row, rails and chips do not move. Stays until dismissed, the next dictation, or 10 s (the countdown pauses while the pointer is over the card and resumes with 4 s when it leaves); it then fades out over 120 ms linear like the pill (a cut under reduced motion).
 6. **History.** The card opens at once, centred on the overlay and 6 pt above it (above a recovery card's grown pill too), with the listening state live underneath (Atin, 2026-10-01). An engineering table: mono index column ("01" over the time), day rows, 1 px rules, transcripts clamped to 4 lines, mono meta with the orange NOT DELIVERED marker where the paste failed, and a title-block footer ("HISTORY · 12 OF 247 · NEWEST FIRST" | "LIQUID VOICE"). Rows invert on hover; click inserts. The History chip stays inverted (latched) while the card is open. Closes on outside click, re-tap, or a row pick.
 
 7. **Send countdown**, 8. **Sent**, 9. **Transcription timed out**, 10. **Speech recognition is back**, 11. **Microphone access is off**: added in round 5, see section 15.
@@ -156,10 +160,12 @@ A 22 × 16 template mark: three square-ended bars at rest; bars plus a solid squ
 | Double-click reset | detected in AppKit: the overlay's hosting view, after SwiftUI has the click, checks `clickCount == 2` and that the point is on no button (every Signal button style reports its frame, `SignalClickTargetsKey`). Never a SwiftUI `onTapGesture(count: 2)` on a parent: it makes every child Button wait out the double-click interval, ~350 ms, before it acts (the History lag, 2026-10-01). `HISTORY_OPEN click_to_action_ms=…` in the log times each History click |
 | Selection brackets | A `Bracket: Shape` whose path is four L sub-paths, one per corner. Overlay it stroked twice (halo 3.5 pt in `surface`, then 1.5 pt in `bracket`), with negative padding of `gap + 0.75` (plus the drop rule at the bottom) so it sits outside the frame without changing layout, `allowsHitTesting(false)`, opacity driven by a single `hoveredElement` enum from `.onHover` on the pill, each chip and the card, animated `.linear(duration: 0.06)`. The non-activating panel needs an `NSTrackingArea` with `.activeAlways` |
 | Chip | a `ButtonStyle`: `Rectangle` fill `chip`; `Bracket(len: 6)` at gap 2 on hover; `isPressed` or latched swaps to `inv-bg` with an outer 1 pt `surface` stroke |
-| Trace row | `HStack(alignment: .center)`: the target icon, the `Canvas`, `Spacer`, a 6 pt `Rectangle` (filled or 1.5 pt outline), then the timer `.system(size: 15, weight: .semibold, design: .monospaced)` in a fixed-width trailing frame |
+| Trace row | `SignalTraceRow`: the `Canvas`, `Spacer(minLength: 12)`, a 6 pt `Rectangle` (filled or 1.5 pt outline), then the timer `.system(size: 14, weight: .semibold, design: .monospaced)` in a fixed-width trailing frame. The bar count is `SignalOverlayGeometry.traceBars`: what fits the content width less 12 and the readout (63 in the medium pill) (Atin, 2026-10-01, round 6) |
+| Foot row | `SignalFootRow`, a `ZStack`: the 16 pt icon and the mic label in an `HStack(spacing: 7)`, the label framed to its own measured width (at most 160) so the pair centres; over it an `HStack` of the word count, `Spacer`, and the placard in its reserved 7 ch trailing frame. The word count counts the whole live text (`NotchContentState.liveWordCount`, not the stored 800-character tail) and freezes at the stop (`SignalOverlayModel.frozenWordCount`) (Atin, 2026-10-01, round 6) |
+| Rails | `SignalRail`: top chip, `Spacer`, bottom chip, padded by `(height - 60) / 3` rounded down; the reserved middle slot is an overlay at the centre (Atin, 2026-10-01, round 6) |
 | Trace and ruler | one `Canvas` in `TimelineView(.animation)`: `fill(Path(rect))` per bar, then the static ruler ticks; the write head is the newest 6 bars in `accent`; the sweep is one accent rect stepped on the pitch |
 | Trace heights | calibrated per recording, not a fixed gate: a window's peak draws by how far it rises above the recording's quiet floor (falls at once, rises 1.65 dB/s), scaled to its loud peak (rises at once, falls 1.1 dB/s, kept at least 11 dB above the gate). Settings > Sensitivity sets the gate: 6 dB above the floor at the default 0.4, 15 dB at 1.0. The fixed gate at -33 dBFS left a quiet microphone's speech on the 2 pt floor for whole dictations (2026-09-29). Each stop logs `TRACE_SUMMARY` (windows, voiced windows, bars pushed, bars raised, loudest, floor, gate, peak) |
-| Mic row | mono 10.5 medium, `.textCase(.uppercase)`, `.tracking(0.63)`, centred |
+| Mic label | mono 10 medium, `.textCase(.uppercase)`, `.tracking(0.6)`, 16 pt line, in the foot row |
 | Failed top rule | `Rectangle().frame(height: 2)` aligned `.top` |
 | Menu bar mark | `NSStatusItem` with a square-cornered template `NSImage` per state |
 | Dismiss | `NSAnimationContext` 0.12 s linear `alphaValue` → 0, then park |
@@ -202,11 +208,11 @@ Not prototyped in this pass; Atin locked the overlay and menu bar. The tokens, t
 
 ## 15. Round 5: Spoken Send, recovery cards, wording, icon
 
-Added 2026-09-28 for the states the newer `liquid-voice` branch has. The pill stays 149 pt; the rails, chips, trace row and mic row never move; only a recovery card raises the pill's top. Full tokens and native mapping: the "Round 5" section of `prototypes/signal/DIRECTION.md`.
+Added 2026-09-28 for the states the newer `liquid-voice` branch has. The pill stays 130 pt (149 until round 6); the rails, chips, trace row and foot row never move; only a recovery card raises the pill's top. Full tokens and native mapping: the "Round 5" section of `prototypes/signal/DIRECTION.md`.
 
-### Spoken Send (in the trace row; no fifth chip)
+### Spoken Send (the placard at the foot row's right end; no fifth chip)
 
-The trace row becomes `[icon 20] [trace 39 bars] [placard 7 ch] [■ 6] [timer 5 ch]`. The **placard** is mono 10.5 semibold uppercase, right-aligned, width reserved for "NO SEND", empty at rest.
+Round 5 put the placard in the trace row; **round 6 moved it to the foot row's right end** (Atin, 2026-10-01, round 6), so the trace row is `[trace 63 bars] ≥12 [■ 6] [timer 5 ch]`. The **placard** is mono 10.5 semibold uppercase, right-aligned, width reserved for "NO SEND", empty at rest. The drain bar and the countdown timer stay in the trace row.
 
 | Phase | Placard | Trace row | Timer |
 |---|---|---|---|
@@ -221,19 +227,19 @@ Outcomes: a completed countdown goes to **Sent** (the stamp layout, "Sent to c11
 
 ### Recovery card family
 
-One anatomy for every problem: the failed card grown upward from the pill with the orange 2 pt top rule, a headline (Pro 13.5 semibold), one reason line (Pro 13, `text-2`, at most two), the transcript (failed only, 3 lines), then one **primary action** as a solid orange button (at least 88 × 28, 13 pt glyph, label), **Dismiss**, and mono meta on the right. Each fact appears once: cards whose duration is already on the frozen timer show no duration meta.
+One anatomy for every problem: the failed card grown upward from the pill with the orange 2 pt top rule, a headline (Pro 12.5/16 semibold), 4 pt, one reason line (Pro 12/16, `text-2`, at most two), 6 pt, the transcript (failed only, 3 lines of Pro 12/16), 10 pt, then one **primary action** as a solid orange button (at least 88 × 28, 13 pt glyph, label), **Dismiss**, and mono meta on the right. Each fact appears once: cards whose duration is already on the frozen timer show no duration meta.
 
-| State | Headline | Reason | Primary | Meta | Trace row / mic row |
+| State | Headline | Reason | Primary | Meta | Trace row / foot row |
 |---|---|---|---|---|---|
 | Failed → Copy | Couldn't paste into c11 | one of the three reasons above | **Copy** → "✓ Copied" | `118 WORDS` | flat, frozen timer / mic |
 | Transcription timed out | Transcription timed out | Your audio is kept | **Reprocess** | none | flat, frozen timer / mic |
 | Microphone access is off | Microphone access is off | Allow Liquid Voice in Privacy & Security | **Open System Settings** (gear; opens Privacy & Security → Microphone) | none | flat, hollow square, `0:00` dim / `NO MICROPHONE` |
 
-The Reprocess in a card and the Reprocess chip do the same thing; the chip stays. Card heights: 174 pt for a one-line card, 231 for failed, 248 with the two-line clipboard reason. Every card leaves after 10 s unless dismissed first (paused while the pointer is over it), fading over 120 ms linear. A card about the dictation the pill is holding takes the pill's place at once, so the pill reads as growing; a card about anything else, while a newer recording is live, sits above the pill.
+The Reprocess in a card and the Reprocess chip do the same thing; the chip stays. Card heights: 156 pt for a one-line card, 210 for failed, 226 with the two-line clipboard reason (Atin, 2026-10-01, round 6). Every card leaves after 10 s unless dismissed first (paused while the pointer is over it), fading over 120 ms linear. A card about the dictation the pill is holding takes the pill's place at once, so the pill reads as growing; a card about anything else, while a newer recording is live, sits above the pill.
 
 ### Notice row (lighter than a card)
 
-For news that needs no rescue, the pill does not grow and there is no top rule. **Speech recognition is back** is the one notice today (Atin, round 5: "sure, great"). It swaps into the reserved 3-line preview area the way Pasted does: line 1 "Speech recognition is back" (Pro 13.5 semibold), line 2 "A kept dictation is waiting" (Pro 13, `text-2`), line 3 an inline **Reprocess** text action (Pro 13 semibold in `accent`, arrow.clockwise glyph, no fill; hover draws its outside bracket, press inverts) then `·` **Dismiss** (Pro 13 medium, `text-2`). The Cancel chip also dismisses it. Trace row, mic row, rails and chips do not move. Like the card it replaced, it leaves after 10 s unless used (paused while the pointer is over the pill), with the pill's 120 ms fade. It appears on the bottom pill only when nothing else owns it; with the top overlay, or while a recording owns the pill, the notice falls back to the card.
+For news that needs no rescue, the pill does not grow and there is no top rule. **Speech recognition is back** is the one notice today (Atin, round 5: "sure, great"). It swaps into the reserved 3-line preview area the way Pasted does: three 16 pt lines (round 6): line 1 "Speech recognition is back" (Pro 12.5 semibold), line 2 "A kept dictation is waiting" (Pro 12, `text-2`), line 3 an inline **Reprocess** text action (Pro 12 semibold in `accent`, arrow.clockwise glyph, no fill; hover draws its outside bracket, press inverts) then `·` **Dismiss** (Pro 12 medium, `text-2`). The Cancel chip also dismisses it. Trace row, foot row, rails and chips do not move. Like the card it replaced, it leaves after 10 s unless used (paused while the pointer is over the pill), with the pill's 120 ms fade. It appears on the bottom pill only when nothing else owns it; with the top overlay, or while a recording owns the pill, the notice falls back to the card.
 
 ### Wording
 
@@ -242,3 +248,18 @@ The paste is posted, not verified. The outcome reads **"Pasted into c11"**; the 
 ### App icon
 
 Variant A: an ink `#111214` tile, full-bleed (macOS applies its own squircle mask), with the five white square-ended bars of the twin-peak trace (heights 6 / 12 / 8 / 12 / 6 on a 16 grid, 2 units wide on a 3 pitch) and one orange 6 × 6 square at the bars' bottom right. At 32 pt and below the mark simplifies to three bars (6 / 12 / 6, 3 wide on a 5 pitch) with the orange square kept. Variant B (paper tile, ink bars) is on the icon page as the alternative. Menu bar mark unchanged. See [`prototypes/signal/icon.html`](prototypes/signal/icon.html).
+
+## 16. Round 6: shorter pill, wider trace
+
+Approved by Atin in the prototype on 2026-10-01 ("definitely nicer, really nice"). Binding: [`prototypes/signal/round6.html`](prototypes/signal/round6.html), its "ROUND 6" CSS block. The numbers are in §3, §4, §9 and §11, each marked (Atin, 2026-10-01, round 6).
+
+1. The target-app icon moves from the trace row's left end to the foot row, 16 pt, left of the microphone; the icon and mic are centred as a pair.
+2. The trace takes the freed room: horizontal padding 18 → 12, and 63 bars (5.25 s) where 39 stood.
+3. Spoken Send's placard moves to the foot row's right end; the timer sits flush right in the trace row.
+4. Shorter: prose 13.5/18 → 12.5/16, trace 44 → 34 (+4 ruler), timer 15 → 14, mic 10.5/13 → 10/16. The pill is 130 tall (was 149); recovery cards still grow it upward, to 156, 210 and 226.
+5. Rail chips space evenly down the rail instead of pinning to the pill's corners.
+6. A live word count at the foot row's left end while the dictation is live, stopped, transcribing or counting down (the prototype's default, `?words=show`).
+7. The history card centres on the overlay, 6 pt above it (§4), and dark mode's floating shadow is deeper (§6).
+
+Open options in the prototype, and what native does: SEND tag in the foot row (not the trace row), icon and mic centred (not flush left), rails even (not inset or flush), words shown. Renders: `native-renders/native` beside `native-renders/prototype` (captured from `round6.html` by `scripts/capture_prototype.py`), side by side in `native-renders/compare` (`scripts/compose_render_compare.py`).
+

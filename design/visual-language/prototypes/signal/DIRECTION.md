@@ -7,7 +7,7 @@ The overlay is an engineering drawing of an instrument that stays quiet until yo
 ## History
 
 - **Round 1 (2026-09-27):** a printed instrument panel. Flat surfaces, one accent, a label strip over the preview.
-- **Round 2 (2026-09-28):** Atin chose Signal and asked for Sekhem Prime's diagram grammar: 8-tick corner brackets ("corners are the design"), mono numbers and labels, thin rules, status in solid colour and words. We inherited the grammar, not the teal and gold.
+- **Round 2 (2026-09-28):** Atin chose Signal and asked for the earlier deck design's diagram grammar: 8-tick corner brackets ("corners are the design"), mono numbers and labels, thin rules, status in solid colour and words. We inherited the grammar, not the teal and gold.
 - **Round 3 (2026-09-28), current.** Atin: *"let's only have those corners appear in a standard way on mouseover … show [the microphone] in the bottom in the middle and get rid of the listening. And then move the time to the right-hand side, the opposite on the horizontal axis from the icon."* So:
   1. **Corners are a hover affordance.** They are never drawn at rest and never orange.
   2. **The top label strip is gone** ("LISTENING", mic and timer at the top).

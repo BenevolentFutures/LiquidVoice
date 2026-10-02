@@ -221,3 +221,4 @@ builds/
 # Python bytecode (scripts/)
 __pycache__/
 *.pyc
+design/visual-language/native-renders/

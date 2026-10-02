@@ -70,9 +70,9 @@
   const TERM_LINES = [
     '<span class="p">❯</span> <span class="d">claude --resume</span>',
     '',
-    '<span class="d">Merge Captain · workspace:10 · surface:291</span>',
+    '<span class="d">Review · workspace:10 · surface:291</span>',
     '',
-    'Read the three open PRs on lattice/retry-admission.',
+    'Read the three open PRs on retry-admission.',
     '',
     '  <span class="d">#412</span>  Queue: key admission on job id + lease epoch    <span class="d">+184 −31</span>',
     '  <span class="d">#409</span>  Scheduler: drop the duplicate lease timer         <span class="d">+12 −40</span>',
@@ -99,14 +99,14 @@
       <div class="c11">
         <div class="titlebar">
           <div class="lights"><i></i><i></i><i></i></div>
-          <div class="tabs"><span class="tab">184: OSS Strategy Partner</span><span class="tab active">291: Merge Captain</span><span class="tab">284: Style Studio</span></div>
+          <div class="tabs"><span class="tab">184: Docs</span><span class="tab active">291: Review</span><span class="tab">284: Style Studio</span></div>
         </div>
         <div class="body">
           <div class="sidebar">
-            <div class="ws">Gregorovich<small>constellation · 2 agents</small></div>
-            <div class="ws active">LiquidVoice<small>Merge Captain · working</small></div>
-            <div class="ws">Stage11 / c11<small>idle</small></div>
-            <div class="ws">Acetate<small>idle</small></div>
+            <div class="ws">api-server<small>2 agents</small></div>
+            <div class="ws active">LiquidVoice<small>Review · working</small></div>
+            <div class="ws">docs-site<small>idle</small></div>
+            <div class="ws">mobile-app<small>idle</small></div>
           </div>
           <div class="term">${TERM_LINES.join("\n")}</div>
         </div>

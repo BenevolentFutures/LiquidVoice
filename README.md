@@ -2,7 +2,9 @@
 
 <p align="center"><b><i>Straight voice to text for macOS, built to land every word</i></b></p>
 
-<p align="center"><img src="docs/images/overlay.png" width="560" alt="The Liquid Voice overlay mid-dictation: a scrolling voice trace, a six-second timer, live word and WPM counters, and the active mic with its battery level. History and copy buttons sit on the left rail, cancel and reprocess on the right."></p>
+<p align="center"><img src="docs/images/overlay.png" width="560" alt="The Liquid Voice overlay mid-dictation: the live transcript above a voice trace, a 13-second timer, 43 words and 203 words per minute in the foot row, and the active mic with its battery level. History and copy sit on the left rail, cancel and reprocess on the right."></p>
+
+<p align="center"><sub>mid-dictation: the live transcript, your voice as a trace, and the word count and words per minute as you speak.</sub></p>
 
 ---
 

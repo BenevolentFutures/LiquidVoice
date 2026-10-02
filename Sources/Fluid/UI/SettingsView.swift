@@ -313,9 +313,13 @@ struct SettingsView: View {
                             Divider().opacity(0.2)
 
                             // Updates: the upstream updater is off, so there is nothing to check.
-                            Text("MouthKeys updates by local rebuild (./build.sh install).")
-                                .font(self.theme.typography.bodySmall)
-                                .foregroundStyle(self.settingsSecondaryText)
+                            HStack(spacing: 6) {
+                                Text("MouthKeys does not update itself. Download new releases from GitHub.")
+                                    .font(self.theme.typography.bodySmall)
+                                    .foregroundStyle(self.settingsSecondaryText)
+                                Link("Latest release", destination: LiquidVoiceLinks.latestRelease)
+                                    .font(self.theme.typography.bodySmall)
+                            }
                         }
                     }
                     .padding(16)

@@ -189,7 +189,7 @@ SettingsStore.xcuserstate
 build_*
 build_dev.sh
 build_and_notarize.sh
-release.sh
+/release.sh
 check_downloads.sh
 
 
@@ -222,3 +222,6 @@ builds/
 __pycache__/
 *.pyc
 design/visual-language/native-renders/
+
+## Release output (scripts/release.sh)
+dist/

@@ -47,11 +47,21 @@ Liquid Voice is narrower on purpose.
 
 - **Fluid Intelligence.** FluidVoice's AI layer and its settings are not included. AI cleanup through a provider you choose is still here. [#3]
 - **telemetry.** analytics are hard-wired off and the keys are blank. [`0e2948a`][0e2948a], [#3]
-- **the built-in updater.** it updates to FluidVoice, which would replace this build, so it is off. you update by rebuilding. [`19202c1`][19202c1], [#3]
+- **the built-in updater.** it updates to FluidVoice, which would replace this build, so it is off. you update by downloading the new release or rebuilding. [`19202c1`][19202c1], [#3]
 
 ## install.
 
-no binaries yet. you build it. building needs Xcode 26, which needs macOS 15.6 or later; the app itself runs on macOS 15 or later. by engine: Parakeet, Nemotron and Cohere need Apple Silicon. Apple Speech needs macOS 26. Whisper up to Medium and Apple ASR Legacy, the older Apple engine, also run on Intel, which this fork has not tested.
+the app runs on macOS 15 or later. by engine: Parakeet, Nemotron and Cohere, the defaults, need Apple Silicon. Apple Speech needs macOS 26. Whisper up to Medium and Apple ASR Legacy, the older Apple engine, also run on Intel, which this fork has not tested.
+
+### download.
+
+get the DMG from the [latest release](https://github.com/BenevolentFutures/LiquidVoice/releases/latest), open it, and drag Liquid Voice to Applications. it is signed with a Developer ID and notarized by Apple, so it opens like any other app.
+
+the app does not update itself. to update, download the new release and replace the app; your settings, dictionary and history stay.
+
+### build it yourself.
+
+building needs Xcode 26, which needs macOS 15.6 or later.
 
 ```bash
 git clone --depth 1 -b liquid-voice https://github.com/BenevolentFutures/LiquidVoice.git
@@ -61,11 +71,13 @@ cd LiquidVoice
 
 `./build.sh install` builds a signed Release, quits a running Liquid Voice, backs up the installed app to `~/Backups/`, and replaces `/Applications/Liquid Voice.app`. it prints the command to roll back. to update, pull and run it again.
 
-**coming from FluidVoice.** stock FluidVoice and older Liquid Voice builds share the bundle ID `com.FluidApp.app`. if you have used either on this Mac, Liquid Voice copies its settings, dictionary and history once, on first launch, and never changes the original. after that the two apps keep separate data and can run side by side. macOS does not carry permissions over, so you grant them again.
-
 **signing.** the install needs an Apple Development identity, so macOS keeps your permissions across rebuilds. a free Personal Team is enough: add an Apple Account in Xcode › Settings › Accounts, then create an Apple Development certificate. with several teams, set `LIQUIDVOICE_DEVELOPMENT_TEAM` to the Team ID you want. without one, `./build.sh unsigned` makes an unsigned Debug build, `DerivedData/Build/Products/Debug/Liquid Voice Debug.app`. it is a separate app with its own settings and data, and macOS may ask for Accessibility again after each rebuild.
 
-**permissions.** Microphone, to hear you. Accessibility, to type into other apps. Apple ASR Legacy also asks for Speech Recognition. then pick a speech model; the default on Apple Silicon, Parakeet TDT v3, is about a 460 MiB download.
+### first launch.
+
+**permissions.** Microphone, to hear you. Accessibility, to type into other apps. Apple ASR Legacy also asks for Speech Recognition. then pick a speech model; the default on Apple Silicon, Parakeet TDT v3, is about a 460 MiB download. a download and your own build share settings and data, but not a signature, so moving from one to the other means granting Microphone and Accessibility again, once.
+
+**coming from FluidVoice.** stock FluidVoice and older Liquid Voice builds share the bundle ID `com.FluidApp.app`. if you have used either on this Mac, Liquid Voice copies its settings, dictionary and history once, on first launch, and never changes the original. after that the two apps keep separate data and can run side by side. macOS does not carry permissions over, so you grant them again.
 
 ## privacy.
 

@@ -6,8 +6,9 @@ import SwiftUI
 /// them. Pure: the view's frame clock drives `advance(to:words:elapsed:snaps:)`.
 ///
 /// - Words step up one at a time toward the true count, each step `stepInterval(remaining:)`
-///   after the last (30 to 110 ms, so a burst plays out over about 0.45 s). They never pass the
-///   true count and drop at once when it goes down (a revised partial).
+///   after the last (30 to 110 ms: a burst of up to about 15 words plays out in about half a
+///   second, a larger one at about 30 ms a word). They never pass the true count and drop at once
+///   when it goes down (a revised partial).
 /// - WPM eases toward `trueWords x 60 / max(6, elapsed)` with a 0.7 s time constant, so it drifts
 ///   rather than jumps, and keeps drifting through silence.
 /// - `snaps` (Reduce Motion, or a settled pill) shows both targets at once.
@@ -20,7 +21,7 @@ struct SignalCounterSmoother: Equatable {
     /// The first 6 s of a recording count as 6, so its first burst does not spike WPM.
     static let wpmFloorSeconds: TimeInterval = 6
     static let wpmTimeConstant: TimeInterval = 0.7
-    /// A burst of any size plays out over about this long, one word a step.
+    /// A burst plays out over about this long, one word a step, until the 30 ms floor.
     static let burstDuration: TimeInterval = 0.45
     static let shortestStep: TimeInterval = 0.030
     static let longestStep: TimeInterval = 0.110
@@ -71,6 +72,16 @@ struct SignalCounterSmoother: Equatable {
             self.shownWords = words
         }
         self.shownWPM += (target - self.shownWPM) * (1 - exp(-frame / Self.wpmTimeConstant))
+    }
+
+    /// How long the counters still move once the truth is frozen (the stop): the remaining words
+    /// at up to 110 ms each, and the ease coming within half a word a minute of its target;
+    /// at most `maxSettle`. The view's clock runs this long, then shows the targets.
+    func settleDuration(words: Int, elapsed: TimeInterval, maxSettle: TimeInterval = 3) -> TimeInterval {
+        let remaining = Double(max(0, words - self.shownWords))
+        let gap = abs(Self.wpmTarget(words: words, elapsed: elapsed) - self.shownWPM)
+        let ease = gap > 0.5 ? Self.wpmTimeConstant * log(gap / 0.5) : 0
+        return min(maxSettle, max(remaining * Self.longestStep, ease))
     }
 
     var displayedWords: Int {
@@ -135,13 +146,19 @@ final class SignalCounterClock {
         self.smoother.advance(to: date.timeIntervalSinceReferenceDate, words: input.words, elapsed: elapsed, snaps: snaps)
         return (self.smoother.displayedWords, self.smoother.displayedWPM)
     }
+
+    /// How long after the stop the clock must still run for `input` (frozen) to finish moving.
+    func settleDuration(_ input: SignalCounterInput) -> TimeInterval {
+        guard input.recording == self.recording else { return 0 }
+        return self.smoother.settleDuration(words: input.words, elapsed: input.elapsed(at: Date()))
+    }
 }
 
 /// The counters on the foot row: words at the left end, WPM at the right end (in the placard's
 /// slot, which the foot row gives back to SEND / NO SEND whenever the placard has content). Its
-/// own frame clock, at most 60 Hz, runs only while the counters show, and for a short settle
-/// after the stop; nothing outside this view is invalidated by it, and the face redraws only when
-/// a displayed number changes.
+/// own frame clock, at most 60 Hz, runs only while the counters show and, after the stop, only
+/// until they have finished moving (usually well under a second, at most 3 s); nothing outside
+/// this view is invalidated by it, and the face redraws only when a displayed number changes.
 struct SignalLiveCounters: View {
     /// Nil: hidden, and the clock paused.
     let input: SignalCounterInput?
@@ -151,30 +168,26 @@ struct SignalLiveCounters: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// After the stop the counts finish catching up and WPM settles from the frozen length; then
     /// the clock pauses and the face shows the targets.
-    @State private var settlesUntil: Date = .distantFuture
-
-    /// Long enough for a burst to play out and the 0.7 s ease to come within a word a minute.
-    static let settleDuration: TimeInterval = 3
+    @State private var isSettled = false
 
     var body: some View {
         let isRunning = self.input?.isRunning ?? false
-        let isSettled = !isRunning && Date() >= self.settlesUntil
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: self.input == nil || isSettled)) { context in
-            let reading = self.input.map { self.clock.reading($0, at: context.date, snaps: self.reduceMotion || isSettled) }
+        let settled = !isRunning && self.isSettled
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: self.input == nil || settled)) { context in
+            let reading = self.input.map { self.clock.reading($0, at: context.date, snaps: self.reduceMotion || settled) }
             SignalCounterFace(words: reading?.words, wpm: self.showsWPM ? reading?.wpm : nil)
                 .equatable()
         }
-        .onChange(of: isRunning, initial: true) { _, running in
-            guard !running else {
-                self.settlesUntil = .distantFuture
-                return
+        .task(id: isRunning) {
+            self.isSettled = false
+            guard !isRunning else { return }
+            let settle = self.input.map { self.clock.settleDuration($0) } ?? 0
+            if settle > 0 {
+                try? await Task.sleep(for: .seconds(settle))
+                guard !Task.isCancelled else { return }
             }
-            let settle = Self.settleDuration
-            self.settlesUntil = Date().addingTimeInterval(settle)
-            DispatchQueue.main.asyncAfter(deadline: .now() + settle + 0.02) {
-                // Re-evaluates the view, which pauses the clock and shows the targets.
-                if self.settlesUntil <= Date() { self.settlesUntil = .distantPast }
-            }
+            // Re-evaluates the view, which pauses the clock and shows the targets.
+            self.isSettled = true
         }
     }
 }
@@ -196,7 +209,8 @@ struct SignalCounterFace: View, Equatable {
                 self.counter(
                     SignalCounterSmoother.padded(words, places: SignalCounterSmoother.wordPlaces),
                     unit: words == 1 ? "word" : "words",
-                    spoken: words == 1 ? "1 word" : "\(words) words"
+                    label: "Words",
+                    value: "\(words)"
                 )
                 .help("Words so far")
             }
@@ -205,14 +219,15 @@ struct SignalCounterFace: View, Equatable {
                 self.counter(
                     SignalCounterSmoother.padded(wpm, places: SignalCounterSmoother.wpmPlaces),
                     unit: "wpm",
-                    spoken: "\(wpm) words per minute"
+                    label: "Words per minute",
+                    value: "\(wpm)"
                 )
                 .help("Words per minute")
             }
         }
     }
 
-    private func counter(_ digits: String, unit: String, spoken: String) -> some View {
+    private func counter(_ digits: String, unit: String, label: String, value: String) -> some View {
         let role = SignalTheme.Typography.micLabel
         return HStack(spacing: Self.labelGap) {
             SignalMonoLabel(text: digits, role: role, color: self.palette.text2)
@@ -221,7 +236,9 @@ struct SignalCounterFace: View, Equatable {
                 .fixedSize()
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(spoken)
+        .accessibilityLabel(label)
+        .accessibilityValue(value)
+        .accessibilityAddTraits(.updatesFrequently)
     }
 
     nonisolated static func == (lhs: SignalCounterFace, rhs: SignalCounterFace) -> Bool {

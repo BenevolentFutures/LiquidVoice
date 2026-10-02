@@ -496,24 +496,40 @@ struct BottomOverlayView: View {
     /// card), on a notice, and while the pill is not on screen.
     private func counterInput(_ display: Display) -> SignalCounterInput? {
         guard self.contentState.isBottomOverlayPresented else { return nil }
+        let model = self.model
         return Self.counterInput(
             display: display,
-            model: self.model,
+            countsLiveWords: model.countsLiveWords,
+            recordingStartedAt: model.recordingStartedAt,
+            frozenDuration: model.frozenDuration,
+            frozenWords: model.frozenWordCount,
             live: self.contentState.liveWordCount,
-            streamingPreview: self.settings.enableStreamingPreview
+            hasLiveText: self.settings.enableStreamingPreview && self.settings.selectedSpeechModel.supportsStreaming
         )
     }
 
-    /// Nothing without a recording behind the pill (a reprocess), or with the streaming preview
-    /// off, where no live text arrives and the counts would read 0 for the whole dictation.
-    static func counterInput(display: Display, model: SignalOverlayModel, live: Int, streamingPreview: Bool) -> SignalCounterInput? {
-        guard streamingPreview, model.countsLiveWords, let start = model.recordingStartedAt else { return nil }
+    /// Nothing without a recording of this session behind the pill (a reprocess, including one
+    /// that re-shows the pill), or without live text: the streaming preview off, or a model that
+    /// does not stream, where the counts would read 0 for the whole dictation.
+    static func counterInput(
+        display: Display,
+        countsLiveWords: Bool,
+        recordingStartedAt: Date?,
+        frozenDuration: TimeInterval?,
+        frozenWords: Int?,
+        live: Int,
+        hasLiveText: @autoclosure () -> Bool
+    ) -> SignalCounterInput? {
+        guard countsLiveWords, let start = recordingStartedAt else { return nil }
         switch display {
         case .listening:
+            guard frozenDuration == nil, hasLiveText() else { return nil }
             return SignalCounterInput(recording: start, words: live, clock: .running(start))
         case .stopped, .transcribing:
-            // Frozen at the stop: the count finishes catching up and WPM settles from the length.
-            return SignalCounterInput(recording: start, words: model.frozenWordCount ?? live, clock: .frozen(model.frozenDuration ?? 0))
+            // Only after a real stop: frozen there, the count finishes catching up and WPM settles
+            // from the recording's length.
+            guard let duration = frozenDuration, hasLiveText() else { return nil }
+            return SignalCounterInput(recording: start, words: frozenWords ?? live, clock: .frozen(duration))
         case .delivered, .notice, .noticeRow, .idle:
             return nil
         }

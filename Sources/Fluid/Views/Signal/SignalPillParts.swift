@@ -171,17 +171,18 @@ struct SignalFootRow: View {
                     .help("Microphone")
             }
 
-            if let clock = self.counterClock {
-                // SEND / NO SEND takes the right end back whenever the placard has content.
-                SignalLiveCounters(input: self.counters, showsWPM: self.placard == .none, clock: clock)
-            }
-
             HStack(spacing: 0) {
                 Spacer(minLength: 0)
                 SignalMonoLabel(text: self.placard.text, role: SignalTheme.Typography.placard, color: self.placardColor)
                     .fixedSize()
                     .frame(width: metrics.placardWidth, alignment: .trailing)
-                    .help(self.placard == .none ? "" : "Spoken Send")
+                    .help("Spoken Send")
+            }
+
+            // Above the placard, so WPM's tooltip is its own; SEND / NO SEND takes the right end
+            // back whenever the placard has content.
+            if let clock = self.counterClock {
+                SignalLiveCounters(input: self.counters, showsWPM: self.placard == .none, clock: clock)
             }
         }
         .frame(height: metrics.micRowHeight)

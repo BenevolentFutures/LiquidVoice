@@ -326,7 +326,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             DebugLogger.shared.info("Manual update check refused (MouthKeys fork)", source: "AppDelegate")
             self.showUpdateAlert(
                 title: "Updates Are Managed Locally",
-                message: "MouthKeys is a local fork of FluidVoice. Pull the latest source and run ./build.sh install to update."
+                message: "MouthKeys does not update itself. Download the latest release from github.com/BenevolentFutures/MouthKeys/releases, or pull the source and run ./build.sh install."
             )
             return
         }

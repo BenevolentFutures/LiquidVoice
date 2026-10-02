@@ -5,6 +5,8 @@ import Foundation
 /// Nothing here is fetched: these URLs are only ever opened in the user's browser.
 enum LiquidVoiceLinks {
     static let newIssue = URL(string: "https://github.com/BenevolentFutures/MouthKeys/issues/new")!
+    /// The newest signed release. MouthKeys does not update itself; people download each release.
+    static let latestRelease = URL(string: "https://github.com/BenevolentFutures/MouthKeys/releases/latest")!
 
     /// Upstream credit: the project MouthKeys is forked from, and its maintainer's sponsor page.
     static let upstreamRepository = URL(string: "https://github.com/altic-dev/FluidVoice")!

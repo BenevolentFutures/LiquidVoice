@@ -842,6 +842,9 @@ final class GlobalHotkeyManager: NSObject {
     private func attemptTapInstall(reason: String) {
         self.tapRetryTask?.cancel()
         self.tapRetryTask = nil
+        // A pending start-up or reinitialize attempt would tear down whatever this one installs.
+        self.initializationTask?.cancel()
+        self.initializationTask = nil
 
         let outcome = self.setupGlobalHotkey()
         let step = self.tapInstallPolicy.record(outcome)
@@ -863,6 +866,9 @@ final class GlobalHotkeyManager: NSObject {
             self.startHealthCheckTimer()
         } else {
             self.isInitialized = false
+            // The retry below polls from here; the 30 s health check would only repeat its warning.
+            self.healthCheckTask?.cancel()
+            self.healthCheckTask = nil
         }
 
         guard let delay = step.retryAfter else { return }
@@ -872,6 +878,7 @@ final class GlobalHotkeyManager: NSObject {
             } catch {
                 return
             }
+            guard !Task.isCancelled else { return }
             await MainActor.run { [weak self] in
                 self?.attemptTapInstall(reason: "retry")
             }
@@ -885,6 +892,11 @@ final class GlobalHotkeyManager: NSObject {
             return // the start-up attempt is still pending
         case .installed:
             guard !self.isEventTapEnabled() else { return }
+            // macOS disables a live tap briefly on a timeout; re-enable before rebuilding it.
+            if let tap = self.eventTap {
+                CGEvent.tapEnable(tap: tap, enable: true)
+                if self.isEventTapEnabled() { return }
+            }
         case .installing, .waitingForAccessibility, .failedTrusted:
             break
         }

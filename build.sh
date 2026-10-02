@@ -585,9 +585,11 @@ warn_other_registered_copies() {
         mdfind "kMDItemCFBundleIdentifier == '${bundle_id}'" 2>/dev/null
         for candidate in "${HOME}"/.Trash/*.app "${HOME}"/Library/Caches/com.apple.SwiftUI.Drag-*/*.app; do
             [ -d "${candidate}" ] || continue
-            [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${candidate}/Contents/Info.plist" 2>/dev/null)" = "${bundle_id}" ] && echo "${candidate}"
+            if [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${candidate}/Contents/Info.plist" 2>/dev/null || true)" = "${bundle_id}" ]; then
+                echo "${candidate}"
+            fi
         done
-    } | grep -v -x -F "${installed}" | sort -u)"
+    } | { grep -v -x -F "${installed}" || true; } | sort -u)" || true
     [ -n "${others}" ] || return 0
     local signer
     signer="$(codesign -dv "${installed}" 2>&1 | grep -m1 '^Authority=' || echo unsigned)"

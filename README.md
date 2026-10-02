@@ -2,7 +2,7 @@
 
 <p align="center"><b><i>Straight voice to text for macOS, built to land every word</i></b></p>
 
-<!-- hero: the overlay mid-dictation, image in docs/ -->
+<p align="center"><img src="docs/images/overlay.png" width="560" alt="The Liquid Voice overlay mid-dictation: a scrolling voice trace, a six-second timer, live word and WPM counters, and the active mic with its battery level. History and copy buttons sit on the left rail, cancel and reprocess on the right."></p>
 
 ---
 

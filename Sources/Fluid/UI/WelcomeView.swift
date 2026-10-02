@@ -16,6 +16,7 @@ struct WelcomeView: View {
     }
 
     @ObservedObject private var settings = SettingsStore.shared
+    @ObservedObject private var permissionMonitor = AccessibilityTrustMonitor.shared
     @Binding var selectedSidebarItem: SidebarItem?
     @Binding var playgroundUsed: Bool
     var isTranscriptionFocused: FocusState<Bool>.Binding
@@ -145,6 +146,13 @@ struct WelcomeView: View {
                                     },
                                     actionButtonTitle: "Open Settings",
                                     showActionButton: !self.accessibilityEnabled
+                                )
+
+                                AccessibilityRecoveryHintView(
+                                    hint: self.permissionMonitor.hint,
+                                    conflictingCopies: self.permissionMonitor.conflictingCopies,
+                                    openAccessibilitySettings: { self.permissionMonitor.openAccessibilitySettings() },
+                                    relaunch: self.restartApp
                                 )
 
                                 SetupStepView(
@@ -622,6 +630,7 @@ struct WelcomeView: View {
 
 struct OnboardingFlowView: View {
     @EnvironmentObject var appServices: AppServices
+    @ObservedObject private var permissionMonitor = AccessibilityTrustMonitor.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var asr: ASRService {
         self.appServices.asr
@@ -1818,7 +1827,16 @@ struct OnboardingFlowView: View {
                                     self.openAccessibilitySettings()
                                 }
 
-                                if !self.isAccessibilityReady {
+                                if self.permissionMonitor.hint != .none {
+                                    AccessibilityRecoveryHintView(
+                                        hint: self.permissionMonitor.hint,
+                                        conflictingCopies: self.permissionMonitor.conflictingCopies,
+                                        tone: .onDark,
+                                        openAccessibilitySettings: { self.permissionMonitor.openAccessibilitySettings() },
+                                        relaunch: self.restartApp
+                                    )
+                                    .padding(.top, 2)
+                                } else if !self.isAccessibilityReady {
                                     Text("Already enabled it? MouthKeys will update when macOS confirms access.")
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundStyle(Color.white.opacity(0.42))

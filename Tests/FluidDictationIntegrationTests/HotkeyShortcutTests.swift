@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Combine
 import CoreAudio
 @testable import MouthKeys_Debug
@@ -169,6 +170,218 @@ final class HotkeyShortcutTests: XCTestCase {
             ),
             "toggle recordings are not held, so a reset never stops them"
         )
+    }
+
+    // MARK: - Permission UX: tap install policy, hint timing, conflicting copies
+
+    func testTapInstallPolicyBacksOffWhileUntrustedAndCountsAttempts() {
+        var policy = HotkeyTapInstallPolicy()
+        let first = policy.record(.untrusted)
+        XCTAssertEqual(first.state, .waitingForAccessibility)
+        XCTAssertEqual(first.attempt, 1)
+        XCTAssertEqual(first.retryAfter, 0.5)
+        XCTAssertTrue(first.transitioned, "idle -> waiting is logged once")
+
+        let steps = (0..<6).map { _ in policy.record(.untrusted) }
+        XCTAssertEqual(steps.map(\.attempt), [2, 3, 4, 5, 6, 7], "the attempt counter climbs instead of sticking at 1")
+        XCTAssertEqual(steps.map(\.retryAfter), [1, 2, 2, 2, 2, 2], "backs off, then polls every 2 s, never gives up")
+        XCTAssertTrue(steps.allSatisfy { !$0.transitioned }, "a long wait logs nothing more")
+
+        let installed = policy.record(.installed)
+        XCTAssertEqual(installed.state, .installed)
+        XCTAssertEqual(installed.attempt, 0)
+        XCTAssertNil(installed.retryAfter)
+        XCTAssertTrue(installed.transitioned)
+        XCTAssertFalse(policy.record(.installed).transitioned, "a rebuild while installed is not a transition")
+    }
+
+    func testTapInstallPolicyStopsFastRetriesWhenTrustedButTheTapIsRefused() {
+        var policy = HotkeyTapInstallPolicy()
+        let steps = (0..<6).map { _ in policy.record(.tapFailed) }
+        XCTAssertEqual(steps.map(\.state), [.installing, .installing, .installing, .installing, .failedTrusted, .failedTrusted])
+        XCTAssertEqual(steps.map(\.attempt), [1, 2, 3, 4, 5, 6])
+        XCTAssertEqual(steps.map(\.retryAfter), [0.5, 1, 2, 4, 30, 30])
+        XCTAssertEqual(steps.map(\.transitioned), [true, false, false, false, true, false])
+        XCTAssertTrue(HotkeyTapState.failedTrusted.isPausedForPermission)
+        XCTAssertTrue(HotkeyTapState.waitingForAccessibility.isPausedForPermission)
+        XCTAssertFalse(HotkeyTapState.installing.isPausedForPermission)
+
+        // Losing trust from failed_trusted starts the untrusted count afresh.
+        let untrusted = policy.record(.untrusted)
+        XCTAssertEqual(untrusted.state, .waitingForAccessibility)
+        XCTAssertEqual(untrusted.attempt, 1)
+        XCTAssertTrue(untrusted.transitioned)
+        // A grant that then hits a refused tap starts the fast retries afresh.
+        XCTAssertEqual(policy.record(.tapFailed).attempt, 1)
+    }
+
+    func testTapInstallLogLineNamesStateAttemptAndRetry() {
+        var policy = HotkeyTapInstallPolicy()
+        let line = HotkeyTapInstallPolicy.logLine(for: policy.record(.untrusted), reason: "startup")
+        XCTAssertEqual(line, "HOTKEY_TAP state=waiting_for_accessibility attempt=1 reason=startup retry_in=0.5s")
+        XCTAssertEqual(
+            HotkeyTapInstallPolicy.logLine(for: policy.record(.installed), reason: "trust_granted"),
+            "HOTKEY_TAP state=installed attempt=0 reason=trust_granted"
+        )
+    }
+
+    func testAccessibilityHintWaitsForTheReturnFromSettingsToSettle() {
+        func hint(
+            trusted: Bool = false,
+            tap: HotkeyTapState = .waitingForAccessibility,
+            before: Bool = false,
+            returned: TimeInterval? = nil,
+            now: TimeInterval = 100,
+            conflicts: Int = 0
+        ) -> AccessibilityHint {
+            AccessibilityHintPolicy.hint(
+                isTrusted: trusted,
+                tapState: tap,
+                wasTrustedBefore: before,
+                returnedFromSettingsAt: returned,
+                now: now,
+                conflictingCopyCount: conflicts
+            )
+        }
+        XCTAssertEqual(hint(), .none, "a new user who has not been to Settings sees no hint")
+        XCTAssertEqual(hint(returned: 98), .none, "2 s after returning: a fresh grant may still be registering")
+        XCTAssertEqual(hint(returned: 97), .staleGrant, "3 s after returning and still untrusted")
+        XCTAssertEqual(hint(returned: 97, conflicts: 2), .conflictingCopies)
+        XCTAssertEqual(hint(conflicts: 2), .none, "copies alone do not show before the user has tried")
+        XCTAssertEqual(hint(before: true), .staleGrant, "trusted before, untrusted now: show at once")
+        XCTAssertEqual(hint(trusted: true, tap: .installed, before: true, returned: 0), .none)
+        XCTAssertEqual(hint(trusted: true, tap: .installing), .none, "fast retries still running")
+        XCTAssertEqual(hint(trusted: true, tap: .failedTrusted), .relaunch)
+    }
+
+    @MainActor
+    func testTrustMonitorShowsTheStaleGrantHintAfterReturningFromSettingsAndClearsOnGrant() throws {
+        let suiteName = "PermissionUXTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        var trusted = false
+        var now: TimeInterval = 1000
+        var microphone = AVAuthorizationStatus.notDetermined
+        let monitor = AccessibilityTrustMonitor(
+            trustProvider: { trusted },
+            microphoneStatusProvider: { microphone },
+            clock: { now },
+            defaults: defaults,
+            observeSystem: false,
+            conflictScanner: { [] }
+        )
+        XCTAssertFalse(monitor.isTrusted)
+        XCTAssertEqual(monitor.hint, .none)
+
+        monitor.noteSettingsVisit()
+        now += 5
+        monitor.noteAppActivated()
+        XCTAssertEqual(monitor.hint, .none, "just came back: give the grant a moment")
+        now += AccessibilityHintPolicy.settleDelay
+        monitor.refresh()
+        XCTAssertEqual(monitor.hint, .staleGrant)
+
+        let copy = URL(fileURLWithPath: "/Users/someone/.Trash/Liquid Voice.app")
+        monitor.applyConflictScan([copy])
+        XCTAssertEqual(monitor.hint, .conflictingCopies)
+        XCTAssertEqual(monitor.conflictingCopies, [copy])
+
+        microphone = .authorized
+        trusted = true
+        monitor.refresh()
+        XCTAssertTrue(monitor.isTrusted)
+        XCTAssertEqual(monitor.microphoneStatus, .authorized, "the microphone is re-read on the same tick")
+        XCTAssertEqual(monitor.hint, .none)
+        XCTAssertTrue(monitor.conflictingCopies.isEmpty)
+        XCTAssertTrue(monitor.wasTrustedBefore, "remembered, so a later lost grant shows the hint at once")
+
+        monitor.reportHotkeyTapState(.failedTrusted)
+        XCTAssertEqual(monitor.hint, .relaunch)
+        monitor.reportHotkeyTapState(.installed)
+        XCTAssertEqual(monitor.hint, .none)
+
+        trusted = false
+        monitor.refresh()
+        XCTAssertEqual(monitor.hint, .staleGrant, "trusted before, untrusted now")
+    }
+
+    func testConflictingCopyDetectorFlagsOnlyOtherCopiesWeDoNotSatisfy() {
+        let own = URL(fileURLWithPath: "/Applications/MouthKeys.app")
+        let trash = URL(fileURLWithPath: "/Users/a/.Trash/Liquid Voice.app")
+        let drag = URL(fileURLWithPath: "/Users/a/Library/Caches/com.apple.SwiftUI.Drag-1/Liquid Voice.app")
+        let sameSigner = URL(fileURLWithPath: "/Users/a/Backups/MouthKeys.app")
+        let unsigned = URL(fileURLWithPath: "/tmp/Unsigned.app")
+        let gone = URL(fileURLWithPath: "/Users/a/builds/DerivedData/Release/MouthKeys.app")
+        let candidates = [own, URL(fileURLWithPath: "/Applications/./MouthKeys.app"), trash, drag, trash, sameSigner, unsigned, gone]
+
+        var checked: [URL] = []
+        let conflicts = ConflictingAppCopyDetector.conflictingCopies(
+            ownURL: own,
+            candidates: candidates,
+            exists: { $0 != gone },
+            ownCodeSatisfiesRequirement: { url in
+                checked.append(url)
+                switch url {
+                case sameSigner: return true
+                case unsigned: return nil
+                default: return false
+                }
+            }
+        )
+        XCTAssertEqual(conflicts, [trash, drag])
+        XCTAssertFalse(checked.contains(own), "our own bundle is never checked")
+        XCTAssertEqual(checked.filter { $0 == trash }.count, 1, "duplicates are checked once")
+        XCTAssertFalse(checked.contains(gone), "stale LaunchServices records are skipped")
+
+        XCTAssertEqual(ConflictingAppCopyDetector.displayPath(trash, home: "/Users/a"), "~/.Trash/Liquid Voice.app")
+        XCTAssertEqual(ConflictingAppCopyDetector.displayPath(own, home: "/Users/a"), "/Applications/MouthKeys.app")
+        XCTAssertEqual(
+            ConflictingAppCopyDetector.logLine(conflicts: [trash, drag], home: "/Users/a"),
+            "PERMISSION_DIAG conflicting_copies=2 paths=~/.Trash/Liquid Voice.app | ~/Library/Caches/com.apple.SwiftUI.Drag-1/Liquid Voice.app"
+        )
+        XCTAssertEqual(ConflictingAppCopyDetector.logLine(conflicts: [], home: "/Users/a"), "PERMISSION_DIAG conflicting_copies=0 paths=-")
+    }
+
+    func testAppBundleDiscoveryFindsCopiesOfOurBundleIDInAFolder() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PermissionUX-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        func makeApp(_ name: String, bundleID: String?) throws {
+            let contents = root.appendingPathComponent(name).appendingPathComponent("Contents")
+            try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+            if let bundleID {
+                let info: NSDictionary = ["CFBundleIdentifier": bundleID]
+                XCTAssertTrue(info.write(to: contents.appendingPathComponent("Info.plist"), atomically: true))
+            }
+        }
+        try makeApp("Liquid Voice.app", bundleID: "com.example.ours")
+        try makeApp("Other.app", bundleID: "com.example.other")
+        try makeApp("Broken.app", bundleID: nil)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("NotAnApp"), withIntermediateDirectories: true)
+
+        let found = ConflictingAppCopyDetector.appBundles(
+            in: [root, root.appendingPathComponent("missing")],
+            matching: "com.example.ours"
+        )
+        XCTAssertEqual(found.map(\.lastPathComponent), ["Liquid Voice.app"])
+    }
+
+    func testRunningCodeSatisfiesItsOwnDesignatedRequirement() {
+        // The test host against its own bundle: never a conflict (nil when the build is unsigned).
+        XCTAssertNotEqual(ConflictingAppCopyDetector.runningCodeSatisfiesDesignatedRequirement(of: Bundle.main.bundleURL), false)
+        XCTAssertNil(ConflictingAppCopyDetector.runningCodeSatisfiesDesignatedRequirement(
+            of: URL(fileURLWithPath: "/nonexistent-\(UUID().uuidString).app")
+        ))
+    }
+
+    func testRelaunchWaitsForThisProcessToExitBeforeOpeningTheBundle() {
+        let arguments = AppRelauncher.relaunchArguments(bundlePath: "/Applications/Mouth Keys.app", pid: 4242)
+        XCTAssertEqual(arguments.count, 4)
+        XCTAssertEqual(arguments[0], "-c")
+        XCTAssertTrue(arguments[1].contains("kill -0 \"$1\""), "polls the old pid")
+        XCTAssertTrue(arguments[1].contains("seq 1 50"), "bounded wait, 10 s at most")
+        XCTAssertTrue(arguments[1].hasSuffix("/usr/bin/open \"$0\""), "opens only after the wait, without -n")
+        XCTAssertEqual(arguments[2], "/Applications/Mouth Keys.app", "the path is an argument, never spliced into the script")
+        XCTAssertEqual(arguments[3], "4242")
     }
 
     func testTapDisabledNoticesAreRecognizedForImmediateReenable() {

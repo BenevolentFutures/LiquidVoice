@@ -564,11 +564,45 @@ install_app() {
 
     echo "Installed: ${installed}"
     codesign -dv "${installed}" 2>&1 | grep -E 'Identifier|TeamIdentifier' || true
+    warn_other_registered_copies "${installed}"
     echo "Next: open MouthKeys, grant Microphone and Accessibility when asked (System Settings > Privacy & Security), pick a speech model, then try a dictation."
     echo "Log: ~/Library/Logs/LiquidVoice/Fluid.log. (docs/INSTALL-CHECKLIST.md is the maintainer's own post-install checklist; you do not need it.)"
     if [ -n "${backup_dir}" ]; then
         echo "Rollback: bash \"${backup_dir}/rollback.sh\""
     fi
+}
+
+# Other copies of the installed bundle ID signed by someone else (the Trash, SwiftUI drag caches,
+# DerivedData Release builds, old backups) can poison the Accessibility grant: System Settings may
+# record one of their code requirements, and the switch then shows on but never matches the
+# installed app (2026-10-02). Read-only: lists them, never deletes.
+warn_other_registered_copies() {
+    local installed="$1"
+    local bundle_id
+    bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${installed}/Contents/Info.plist" 2>/dev/null)" || return 0
+    local others
+    others="$({
+        mdfind "kMDItemCFBundleIdentifier == '${bundle_id}'" 2>/dev/null
+        for candidate in "${HOME}"/.Trash/*.app "${HOME}"/Library/Caches/com.apple.SwiftUI.Drag-*/*.app; do
+            [ -d "${candidate}" ] || continue
+            [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${candidate}/Contents/Info.plist" 2>/dev/null)" = "${bundle_id}" ] && echo "${candidate}"
+        done
+    } | grep -v -x -F "${installed}" | sort -u)"
+    [ -n "${others}" ] || return 0
+    local signer
+    signer="$(codesign -dv "${installed}" 2>&1 | grep -m1 '^Authority=' || echo unsigned)"
+    local conflicting=""
+    local copy
+    while IFS= read -r copy; do
+        [ -d "${copy}" ] || continue
+        if [ "$(codesign -dv "${copy}" 2>&1 | grep -m1 '^Authority=' || echo unsigned)" != "${signer}" ]; then
+            conflicting="${conflicting}  ${copy}"$'\n'
+        fi
+    done <<< "${others}"
+    [ -n "${conflicting}" ] || return 0
+    echo "Other copies of ${bundle_id}, signed by someone else, are on this Mac. They can keep Accessibility"
+    echo "from matching the installed app. Delete them (and empty the Trash), then switch MouthKeys off and on:"
+    printf '%s' "${conflicting}"
 }
 
 run_release_build() {

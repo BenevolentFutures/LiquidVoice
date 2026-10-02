@@ -459,6 +459,14 @@
 .odo > span.lead { color: var(--sg-grat); }
 .sg[data-pad="blank"] .odo > span.lead { visibility: hidden; }
 .sg[data-layout="r6"] .sg-mic { max-width: 160px; }
+/* The Hollyland lapel mic's battery (Atin, 2026-10-01: "Hollyland lapel and then the percentage level"; ?lapel=).
+   The label's box is reserved for the widest reading, "HOLLYLAND LAPEL 100%", so the centred icon + mic pair never
+   moves as a percent appears or changes width; the text sits at its left. Two mics linked read "HOLLYLAND 33% 80%",
+   reserved for "HOLLYLAND 100% 100%" ("HOLLYLAND LAPEL 100% 100%" would pass 160 and touch the word count).
+   15% and below in accent (our assumption, not yet confirmed with Atin). */
+.sg[data-layout="r6"] .sg-mic.lapel { flex: none; text-align: left; width: calc(20 * (1ch + 0.06em) + 1px); }
+.sg[data-layout="r6"] .sg-mic.lapel.two { width: calc(19 * (1ch + 0.06em) + 1px); }
+.sg-mic .bat-low { color: var(--sg-accent); }
 
 @media (prefers-reduced-motion: reduce) {
   .sg.is-hidden { transition: none; }
@@ -505,6 +513,8 @@
     tick: pick("tick", ["roll", "step", "snap"], "step"),   // Atin, 2026-10-01: step
     pad: pick("pad", ["zeros", "blank"], "blank"),      // unused digit places in the counters (Atin, 2026-10-01: blank)  // how the counters move: odometer roll, count-through, jump
     float: pick("float", ["deeper", "current"], "deeper"),   // dark mode's floating shadow
+    // The Hollyland lapel mic selected (Atin, 2026-10-01): off (another mic) | none (no reading) | 33 | 9 (low) | two
+    lapel: pick("lapel", ["off", "none", "33", "9", "two"], "off"),
   };
   const ARMED = params.get("armed") === "1";                    // inspection: the send phrase was heard
   const T_FIXED = params.has("t") ? Math.max(0, Math.min(1.5, parseFloat(params.get("t")) || 0)) : null;   // countdown remaining, held
@@ -937,12 +947,22 @@
     rafId = requestAnimationFrame(step);
   }
 
+  // The mic label; with ?lapel= the Hollyland lapel's battery in place of the name (DESIGN.md §16).
+  function paintMic(state) {
+    const lapel = OPT.lapel !== "off" && state !== "micoff";
+    el.mic.classList.toggle("lapel", lapel);
+    el.mic.classList.toggle("two", lapel && OPT.lapel === "two");
+    if (!lapel) { el.mic.textContent = state === "micoff" ? "No microphone" : MIC; return; }
+    const pcts = { none: [], "33": [33], "9": [9], two: [33, 80] }[OPT.lapel];
+    el.mic.innerHTML = (pcts.length > 1 ? "Hollyland" : "Hollyland lapel") + pcts.map((p) => ` <span class="${p <= 15 ? "bat-low" : ""}">${p}%</span>`).join("");
+  }
+
   function onState(next, prev) {
     mount();
     clearTimeout(doneTimer); clearTimeout(send.timer);
     root.dataset.state = next; root.dataset.family = FAMILY[next];
     setMenubar(next);
-    el.mic.textContent = next === "micoff" ? "No microphone" : MIC;
+    paintMic(next);
     if (next === "idle") { closeHistory(false); hide(); LVStage.clearInserted(); send.phase = "none"; paintSend(); updateGrow(); return; }
     const live = FAMILY[next] === "live";
     // Spoken Send phase for this state.

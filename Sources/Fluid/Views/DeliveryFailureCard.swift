@@ -153,6 +153,7 @@ final class DeliveryFailureOverlayController {
             icon: NotchContentState.shared.targetAppIcon ?? ActiveAppMonitor.shared.activeAppIcon,
             timerText: model.lastRecording.map { SignalOverlayModel.formatDuration($0.duration) } ?? "0:00",
             microphoneName: BottomOverlayWindowController.cachedMicrophoneName(current: SignalOverlayModel.shared.microphoneName),
+            micBattery: model.micBattery,
             onPrimary: primary,
             onDismiss: { [weak self] in self?.hide() },
             onHoverChanged: { [weak self] hovering in self?.hoverChanged(hovering) },
@@ -333,6 +334,8 @@ struct DeliveryFailureCardView: View {
     /// The dictation's frozen length ("0:41"); the microphone card shows a dim "0:00".
     let timerText: String
     let microphoneName: String
+    /// The lapel mic's battery as the card appeared, like the name (`SignalFootRow.micBattery`).
+    var micBattery: SignalMicBattery?
     let onPrimary: () -> Void
     let onDismiss: () -> Void
     let onHoverChanged: (Bool) -> Void
@@ -406,7 +409,8 @@ struct DeliveryFailureCardView: View {
                 foot: SignalFootRow(
                     icon: self.icon,
                     micText: self.content.isMicrophoneOff ? "No microphone" : (self.microphoneName.isEmpty ? "Microphone" : self.microphoneName),
-                    isMicEmphasized: self.content.isMicrophoneOff
+                    isMicEmphasized: self.content.isMicrophoneOff,
+                    micBattery: self.content.isMicrophoneOff ? nil : self.micBattery
                 ),
                 // No bracket on the card as a whole: it is not clickable; its buttons and chips are
                 // (DESIGN.md §7, Atin 2026-09-29).

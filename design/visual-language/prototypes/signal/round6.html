@@ -461,8 +461,8 @@
 .sg[data-layout="r6"] .sg-mic { max-width: 160px; }
 /* The Hollyland lapel mic's battery (Atin, 2026-10-01: "Hollyland lapel and then the percentage level"; ?lapel=).
    The label's box is reserved for the widest reading, "HOLLYLAND LAPEL 100%", so the centred icon + mic pair never
-   moves as a percent appears, changes width or goes, or a second mic links; the text sits at its left. Two mics
-   linked read "HOLLYLAND 33% 80%" in the same box ("HOLLYLAND LAPEL 100% 100%" would pass 160 and touch the word count).
+   moves as a percent appears, changes width or goes, or a second mic links; the text sits at its left. Always one
+   number: with two mics linked, the lower (Atin asked for the active mic's; the receiver does not say which is spoken into).
    15% and below in accent (our assumption, not yet confirmed with Atin). */
 .sg[data-layout="r6"] .sg-mic.lapel { flex: none; text-align: left; width: calc(20 * (1ch + 0.06em) + 1px); }
 .sg-mic .bat-low { color: var(--sg-accent); }
@@ -512,7 +512,7 @@
     tick: pick("tick", ["roll", "step", "snap"], "step"),   // Atin, 2026-10-01: step
     pad: pick("pad", ["zeros", "blank"], "blank"),      // unused digit places in the counters (Atin, 2026-10-01: blank)  // how the counters move: odometer roll, count-through, jump
     float: pick("float", ["deeper", "current"], "deeper"),   // dark mode's floating shadow
-    // The Hollyland lapel mic selected (Atin, 2026-10-01): off (another mic) | none (no reading) | 33 | 9 (low) | two
+    // The Hollyland lapel mic selected (Atin, 2026-10-01): off (another mic) | none (no reading) | 33 | 9 (low) | two (33 and 80: shows the lower)
     lapel: pick("lapel", ["off", "none", "33", "9", "two"], "off"),
   };
   const ARMED = params.get("armed") === "1";                    // inspection: the send phrase was heard
@@ -951,8 +951,10 @@
     const lapel = OPT.lapel !== "off" && state !== "micoff";
     el.mic.classList.toggle("lapel", lapel);
     if (!lapel) { el.mic.textContent = state === "micoff" ? "No microphone" : MIC; return; }
-    const pcts = { none: [], "33": [33], "9": [9], two: [33, 80] }[OPT.lapel];
-    el.mic.innerHTML = (pcts.length > 1 ? "Hollyland" : "Hollyland lapel") + pcts.map((p) => ` <span class="${p <= 15 ? "bat-low" : ""}">${p}%</span>`).join("");
+    // One number always: with both mics linked, the lower.
+    const linked = { none: [], "33": [33], "9": [9], two: [33, 80] }[OPT.lapel];
+    const pct = linked.length ? Math.min(...linked) : null;
+    el.mic.innerHTML = "Hollyland lapel" + (pct === null ? "" : ` <span class="${pct <= 15 ? "bat-low" : ""}">${pct}%</span>`);
   }
 
   function onState(next, prev) {

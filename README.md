@@ -14,7 +14,7 @@ you talk to your computer all day now. prompts for agents, replies, notes. dicta
 
 the problem is not hearing you. the problem is. delivery.
 
-**MouthKeys is on-device dictation for macOS.** hold or tap a hotkey, speak, and the text lands where you were typing when you stopped. the speech model runs on your Mac: Parakeet, Nemotron, Cohere Transcribe, Whisper or Apple Speech. when it sees a paste fail, it tells you and puts the words on your clipboard. AI cleanup through a provider you choose is there too, off until you turn it on.
+**MouthKeys is on-device dictation for macOS.** hold or tap a hotkey, speak, and the text lands where you were typing when you stopped. the speech model runs on your Mac: Parakeet, Nemotron, Cohere Transcribe, Whisper or Apple Speech. when it sees a paste fail, it tells you and puts the words on your clipboard. AI cleanup through a provider you choose is still in the code, off until you turn it on. we don't test or support it.
 
 ## built on FluidVoice.
 
@@ -47,7 +47,8 @@ some of what follows is upstream's later work, ported by hand; [UPSTREAM.md](UPS
 
 MouthKeys is narrower on purpose.
 
-- **Fluid Intelligence.** FluidVoice's AI layer and its settings are not included. AI cleanup through a provider you choose is still here. [#3]
+- **Fluid Intelligence.** FluidVoice's AI layer and its settings are not included. [#3]
+- **support for AI cleanup.** the provider-based cleanup FluidVoice shipped is still in the app, under Advanced in the sidebar. we don't use it, test it or support it, and setup never asks about it. if you want it, it's yours: point your coding agent at the code and fix or change it to your heart's content.
 - **telemetry.** analytics are hard-wired off and the keys are blank. [`0e2948a`][0e2948a], [#3]
 - **the built-in updater.** it updates to FluidVoice, which would replace this build, so it is off. you update by downloading the new release or rebuilding. [`19202c1`][19202c1], [#3]
 

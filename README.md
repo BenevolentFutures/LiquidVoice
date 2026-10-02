@@ -2,7 +2,7 @@
 
 <p align="center"><b><i>Straight voice to text for macOS, built to land every word</i></b></p>
 
-<p align="center"><img src="docs/images/overlay.png" width="560" alt="The Liquid Voice overlay mid-dictation: the live transcript above a voice trace, a 13-second timer, 43 words and 203 words per minute in the foot row, and the active mic with its battery level. History and copy sit on the left rail, cancel and reprocess on the right."></p>
+<p align="center"><img src="docs/images/overlay.png" width="560" alt="The Liquid Voice overlay mid-dictation: the live transcript above a voice trace, a 13-second timer, 43 words and 203 words per minute in the foot row, and the active mic. History and copy sit on the left rail, cancel and reprocess on the right."></p>
 
 <p align="center"><sub>mid-dictation: the live transcript, your voice as a trace, and the word count and words per minute as you speak.</sub></p>
 
@@ -18,7 +18,11 @@ the problem is not hearing you. the problem is. delivery.
 
 ## built on FluidVoice.
 
-Liquid Voice is a fork of [FluidVoice](https://github.com/altic-dev/FluidVoice) by altic-dev, taken on 2026-08-15 at upstream [`d62adc9`][base]. FluidVoice did the hard part: the speech pipeline, the model integrations, hotkeys, typing into other apps, settings and model downloads. Liquid Voice takes that foundation in one direction: straight voice to text, delivered reliably, in a new interface. if you want FluidVoice's AI features, FluidVoice is the app for that. some of what follows is upstream's later work, ported by hand; [UPSTREAM.md](UPSTREAM.md) credits each commit.
+Liquid Voice is a fork of [FluidVoice](https://github.com/altic-dev/FluidVoice) by altic-dev, taken on 2026-08-15 at upstream [`d62adc9`][base]. FluidVoice did the hard part: the speech pipeline, the model integrations, hotkeys, typing into other apps, settings and model downloads.
+
+**why we forked.** we dictate into coding agents all day, and we needed one thing done perfectly: every word lands where we were typing. FluidVoice was growing in many directions at once: an AI assistant of its own, analytics, its own updater, connections back to its servers. we wanted the engine without the rest. so we cut Liquid Voice down to the job and spent the time on what matters to us: delivery that never drops a word, a faster stop, and an interface that stays quiet until you reach for it. if you want FluidVoice's AI features, FluidVoice is the app for that.
+
+some of what follows is upstream's later work, ported by hand; [UPSTREAM.md](UPSTREAM.md) credits each commit.
 
 ### what's new.
 
@@ -33,9 +37,9 @@ Liquid Voice is a fork of [FluidVoice](https://github.com/altic-dev/FluidVoice) 
 - **a faster stop.** in a headless benchmark with a 13,600-entry history, stop-path work outside the model fell from a 145 ms median to 4 ms; model time is unchanged. a stalled model no longer loses the recording: it is kept for Reprocess, even across a restart. [#9], [#10]
 - **hotkey, mic and media fixes.** holds that always end, removed mics that stay removed, media resumed only if we paused it, a hung mic routed around, and a hotkey to reprocess the last dictation. [#2], [`8295536`][8295536], [`68afebc`][68afebc], [`0e2948a`][0e2948a]
 
-<p align="center"><img src="docs/images/history.png" width="480" alt="The Liquid Voice history browser: recent dictations newest first, each with its time, word count and the app it went to. Click a row to insert it again."></p>
+<p align="center"><img src="docs/images/history.png" width="520" alt="The Liquid Voice history browser open directly above the recording overlay: recent dictations newest first, each with its time, word count and destination app. Below it, the overlay is mid-dictation with its live transcript, voice trace, timer and counters."></p>
 
-<p align="center"><sub>the history browser: every dictation, newest first. click one to insert it again.</sub></p>
+<p align="center"><sub>the history browser opens right where you are, above the overlay. click a dictation to insert it again.</sub></p>
 
 ### what's left out.
 

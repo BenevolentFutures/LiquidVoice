@@ -3685,8 +3685,9 @@ final class SignalOverlayBehaviorTests: XCTestCase {
     }
 
     /// The live word count (round 6, Atin 2026-10-01): the whole live text, not the stored tail;
-    /// status words keep the count; it shows while live, stopped, transcribing or counting down.
-    func testTheLiveWordCountCountsTheWholeTextAndHidesOnOutcomes() {
+    /// status words keep the count. The counters (DESIGN.md §16, Atin 2026-10-01) show from 0 while
+    /// live, stopped, transcribing or counting down, and freeze at the stop.
+    func testTheLiveCountersCountTheWholeTextFromZeroAndHideOnOutcomes() {
         let state = NotchContentState.shared
         defer { state.updateTranscription("") }
         let long = Array(repeating: "word", count: 400).joined(separator: " ")
@@ -3697,17 +3698,161 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         state.updateTranscription("")
         XCTAssertEqual(state.liveWordCount, 0)
 
-        XCTAssertEqual(BottomOverlayView.wordCount(display: .listening, live: 12, frozen: nil), 12)
-        // No live text (the streaming preview off, the first moments, a reprocess): no count,
-        // never a "0 WORDS" that stays for the whole dictation.
-        XCTAssertNil(BottomOverlayView.wordCount(display: .listening, live: 0, frozen: nil))
-        XCTAssertNil(BottomOverlayView.wordCount(display: .transcribing, live: 0, frozen: nil))
-        XCTAssertEqual(BottomOverlayView.wordCount(display: .transcribing, live: 0, frozen: 118), 118, "frozen at the stop")
-        XCTAssertEqual(BottomOverlayView.wordCount(display: .stopped, live: 7, frozen: nil), 7)
-        XCTAssertNil(BottomOverlayView.wordCount(display: .delivered(SignalDelivery(appName: "c11", words: 118, method: .paste, sentReturn: false)), live: 118, frozen: 118))
-        XCTAssertNil(BottomOverlayView.wordCount(display: .noticeRow(.recognitionBack), live: 0, frozen: nil))
-        XCTAssertEqual(SignalFootRow.wordCountText(1), "1 word")
-        XCTAssertEqual(SignalFootRow.wordCountText(53), "53 words")
+        let start = Date(timeIntervalSinceReferenceDate: 1000)
+        func input(
+            _ display: BottomOverlayView.Display,
+            live: Int,
+            counts: Bool = true,
+            frozen: TimeInterval? = nil,
+            frozenWords: Int? = nil,
+            liveText: Bool = true
+        ) -> SignalCounterInput? {
+            BottomOverlayView.counterInput(
+                display: display, countsLiveWords: counts, recordingStartedAt: start,
+                frozenDuration: frozen, frozenWords: frozenWords, live: live, hasLiveText: liveText
+            )
+        }
+        XCTAssertEqual(input(.listening, live: 0), SignalCounterInput(recording: start, words: 0, clock: .running(start)), "0 from the start")
+        XCTAssertEqual(input(.listening, live: 12)?.words, 12)
+        XCTAssertNil(input(.listening, live: 0, liveText: false), "no live text arrives (preview off, a model that does not stream)")
+        XCTAssertNil(input(.delivered(SignalDelivery(appName: "c11", words: 118, method: .paste, sentReturn: false)), live: 118, frozen: 10, frozenWords: 118))
+        XCTAssertNil(input(.noticeRow(.recognitionBack), live: 0, frozen: 41))
+        XCTAssertNil(input(.notice, live: 3))
+
+        XCTAssertEqual(input(.stopped, live: 0, frozen: 10, frozenWords: 7), SignalCounterInput(recording: start, words: 7, clock: .frozen(10)), "frozen at the stop")
+        XCTAssertEqual(input(.transcribing, live: 0, frozen: 10, frozenWords: 7)?.words, 7)
+        XCTAssertNil(input(.transcribing, live: 0, counts: false, frozen: 10), "a reprocess has no recording behind it")
+        XCTAssertNil(input(.transcribing, live: 0), "a reprocess that re-shows the pill: processing, never stopped")
+
+        // The model: a recording counts; a reprocess from idle, a notice and a reset do not.
+        let model = SignalOverlayModel.shared
+        defer { model.reset() }
+        model.beginRecording(at: Date(), noiseThreshold: 0.4)
+        XCTAssertTrue(model.countsLiveWords)
+        model.reset()
+        XCTAssertFalse(model.countsLiveWords)
+        model.beginTranscribing()
+        XCTAssertFalse(model.countsLiveWords)
+    }
+
+    /// The word count steps up one word at a time toward the truth (DESIGN.md §16, Atin 2026-10-01).
+    func testTheWordCountStepsThroughABurstAndNeverPassesTheTruth() {
+        XCTAssertEqual(SignalCounterSmoother.stepInterval(remaining: 1), 0.110, accuracy: 1e-9, "a single word waits 110 ms")
+        XCTAssertEqual(SignalCounterSmoother.stepInterval(remaining: 5), 0.090, accuracy: 1e-9, "450 / 5")
+        XCTAssertEqual(SignalCounterSmoother.stepInterval(remaining: 40), 0.030, accuracy: 1e-9, "never faster than 30 ms")
+
+        var counter = SignalCounterSmoother()
+        XCTAssertEqual(counter.displayedWords, 0)
+        XCTAssertEqual(counter.displayedWPM, 0)
+        // A burst of 8 words lands at t = 2 s; a 60 Hz frame clock plays it out.
+        var t = 2.0
+        var firstFull: Double?
+        var previous = 0
+        while t < 3 {
+            counter.advance(to: t, words: 8, elapsed: t, snaps: false)
+            XCTAssertLessThanOrEqual(counter.displayedWords, 8, "never past the truth")
+            XCTAssertLessThanOrEqual(counter.displayedWords - previous, 1, "one word a step")
+            previous = counter.displayedWords
+            if counter.displayedWords == 8, firstFull == nil { firstFull = t }
+            t += 1.0 / 60
+        }
+        // The first word lands at once, then each waits its interval (on the 60 Hz frame grid):
+        // the burst plays out in well under a second, not in one jump.
+        let playedOut = (firstFull ?? 99) - 2
+        let intervals = (1...7).map { SignalCounterSmoother.stepInterval(remaining: $0) }.reduce(0, +)
+        XCTAssertGreaterThanOrEqual(playedOut, intervals - 1e-9)
+        XCTAssertLessThanOrEqual(playedOut, intervals + 7.0 / 60)
+
+        // A large burst steps at the 30 ms floor, so 40 words take about 1.5 s, never a jump.
+        var big = SignalCounterSmoother()
+        big.advance(to: 0, words: 40, elapsed: 8, snaps: false)
+        XCTAssertEqual(big.displayedWords, 1)
+        big.advance(to: 0.45, words: 40, elapsed: 8, snaps: false)
+        XCTAssertEqual(big.displayedWords, 2, "one step per frame at most")
+
+        // A revised partial lowers the true count: the shown count drops at once.
+        counter.advance(to: t, words: 5, elapsed: t, snaps: false)
+        XCTAssertEqual(counter.displayedWords, 5)
+
+        // Once the truth freezes (the stop), the clock runs only until the counters stop moving.
+        var settling = SignalCounterSmoother()
+        settling.advance(to: 0, words: 4, elapsed: 10, snaps: false)
+        let settle = settling.settleDuration(words: 4, elapsed: 10)
+        XCTAssertGreaterThanOrEqual(settle, 3 * SignalCounterSmoother.longestStep, "3 words left at up to 110 ms")
+        XCTAssertLessThanOrEqual(settle, 3)
+        var after = settling
+        var clock = 0.0
+        while clock < settle + 1.0 / 60 {
+            clock += 1.0 / 60
+            after.advance(to: clock, words: 4, elapsed: 10, snaps: false)
+        }
+        XCTAssertEqual(after.displayedWords, 4)
+        XCTAssertEqual(after.displayedWPM, 24, "4 x 60 / 10")
+        XCTAssertEqual(SignalCounterSmoother(words: 4, elapsed: 10).settleDuration(words: 4, elapsed: 10), 0, "nothing left to move")
+        XCTAssertEqual(SignalCounterSmoother().settleDuration(words: 5000, elapsed: 10), 3, "at most 3 s")
+
+        // Snap (Reduce Motion) shows the truth at once.
+        counter.advance(to: t + 0.016, words: 30, elapsed: t, snaps: true)
+        XCTAssertEqual(counter.displayedWords, 30)
+    }
+
+    /// WPM: words x 60 / max(6, elapsed), eased with a 0.7 s time constant (DESIGN.md §16).
+    func testWordsPerMinuteFloorsAtSixSecondsAndEases() {
+        XCTAssertEqual(SignalCounterSmoother.wpmTarget(words: 10, elapsed: 2), 100, "the first 6 s count as 6")
+        XCTAssertEqual(SignalCounterSmoother.wpmTarget(words: 10, elapsed: 6), 100)
+        XCTAssertEqual(SignalCounterSmoother.wpmTarget(words: 60, elapsed: 30), 120)
+        XCTAssertEqual(SignalCounterSmoother(words: 0, elapsed: 0).displayedWPM, 0, "a start shows 0")
+        XCTAssertEqual(SignalCounterSmoother(words: 60, elapsed: 30).displayedWPM, 120, "joining a recording starts at the truth")
+
+        var counter = SignalCounterSmoother()
+        counter.advance(to: 10, words: 60, elapsed: 30, snaps: false)
+        // One time constant (0.7 s, in 0.1 s frames) covers 1 - 1/e of the way to 120.
+        var t = 10.0
+        for _ in 0..<7 {
+            t += 0.1
+            counter.advance(to: t, words: 60, elapsed: 30, snaps: false)
+        }
+        let eased = 120 * (1 - exp(-(0.7 + 0.016) / 0.7))
+        XCTAssertEqual(counter.shownWPM, eased, accuracy: 0.01)
+        // A frame gap longer than 0.1 s eases as 0.1 s: no jump after a stall.
+        let before = counter.shownWPM
+        counter.advance(to: t + 5, words: 60, elapsed: 30, snaps: false)
+        XCTAssertEqual(counter.shownWPM, before + (120 - before) * (1 - exp(-0.1 / 0.7)), accuracy: 1e-9)
+        // Through silence the target falls as elapsed grows, and the shown WPM drifts down.
+        var silent = SignalCounterSmoother(words: 60, elapsed: 30)
+        var s = 0.0
+        for _ in 0..<120 {
+            s += 1.0 / 60
+            silent.advance(to: s, words: 60, elapsed: 30 + s, snaps: false)
+        }
+        XCTAssertLessThan(silent.displayedWPM, 120)
+        XCTAssertGreaterThan(silent.displayedWPM, Int(SignalCounterSmoother.wpmTarget(words: 60, elapsed: 32)) - 1)
+    }
+
+    /// Fixed boxes (DESIGN.md §16, Atin 2026-10-01): words 4 digits, WPM 3, right-aligned, unused
+    /// leading places blank, clamped at 9999 and 999, so the labels never move.
+    func testCountersSitInFixedBoxesWithBlankLeadingPlacesAndClamp() {
+        XCTAssertEqual(SignalCounterSmoother.padded(0, places: 4), "   0")
+        XCTAssertEqual(SignalCounterSmoother.padded(7, places: 4), "   7")
+        XCTAssertEqual(SignalCounterSmoother.padded(53, places: 4), "  53")
+        XCTAssertEqual(SignalCounterSmoother.padded(169, places: 3), "169")
+        XCTAssertEqual(SignalCounterSmoother.padded(12_345, places: 4), "9999")
+        XCTAssertEqual(SignalCounterSmoother.padded(1_200, places: 3), "999")
+
+        var counter = SignalCounterSmoother(words: 12_000, elapsed: 60)
+        XCTAssertEqual(counter.displayedWords, 9999)
+        XCTAssertEqual(counter.displayedWPM, 999)
+        counter.advance(to: 1, words: 12_000, elapsed: 60, snaps: true)
+        XCTAssertEqual(counter.displayedWords, 9999)
+
+        // A blank place is as wide as a digit in the counters' face: the label never moves.
+        let role = SignalTheme.Typography.micLabel
+        let widths = [0, 7, 53, 418, 9999].map { role.width(of: SignalCounterSmoother.padded($0, places: 4)) }
+        XCTAssertEqual(Set(widths).count, 1, "\(widths)")
+        let wpmWidths = [0, 9, 88, 169].map { role.width(of: SignalCounterSmoother.padded($0, places: 3)) }
+        XCTAssertEqual(Set(wpmWidths).count, 1, "\(wpmWidths)")
+        let wpmSlot = wpmWidths[0] + SignalCounterFace.labelGap + role.width(of: "WPM")
+        XCTAssertLessThanOrEqual(wpmSlot, SignalTheme.Metrics.placardWidth + 1, "WPM fits the placard's 7-character slot")
     }
 
     /// HISTORY_OPEN times the click on the History chip to its action, and the action to the card.

@@ -431,17 +431,33 @@
 .sg[data-layout="r6"] .sg-lead { position: static; }
 .sg[data-layout="r6"] .sg-hist { left: 50%; transform: translateX(-50%); bottom: calc(100% + 6px); }
 
-/* Live word count (Atin, 2026-10-01): the foot row's left end, opposite the SEND tag. Absolute, so the centred
-   icon + mic pair never moves as it counts. Shown while a dictation is live, transcribing or counting down; hidden
-   where the same number already shows (Pasted, Sent, the failed card). */
-.sg-wc { display: none; }
-.sg[data-layout="r6"][data-words="show"] .sg-wc {
-  display: block; position: absolute; left: 0; top: 0; height: 16px; visibility: hidden;
+/* Live counters (Atin, 2026-10-01): the word count at the foot row's left end, from 0 up; words per minute at its
+   right end, in the SEND tag's 7-character slot (SEND takes the slot back while a send is armed or counting down).
+   Absolute, so the centred icon + mic pair never moves. Shown while a dictation is live, transcribing or counting
+   down; hidden where the same number already shows (Pasted, Sent, the failed card). */
+.sg-wc, .sg-wpm { display: none; }
+.sg[data-layout="r6"][data-words="show"] :is(.sg-wc, .sg-wpm) {
+  display: flex; position: absolute; top: 0; height: 16px; visibility: hidden; gap: 0.6em;
   font: 500 10px/16px var(--sg-mono); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; color: var(--sg-text-2);
 }
-.sg[data-layout="r6"][data-words="show"]:is([data-family="live"], [data-family="work"], [data-family="countdown"]) .sg-wc { visibility: visible; }
-.sg[data-layout="r6"][data-mic="left"] .sg-wc { left: auto; right: 0; }
-.sg[data-layout="r6"][data-mic="left"][data-words="show"] .sg-foot > .sg-placard { right: 84px; }
+.sg[data-layout="r6"] .sg-wc { left: 0; }
+.sg[data-layout="r6"] .sg-wpm { right: 0; }
+.sg[data-layout="r6"][data-words="show"]:is([data-family="live"], [data-family="work"], [data-family="countdown"]) :is(.sg-wc, .sg-wpm) { visibility: visible; }
+.sg[data-layout="r6"][data-words="show"][data-placard="foot"]:not([data-send="none"]) .sg-wpm { visibility: hidden; }
+.sg[data-layout="r6"][data-mic="left"] .sg-wc { display: none; }   /* icon + mic own the left end */
+
+/* Odometer: each digit is a 1-character window; a changed digit rolls up out of it as the new one rolls in from below.
+   Tabular by construction (mono). Native: Text(...).contentTransition(.numericText(countsDown: false)), or a per-digit
+   clipped VStack offset, animated .linear(duration: 0.11). */
+.odo { display: inline-flex; }
+.odo > span { position: relative; display: inline-block; width: calc(1ch + 0.06em); height: 16px; overflow: hidden; }
+.odo i { position: absolute; left: 0; top: 0; font-style: normal; transition: transform 110ms linear; }
+.odo i.in { transform: translateY(100%); transition: none; }
+.odo i.out { transform: translateY(-100%); }
+/* Fixed width (Atin, 2026-10-01): the words box holds 4 digits and WPM 3, right-aligned, so going from 9 to 10 or
+   99 to 100 moves nothing. Unused places are faint zeros (an instrument readout) or blank (?pad=blank). */
+.odo > span.lead { color: var(--sg-grat); }
+.sg[data-pad="blank"] .odo > span.lead { visibility: hidden; }
 .sg[data-layout="r6"] .sg-mic { max-width: 160px; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -485,7 +501,9 @@
     mic: pick("mic", ["center", "left"], "center"),
     rail: pick("rail", ["even", "inset", "flush"], "even"),
     placard: pick("placard", ["foot", "row"], "foot"),
-    words: pick("words", ["show", "hide"], "show"),     // live word count in the foot row
+    words: pick("words", ["show", "hide"], "show"),     // live word count + words per minute in the foot row
+    tick: pick("tick", ["roll", "step", "snap"], "step"),   // Atin, 2026-10-01: step
+    pad: pick("pad", ["zeros", "blank"], "blank"),      // unused digit places in the counters (Atin, 2026-10-01: blank)  // how the counters move: odometer roll, count-through, jump
     float: pick("float", ["deeper", "current"], "deeper"),   // dark mode's floating shadow
   };
   const ARMED = params.get("armed") === "1";                    // inspection: the send phrase was heard
@@ -613,7 +631,7 @@
         <span class="sg-placard" title="Spoken Send" aria-live="polite"></span>
         <span class="sg-readout"><i class="sg-dot"></i><span class="sg-time">0:00</span></span>
       </div>
-      <div class="sg-foot"><span class="sg-wc" title="Words so far"></span><div class="sg-mic" title="Microphone">${esc(MIC)}</div></div>
+      <div class="sg-foot"><span class="sg-wc" title="Words so far"><span class="odo"></span><span class="u">words</span></span><div class="sg-mic" title="Microphone">${esc(MIC)}</div><span class="sg-wpm" title="Words per minute"><span class="odo"></span><span>wpm</span></span></div>
     </div>
     <div class="sg-rail sg-trail">
       ${chip("cancel", "Cancel Dictation (Esc)", G.cancel)}
@@ -626,7 +644,7 @@
 
   const $ = (s) => root.querySelector(s);
   const el = {
-    time: $(".sg-time"), wc: $(".sg-wc"), preview: $(".sg-preview p"), placard: $(".sg-placard"), readout: $(".sg-readout"), mic: $(".sg-mic"),
+    time: $(".sg-time"), wcNum: $(".sg-wc .odo"), wcUnit: $(".sg-wc .u"), wpmNum: $(".sg-wpm .odo"), preview: $(".sg-preview p"), placard: $(".sg-placard"), readout: $(".sg-readout"), mic: $(".sg-mic"),
     doneHead: $(".sg-done-head"), doneMeta: $(".sg-done-meta"), hist: $(".sg-hist"), canvas: $(".sg-trace"),
     cardHead: $(".sg-card-head"), reason: $(".sg-reason"), cardText: $(".sg-card-text"), cardMeta: $(".sg-fail-meta"),
     primary: $(".sg-primary"), dismissBtn: $(".sg-dismiss"), pill: $(".sg-pill"), ring: $(".sg-ring path"),
@@ -748,7 +766,7 @@
   // ---------------------------------------------------------------- round 6 layout
   function applyLayout() {
     const r6 = OPT.layout === "r6";
-    Object.assign(root.dataset, { layout: OPT.layout, mic: OPT.mic, rail: OPT.rail, placard: OPT.placard, words: OPT.words, float: OPT.float });
+    Object.assign(root.dataset, { layout: OPT.layout, mic: OPT.mic, rail: OPT.rail, placard: OPT.placard, words: OPT.words, float: OPT.float, pad: OPT.pad });
     if (r6) { TH = 34; CH = 38; MID = 17; HMAX = 30; RULER_MAJ = 3; } else { TH = 44; CH = 50; MID = 22; HMAX = 40; RULER_MAJ = 4; }
     const foot = $(".sg-foot"), row = $(".sg-trace-row"), app = $(".sg-app");
     if (r6) foot.insertBefore(app, foot.firstChild); else row.insertBefore(app, row.firstChild);
@@ -765,13 +783,17 @@
     rec.t0 = performance.now(); rec.offset = fresh ? 0 : PREROLL_S; rec.frozen = null; rec.words = -1; rec.fitK = 0;
     if (fresh) { tr.cur.fill(HMIN); tr.prev.fill(HMIN); tr.n = 0; } else preroll();
     tr.acc = 0; tr.accT = performance.now();
+    setCounters(fresh ? 0 : liveWords());
   }
   function wordsAt(s) { return Math.min(STREAM.length, Math.floor(s * WPS)); }
+  // The streaming preview lands in bursts (a partial result every ~0.7 s), not word by word; the counters smooth it.
+  const BURST = 0.7;
+  function liveWords() { return rec.frozen != null ? wordsAt(rec.frozen) : wordsAt(Math.floor(elapsed() / BURST) * BURST); }
   function renderPreview() {
-    const count = wordsAt(elapsed());
+    const count = liveWords();
     if (count === rec.words) return;
     rec.words = count;
-    el.wc.textContent = `${count} ${count === 1 ? "word" : "words"}`;
+    ctr.target = count;
     const words = STREAM.slice(0, count), p = el.preview, maxH = (OPT.layout === "r6" ? 48 : 54) + 1;
     if (!words.length) { p.textContent = ""; return; }
     let k = Math.min(rec.fitK, words.length - 1);
@@ -781,6 +803,45 @@
     rec.fitK = k;
   }
   function renderTimer() { el.time.textContent = fmt(elapsed()); }
+
+  // ---------------------------------------------------------------- live counters (round 6)
+  // Words: a burst counts through one word at a time, the whole burst over ~0.45 s (30–110 ms a word), never past the
+  // truth. WPM: words over elapsed time (the first 6 s count as 6, so it does not spike on the first burst), eased
+  // toward its target with a 0.7 s time constant, so it drifts rather than jumps. Snap shows both raw.
+  const ctr = { shown: 0, target: 0, lastStep: 0, wpm: 0, lastT: 0 };
+  function wpmTarget() { return ctr.target * 60 / Math.max(6, elapsed()); }
+  function setCounters(n) { ctr.shown = ctr.target = n; ctr.wpm = n ? wpmTarget() : 0; paintCounters(true); }
+  function tickCounters(now) {
+    const dt = ctr.lastT ? Math.min(100, now - ctr.lastT) : 16; ctr.lastT = now;
+    if (OPT.tick === "snap") { ctr.shown = ctr.target; ctr.wpm = wpmTarget(); }
+    else {
+      if (ctr.shown < ctr.target) {
+        const interval = Math.max(30, Math.min(110, 450 / (ctr.target - ctr.shown)));
+        if (now - ctr.lastStep >= interval) { ctr.shown++; ctr.lastStep = now; }
+      } else ctr.shown = ctr.target;
+      ctr.wpm += (wpmTarget() - ctr.wpm) * (1 - Math.exp(-dt / 700));
+    }
+    paintCounters(false);
+  }
+  function paintCounters(cut) {
+    const roll = !cut && OPT.tick === "roll" && !REDUCED;
+    odo(el.wcNum, ctr.shown, roll, 4); el.wcUnit.textContent = ctr.shown === 1 ? "word" : "words";
+    odo(el.wpmNum, Math.round(ctr.wpm), roll, 3);
+  }
+  function odo(box, n, roll, width) {
+    n = Math.min(n, 10 ** width - 1);
+    const sig = String(n).length, str = String(n).padStart(width, "0");
+    while (box.children.length < width) box.insertBefore(document.createElement("span"), box.firstChild);
+    [...box.children].forEach((slot, i) => {
+      slot.classList.toggle("lead", i < width - sig);
+      const d = str[i]; if (slot.dataset.d === d) return;
+      const had = slot.dataset.d != null; slot.dataset.d = d;
+      if (!roll || !had) { slot.innerHTML = `<i>${d}</i>`; return; }
+      [...slot.children].forEach((o) => { o.className = "out"; setTimeout(() => o.remove(), 120); });
+      const nu = document.createElement("i"); nu.className = "in"; nu.textContent = d; slot.appendChild(nu);
+      void nu.offsetWidth; nu.className = "";
+    });
+  }
 
   // ---------------------------------------------------------------- Spoken Send model
   // phase: none | armed (the phrase was heard; Return follows the paste) | countdown | canceled | noreturn
@@ -863,6 +924,7 @@
         if (now - tr.accT >= T_SAMPLE) { push(heightFor(tr.acc), now); tr.acc = 0; tr.accT = now; }
         renderTimer(); renderPreview();
       }
+      if (FAMILY[st] === "live" || FAMILY[st] === "work" || FAMILY[st] === "countdown") tickCounters(now);   // a stop lets the count finish catching up
       if (st === "countdown" && send.phase === "countdown") {
         const r = sendRemain(now);
         el.time.textContent = r.toFixed(1);
@@ -909,7 +971,7 @@
       // Recording has ended: freeze the readout at the recorded length (0:41 when entered directly).
       const wasLive = prev === "listening" || prev === "history";
       if (wasLive) rec.frozen = elapsed();
-      else if (rec.frozen == null || prev === "idle" || prev == null) { rec.frozen = H0.seconds; rec.fitK = 0; rec.words = -1; rec.offset = 0; }
+      else if (rec.frozen == null || prev === "idle" || prev == null) { rec.frozen = H0.seconds; rec.fitK = 0; rec.words = -1; rec.offset = 0; setCounters(wordsAt(H0.seconds)); }
       tr.live = false;
       flatten(performance.now());
       renderTimer();
@@ -1127,6 +1189,10 @@
       <button data-v="foot">Foot row</button><button data-v="row">Trace row</button></div></div>
     <div class="row"><label>Words</label><div class="seg" data-opt="words">
       <button data-v="show">Show</button><button data-v="hide">Hide</button></div></div>
+    <div class="row"><label>Ticks</label><div class="seg" data-opt="tick">
+      <button data-v="roll">Roll</button><button data-v="step">Step</button><button data-v="snap">Snap</button></div></div>
+    <div class="row"><label>Unused digits</label><div class="seg" data-opt="pad">
+      <button data-v="zeros">Faint zeros</button><button data-v="blank">Blank</button></div></div>
     <div class="row"><label>Dark float</label><div class="seg" data-opt="float">
       <button data-v="current">Current</button><button data-v="deeper">Deeper</button></div></div>
     <div class="row"><label>Density</label><div class="seg" data-opt="density">
@@ -1152,7 +1218,7 @@
   function setOption(key, value) {
     OPT[key] = value;
     if (key === "density") root.dataset.density = value;
-    if (["layout", "mic", "rail", "placard", "words", "float"].includes(key)) applyLayout();
+    if (["layout", "mic", "rail", "placard", "words", "float", "pad"].includes(key)) applyLayout();
     if (key === "send") { root.dataset.sendui = value; layoutTrace(); }
     if (key === "wording") { root.querySelectorAll(".sg-flag-t").forEach((t) => { t.textContent = value === "delivered" ? "Not delivered" : "Not pasted"; });
       if (FAMILY[LVStage.state] === "outcome") renderOutcome(LVStage.state); }

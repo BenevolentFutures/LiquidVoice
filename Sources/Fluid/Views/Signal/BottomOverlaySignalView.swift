@@ -342,7 +342,8 @@ struct BottomOverlayView: View {
             foot: SignalFootRow(
                 icon: self.contentState.targetAppIcon ?? self.activeAppMonitor.activeAppIcon ?? self.lastResolvedAppIcon,
                 micText: self.micText,
-                wordCount: self.wordCount(display),
+                counters: self.counterInput(display),
+                counterClock: self.model.counterClock,
                 placard: self.placard
             ),
             isBracketVisible: pillBracket
@@ -489,22 +490,49 @@ struct BottomOverlayView: View {
         )
     }
 
-    /// The live word count at the foot row's left end (round 6, Atin 2026-10-01): while the
-    /// dictation is live, stopped, transcribing or counting down; hidden where the same number
-    /// already shows (Pasted, Sent, a card) and on a notice. Nothing while there is no live text
-    /// (the streaming preview off, a reprocess), rather than a "0 WORDS" that never moves.
-    private func wordCount(_ display: Display) -> Int? {
-        Self.wordCount(display: display, live: self.contentState.liveWordCount, frozen: self.model.frozenWordCount)
+    /// The live counters (DESIGN.md §16, Atin 2026-10-01): the word count from 0 at the foot row's
+    /// left end and words per minute at its right end, while the dictation is live, stopped,
+    /// transcribing or counting down; hidden where the number already shows (Pasted, Sent, a
+    /// card), on a notice, and while the pill is not on screen.
+    private func counterInput(_ display: Display) -> SignalCounterInput? {
+        guard self.contentState.isBottomOverlayPresented else { return nil }
+        let model = self.model
+        return Self.counterInput(
+            display: display,
+            countsLiveWords: model.countsLiveWords,
+            recordingStartedAt: model.recordingStartedAt,
+            frozenDuration: model.frozenDuration,
+            frozenWords: model.frozenWordCount,
+            live: self.contentState.liveWordCount,
+            hasLiveText: self.settings.enableStreamingPreview && self.settings.selectedSpeechModel.supportsStreaming
+        )
     }
 
-    static func wordCount(display: Display, live: Int, frozen: Int?) -> Int? {
-        let count: Int
+    /// Nothing without a recording of this session behind the pill (a reprocess, including one
+    /// that re-shows the pill), or without live text: the streaming preview off, or a model that
+    /// does not stream, where the counts would read 0 for the whole dictation.
+    static func counterInput(
+        display: Display,
+        countsLiveWords: Bool,
+        recordingStartedAt: Date?,
+        frozenDuration: TimeInterval?,
+        frozenWords: Int?,
+        live: Int,
+        hasLiveText: @autoclosure () -> Bool
+    ) -> SignalCounterInput? {
+        guard countsLiveWords, let start = recordingStartedAt else { return nil }
         switch display {
-        case .listening: count = live
-        case .stopped, .transcribing: count = frozen ?? live
-        case .delivered, .notice, .noticeRow, .idle: return nil
+        case .listening:
+            guard frozenDuration == nil, hasLiveText() else { return nil }
+            return SignalCounterInput(recording: start, words: live, clock: .running(start))
+        case .stopped, .transcribing:
+            // Only after a real stop: frozen there, the count finishes catching up and WPM settles
+            // from the recording's length.
+            guard let duration = frozenDuration, hasLiveText() else { return nil }
+            return SignalCounterInput(recording: start, words: frozenWords ?? live, clock: .frozen(duration))
+        case .delivered, .notice, .noticeRow, .idle:
+            return nil
         }
-        return count > 0 ? count : nil
     }
 
     // MARK: Text

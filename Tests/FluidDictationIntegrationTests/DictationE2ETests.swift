@@ -4578,3 +4578,203 @@ final class StartPathTraceTests: XCTestCase {
         )
     }
 }
+
+/// The Hollyland Lark A1's battery in the foot row (DESIGN.md §16): the heartbeat frame, its reply,
+/// finding the receiver behind the selected input, the log line, the cache's freshness and the
+/// label's reserved width. Pure; nothing here opens a HID device.
+@MainActor
+final class LapelMicBatteryTests: XCTestCase {
+    /// A real reply from Atin's receiver (2026-10-01): mic 1 not linked, mic 2 linked at 33%.
+    static let capturedReply: [UInt8] = [
+        0x05, 0x03, 0xBB, 0xDD, 0x1F, 0x00, 0x11,
+        0x00, 0x01, 0x00, 0x21, 0x00, 0x00, 0x01, 0x02, 0x04, 0x00, 0x00, 0x00, 0x03, 0x00, 0x02, 0x00, 0x00,
+    ] + [UInt8](repeating: 0, count: 40)
+
+    static func reply(command: UInt8 = 0x1F, payload: [UInt8]) -> [UInt8] {
+        [0x05, 0x03, 0xBB, 0xDD, command, UInt8(payload.count >> 8), UInt8(payload.count & 0xFF)] + payload
+    }
+
+    override func tearDown() {
+        SignalOverlayModel.shared.micBattery = nil
+        SignalRenderStage.reset()
+        super.tearDown()
+    }
+
+    func testTheHeartbeatIsTheOneFixedStatusFrame() {
+        let frame = LarkA1Protocol.heartbeatRequest
+        XCTAssertEqual(frame.count, 64, "report 5 is 63 bytes plus its ID")
+        XCTAssertEqual(Array(frame[0..<8]), [0x05, 0x03, 0xAA, 0xDD, 0x1F, 0x00, 0x00, 0xEF])
+        XCTAssertTrue(frame[8...].allSatisfy { $0 == 0 })
+    }
+
+    func testTheCapturedReplyReadsMicTwoAtThirtyThreePercent() throws {
+        let status = try LarkA1Protocol.parseHeartbeatReply(Self.capturedReply).get()
+        XCTAssertEqual(status.mic1, LarkA1Status.Mic(isLinked: false, percent: nil))
+        XCTAssertEqual(status.mic2, LarkA1Status.Mic(isLinked: true, percent: 33))
+        XCTAssertEqual(status.linkedCount, 1)
+        XCTAssertEqual(status.linkedPercents, [33])
+    }
+
+    func testMalformedShortAndWrongCommandRepliesAreRejected() {
+        XCTAssertEqual(LarkA1Protocol.parseHeartbeatReply([]), .failure(.short))
+        XCTAssertEqual(LarkA1Protocol.parseHeartbeatReply([0x05, 0x03, 0xBB, 0xDD, 0x1F]), .failure(.short))
+        var echoed = Self.capturedReply
+        echoed[2] = 0xAA // our own request echoed back, not a reply
+        XCTAssertEqual(LarkA1Protocol.parseHeartbeatReply(echoed), .failure(.malformed))
+        var otherReport = Self.capturedReply
+        otherReport[0] = 0x06
+        XCTAssertEqual(LarkA1Protocol.parseHeartbeatReply(otherReport), .failure(.malformed))
+        XCTAssertEqual(LarkA1Protocol.parseHeartbeatReply(Self.reply(payload: [0x01, 0x01])), .failure(.malformed), "too short a payload to hold both mics")
+        var truncated = Self.reply(payload: [0x00, 0x01, 0x00, 0x21])
+        truncated[6] = 0x11 // announces 17 bytes, carries 4
+        XCTAssertEqual(LarkA1Protocol.parseHeartbeatReply(truncated), .failure(.short))
+        XCTAssertEqual(LarkA1Protocol.parseHeartbeatReply(Self.reply(command: 0x20, payload: [0x00, 0x01, 0x00, 0x21])), .failure(.wrongCommand))
+    }
+
+    func testBothMicsLinked() throws {
+        let status = try LarkA1Protocol.parseHeartbeatReply(Self.reply(payload: [0x01, 0x01, 0x21, 0x50])).get()
+        XCTAssertEqual(status.linkedCount, 2)
+        XCTAssertEqual(status.linkedPercents, [33, 80], "mic 1 first")
+        let none = try LarkA1Protocol.parseHeartbeatReply(Self.reply(payload: [0x00, 0x00, 0x40, 0x50])).get()
+        XCTAssertEqual(none.linkedCount, 0)
+        XCTAssertEqual(none.linkedPercents, [], "an unlinked mic's stale percent is never shown")
+    }
+
+    func testAnOutOfRangePercentReadsAsLinkedWithNoPercent() throws {
+        let status = try LarkA1Protocol.parseHeartbeatReply(Self.reply(payload: [0x01, 0x01, 0x65, 0xFF])).get()
+        XCTAssertEqual(status.mic1, LarkA1Status.Mic(isLinked: true, percent: nil), "101")
+        XCTAssertEqual(status.mic2, LarkA1Status.Mic(isLinked: true, percent: nil), "255")
+        XCTAssertEqual(status.linkedCount, 2)
+        XCTAssertEqual(status.linkedPercents, [])
+        let edges = try LarkA1Protocol.parseHeartbeatReply(Self.reply(payload: [0x01, 0x01, 0x00, 0x64])).get()
+        XCTAssertEqual(edges.linkedPercents, [0, 100])
+    }
+
+    /// Found by USB vendor and product in the model UID, directly or through an aggregate's
+    /// sub-devices; never by name.
+    func testTheReceiverIsFoundByItsUSBIDsDirectlyOrThroughAnAggregate() {
+        let raw = "AppleUSBAudioEngine:Shenzhen Hollyland Technology Co.,Ltd:Wireless Microphone:Wireless Microphone:2"
+        let models = [raw: "Wireless Microphone:3547:0407", "BuiltInMicrophoneDevice": "Digital Mic", "other-usb": "Wireless Microphone:3547:0408"]
+        let subs = ["hollyland-lapel-mic": [raw], "studio-aggregate": ["BuiltInMicrophoneDevice", "other-usb"]]
+        func isReceiver(_ uid: String) -> Bool {
+            LarkA1Protocol.inputIsReceiver(uid: uid, modelUID: { models[$0] }, subDeviceUIDs: { subs[$0] ?? [] })
+        }
+        XCTAssertTrue(isReceiver(raw))
+        XCTAssertTrue(isReceiver("hollyland-lapel-mic"), "Atin's aggregate")
+        XCTAssertFalse(isReceiver("BuiltInMicrophoneDevice"))
+        XCTAssertFalse(isReceiver("studio-aggregate"))
+        XCTAssertFalse(isReceiver("unplugged"))
+        XCTAssertTrue(LarkA1Protocol.isReceiverModelUID("WIRELESS MICROPHONE:3547:0407"))
+        XCTAssertFalse(LarkA1Protocol.isReceiverModelUID("Wireless Microphone"), "a name alone is not enough")
+        XCTAssertFalse(LarkA1Protocol.isReceiverModelUID("3547:0407"))
+        XCTAssertFalse(LarkA1Protocol.isReceiverModelUID(nil))
+    }
+
+    /// One structured line per change; an unchanged poll logs nothing.
+    func testThePollLogsOnlyWhenItsOutcomeChanges() throws {
+        let status = try LarkA1Protocol.parseHeartbeatReply(Self.capturedReply).get()
+        let first = LarkA1PollOutcome.reading(status)
+        XCTAssertEqual(LarkA1Protocol.logLine(for: first, previous: nil), "MIC_BATTERY device=lark-a1 mic1=off mic2=33% result=ok")
+        XCTAssertNil(LarkA1Protocol.logLine(for: first, previous: first))
+        let lower = try LarkA1Protocol.parseHeartbeatReply(Self.reply(payload: [0x00, 0x01, 0x00, 0x20])).get()
+        XCTAssertEqual(LarkA1Protocol.logLine(for: .reading(lower), previous: first), "MIC_BATTERY device=lark-a1 mic1=off mic2=32% result=ok")
+        let odd = try LarkA1Protocol.parseHeartbeatReply(Self.reply(payload: [0x01, 0x00, 0xC8, 0x00])).get()
+        XCTAssertEqual(LarkA1Protocol.logLine(for: .reading(odd), previous: nil), "MIC_BATTERY device=lark-a1 mic1=linked mic2=off result=ok")
+        XCTAssertEqual(LarkA1Protocol.logLine(for: .noDevice, previous: first), "MIC_BATTERY device=lark-a1 mic1=- mic2=- result=no-device")
+        XCTAssertNil(LarkA1Protocol.logLine(for: .noDevice, previous: .noDevice))
+        XCTAssertEqual(
+            LarkA1Protocol.logLine(for: .transferFailed(step: "open", code: Int32(bitPattern: 0xE000_02E2)), previous: nil),
+            "MIC_BATTERY device=lark-a1 mic1=- mic2=- result=open-failed:0xe00002e2"
+        )
+        XCTAssertEqual(LarkA1Protocol.logLine(for: .unreadable(.wrongCommand), previous: nil), "MIC_BATTERY device=lark-a1 mic1=- mic2=- result=wrong-command")
+    }
+
+    /// The overlay reads only the cache: nil for any other mic, the name alone with no reading, and
+    /// a reading older than 2 minutes reads as none.
+    func testTheCacheIsFreshForTwoMinutes() throws {
+        let status = try LarkA1Protocol.parseHeartbeatReply(Self.capturedReply).get()
+        let now = Date()
+        XCTAssertNil(SignalMicBattery.from(inputIsReceiver: false, reading: status, readAt: now, now: now))
+        XCTAssertEqual(SignalMicBattery.from(inputIsReceiver: true, reading: nil, readAt: nil, now: now), SignalMicBattery(linkedCount: 0, percents: []))
+        XCTAssertEqual(SignalMicBattery.from(inputIsReceiver: true, reading: status, readAt: now.addingTimeInterval(-119), now: now), SignalMicBattery(linkedCount: 1, percents: [33]))
+        XCTAssertEqual(SignalMicBattery.from(inputIsReceiver: true, reading: status, readAt: now.addingTimeInterval(-121), now: now), SignalMicBattery(linkedCount: 0, percents: []))
+        XCTAssertTrue(SignalMicBattery.isLow(15), "15% and below in accent (our assumption)")
+        XCTAssertTrue(SignalMicBattery.isLow(0))
+        XCTAssertFalse(SignalMicBattery.isLow(16))
+    }
+
+    /// Nothing beside the label moves as a percent appears, changes width or goes, or a second
+    /// transmitter links: one box for every lapel state, inside the mic's 160, and the icon and
+    /// label still clear the word count and WPM at the foot row's ends (round 6).
+    func testTheLabelReservesOneWidthAndFitsTheFootRow() {
+        let role = SignalTheme.Typography.micLabel
+        let max = SignalTheme.Metrics.micMaxWidth
+        func layout(_ prefix: String = "", linked: Int, _ percents: [Int]) -> SignalMicLabel.Layout {
+            SignalMicLabel.layout(prefix: prefix, battery: SignalMicBattery(linkedCount: linked, percents: percents), maxWidth: max, width: role.width(of:))
+        }
+        let one = [layout(linked: 0, []), layout(linked: 1, []), layout(linked: 1, [5]), layout(linked: 1, [33]), layout(linked: 1, [100])]
+        // Two mics: "HOLLYLAND LAPEL 100% 100%" passes 160, so the name is HOLLYLAND for every
+        // two-mic reading.
+        let two = [layout(linked: 2, []), layout(linked: 2, [33, 80]), layout(linked: 2, [100, 80]), layout(linked: 2, [100, 100]), layout(linked: 2, [9, 9])]
+        XCTAssertGreaterThan(role.width(of: "HOLLYLAND LAPEL 100% 100%") + 1, max)
+        XCTAssertTrue(one.allSatisfy { $0.name == "Hollyland lapel" })
+        XCTAssertTrue(two.allSatisfy { $0.name == "Hollyland" })
+        let widths = Set((one + two).map(\.width))
+        XCTAssertEqual(widths, [role.width(of: "HOLLYLAND LAPEL 100%") + 1], "one box for one mic, two, stale or none")
+        for entry in one + two {
+            let text = (entry.name + entry.percents.map { " \($0)%" }.joined()).uppercased()
+            XCTAssertLessThanOrEqual(role.width(of: text) + 1, entry.width, text)
+        }
+        // A mode word before it ("EDIT · "): HOLLYLAND, one box, inside 160; two mics there would
+        // pass 160 and truncate inside the box rather than widen it.
+        let edit = [layout("Edit · ", linked: 1, []), layout("Edit · ", linked: 1, [100]), layout("Edit · ", linked: 2, [100, 100])]
+        XCTAssertEqual(edit.map(\.name), ["Hollyland", "Hollyland", "Hollyland"])
+        XCTAssertEqual(Set(edit.map(\.width)).count, 1)
+        XCTAssertLessThanOrEqual(edit[0].width, max)
+
+        // The pair, centred, clears the word count's box at the left end and WPM's slot at the right.
+        let inner = SignalOverlayGeometry.forSize(.medium).innerWidth
+        let words = role.width(of: SignalCounterSmoother.padded(9999, places: 4)) + SignalCounterFace.labelGap + role.width(of: "WORDS")
+        for width in [one[0].width, edit[0].width] {
+            let pair = SignalTheme.Metrics.targetIcon + SignalTheme.Metrics.footGap + width
+            let left = (inner - pair) / 2
+            XCTAssertGreaterThanOrEqual(left, words, "the pair clears \"9999 WORDS\" at \(width)")
+            XCTAssertLessThanOrEqual(left + pair, inner - SignalTheme.Metrics.placardWidth, "the pair clears WPM at \(width)")
+        }
+    }
+
+    /// Quiet mode: the transport never reaches IOKit and the monitor never starts, so no test ever
+    /// opens a HID device and the label never changes under a test.
+    func testQuietModeNeverOpensTheReceiver() {
+        XCTAssertTrue(TestHostQuietMode.isActive)
+        XCTAssertEqual(LarkA1HIDTransport().heartbeat(), .noDevice)
+        LapelMicBatteryMonitor.shared.noteSelectedInput(uid: "hollyland-lapel-mic")
+        XCTAssertNil(LapelMicBatteryMonitor.shared.followedInputUID, "the monitor never starts in quiet mode")
+        XCTAssertNil(SignalOverlayModel.shared.micBattery)
+    }
+
+    /// Renders only, for design review (the geometry is asserted above): the listening overlay with
+    /// the lapel mic selected, no reading, 33%, low and both mics (design/visual-language/
+    /// native-renders when LIQUID_VOICE_RENDER_DIR is set).
+    func testRendersTheLapelLabelForReview() throws {
+        let states: [(String, SignalMicBattery)] = [
+            ("lapel-none", SignalMicBattery(linkedCount: 0, percents: [])),
+            ("lapel-33", SignalMicBattery(linkedCount: 1, percents: [33])),
+            ("lapel-9", SignalMicBattery(linkedCount: 1, percents: [9])),
+            ("lapel-two", SignalMicBattery(linkedCount: 2, percents: [33, 80])),
+        ]
+        let folder = ProcessInfo.processInfo.environment["LIQUID_VOICE_RENDER_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+        for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+            let theme = appearance == .darkAqua ? "dark" : "light"
+            for (name, battery) in states {
+                SignalRenderStage.listening()
+                SignalOverlayModel.shared.microphoneName = "Hollyland Lapel Mic"
+                SignalOverlayModel.shared.micBattery = battery
+                let rep = try SignalRenderStage.render(BottomOverlayView(), appearance: appearance)
+                if let folder {
+                    try SignalRenderStage.write(rep, to: folder.appendingPathComponent("\(theme)-23-\(name).png"))
+                }
+            }
+        }
+    }
+}

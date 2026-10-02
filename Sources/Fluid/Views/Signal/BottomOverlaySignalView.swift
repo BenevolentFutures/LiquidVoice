@@ -344,7 +344,9 @@ struct BottomOverlayView: View {
                 micText: self.micText,
                 counters: self.counterInput(display),
                 counterClock: self.model.counterClock,
-                placard: self.placard
+                placard: self.placard,
+                micBattery: self.model.micBattery,
+                micPrefix: self.micPrefix
             ),
             isBracketVisible: pillBracket
         ) {
@@ -561,6 +563,12 @@ struct BottomOverlayView: View {
     /// The microphone, and (provisional, awaiting round 5) the words that replace the retired
     /// mode tint and model spinner: "EDIT", "COMMAND", "LOADING MODEL".
     private var micText: String {
+        let microphone = self.model.microphoneName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return self.micPrefix + (microphone.isEmpty ? "Microphone" : microphone)
+    }
+
+    /// The words before the microphone ("EDIT · "), so the lapel mic's battery label keeps them.
+    private var micPrefix: String {
         var parts: [String] = []
         let asr = self.appServices.asr
         if !asr.isAsrReady, asr.isLoadingModel || asr.isDownloadingModel {
@@ -571,9 +579,7 @@ struct BottomOverlayView: View {
         case .edit, .write, .rewrite: parts.append("Edit")
         case .command: parts.append("Command")
         }
-        let microphone = self.model.microphoneName.trimmingCharacters(in: .whitespacesAndNewlines)
-        parts.append(microphone.isEmpty ? "Microphone" : microphone)
-        return parts.joined(separator: " · ")
+        return parts.map { $0 + " · " }.joined()
     }
 
     private func rememberAppIcon(_ icon: NSImage?) {

@@ -36,6 +36,8 @@ final class SignalOverlayModel: ObservableObject {
     @Published private(set) var frozenWordCount: Int?
     /// The microphone in use, shown bottom-centre in every visible state.
     @Published var microphoneName = ""
+    /// The Hollyland lapel mic's battery while it is the input, else nil (`LapelMicBatteryMonitor`).
+    @Published var micBattery: SignalMicBattery?
     /// Fading out (120 ms linear); controls are inert.
     @Published private(set) var isFading = false
     /// Spoken Send's quiet countdown while it runs, or where a cancel stopped it (held 700 ms).

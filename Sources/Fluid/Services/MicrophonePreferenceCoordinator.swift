@@ -230,6 +230,9 @@ final class MicrophonePreferenceCoordinator: ObservableObject {
         let previousName = self.lastResolvedInputName
         self.lastResolvedInputUID = uid
         self.lastResolvedInputName = name
+        // The lapel mic's battery for the mic label: a repeat returns at once, a change only hands
+        // the UID to a background queue, so this stays off the start path's cost.
+        LapelMicBatteryMonitor.shared.noteSelectedInput(uid: uid)
         // The overlay names the microphone from its first frame; correct it once capture resolves.
         if let name, !name.isEmpty, NotchContentState.shared.isBottomOverlayPresented,
            SignalOverlayModel.shared.microphoneName != name

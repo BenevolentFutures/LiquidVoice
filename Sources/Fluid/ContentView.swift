@@ -1244,7 +1244,6 @@ struct ContentView: View {
             Section {
                 self.sidebarNavigationLink(.preferences, title: "Settings", systemImage: "gearshape.fill")
                 self.sidebarNavigationLink(.voiceEngine, title: "Voice Engine", systemImage: "waveform")
-                self.sidebarNavigationLink(.aiEnhancements, title: "AI Enhancement", systemImage: "brain")
                 self.sidebarNavigationLink(.customDictionary, title: "Custom Dictionary", systemImage: "text.book.closed.fill")
             } header: {
                 self.sidebarSectionHeader("Configure")
@@ -1262,6 +1261,12 @@ struct ContentView: View {
                 self.sidebarNavigationLink(.stats, title: "Stats", systemImage: "chart.bar.fill")
             } header: {
                 self.sidebarSectionHeader("Activity")
+            }
+
+            Section {
+                self.sidebarNavigationLink(.aiEnhancements, title: "AI Enhancement", systemImage: "brain")
+            } header: {
+                self.sidebarSectionHeader("Advanced")
             }
 
             Section {
@@ -1378,14 +1383,8 @@ struct ContentView: View {
                 self.settings.onboardingAISkipped = true
                 self.settings.setDictationPromptSelection(.off)
             },
-            finishOnboarding: {
-                self.completeOnboardingIfPossible()
-            },
             finishOnboardingAtGettingStarted: {
                 self.completeOnboardingIfPossible(selecting: .welcome)
-            },
-            openAIEnhancementSettingsFromOnboarding: {
-                self.completeOnboardingForAIProviderSetup()
             },
             openAccessibilitySettings: self.openAccessibilitySettings,
             restartApp: self.restartApp,
@@ -2802,9 +2801,7 @@ struct ContentView: View {
     }
 
     private var isOnboardingSandboxRouteActive: Bool {
-        let onboardingAIEnhancementStep = 5
-        return self.isOnboardingVoicePlaygroundStepActive ||
-            (!self.settings.onboardingCompleted && self.settings.onboardingCurrentStep == onboardingAIEnhancementStep)
+        self.isOnboardingVoicePlaygroundStepActive
     }
 
     private func currentDictationOutputRouteForHotkeyStop() -> DictationOutputRoute {
@@ -4101,10 +4098,6 @@ extension ContentView {
         self.accessibilityEnabled
     }
 
-    private var onboardingAIReady: Bool {
-        self.settings.onboardingAISkipped || DictationAIPostProcessingGate.isProviderConfigured()
-    }
-
     private var onboardingPlaygroundReady: Bool {
         self.settings.onboardingPlaygroundValidated || self.settings.onboardingPlaygroundSkipped
     }
@@ -4133,16 +4126,6 @@ extension ContentView {
         self.completeOnboarding(selecting: target)
     }
 
-    func completeOnboardingForAIProviderSetup() {
-        let missingRequirements = self.missingOnboardingCompletionRequirements(allowsAIConfiguration: true)
-        guard missingRequirements.isEmpty else {
-            self.presentOnboardingCompletionBlocked(missingRequirements)
-            return
-        }
-
-        self.completeOnboarding(selecting: .aiEnhancements)
-    }
-
     private func completeOnboarding(selecting target: SidebarItem? = nil) {
         self.settings.onboardingCompleted = true
 
@@ -4150,7 +4133,7 @@ extension ContentView {
         self.selectedSidebarItem = target ?? (isOnboarded ? .preferences : .welcome)
     }
 
-    private func missingOnboardingCompletionRequirements(allowsAIConfiguration: Bool = false) -> [String] {
+    private func missingOnboardingCompletionRequirements() -> [String] {
         var missing: [String] = []
 
         if !self.onboardingVoiceModelReady {
@@ -4161,9 +4144,6 @@ extension ContentView {
         }
         if !self.onboardingAccessibilityReady {
             missing.append("Accessibility access")
-        }
-        if !allowsAIConfiguration, !self.onboardingAIReady {
-            missing.append("AI choice")
         }
         if !self.onboardingPlaygroundReady {
             missing.append("test or skip")

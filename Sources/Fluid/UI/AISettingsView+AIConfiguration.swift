@@ -98,7 +98,7 @@ extension AIEnhancementSettingsView {
                     .font(.title3)
                     .fontWeight(.semibold)
                     .foregroundStyle(self.theme.palette.primaryText)
-                Text("Set up providers and prompt behavior separately.")
+                Text("Untested and unsupported. Kept from FluidVoice; fix or change it with your own agent.")
                     .font(.caption)
                     .foregroundStyle(self.theme.palette.secondaryText)
             }

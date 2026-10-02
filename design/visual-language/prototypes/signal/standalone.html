@@ -559,9 +559,9 @@ window.LV_MOCK = {
   targets: [
     { app: "c11", icon: "c11", title: "Style Studio — c11" },
     { app: "Mail", icon: "mail", title: "Re: Q4 rollout — Mail" },
-    { app: "Notes", icon: "notes", title: "Constellation — Notes" },
+    { app: "Notes", icon: "notes", title: "Launch checklist — Notes" },
     { app: "Slack", icon: "slack", title: "#eng-platform — Slack" },
-    { app: "Safari", icon: "safari", title: "Forgejo — Safari" },
+    { app: "Safari", icon: "safari", title: "Pull request 412 — Safari" },
   ],
   // Live listening snippets: what the streaming preview shows while speaking.
   livePreview: [
@@ -577,7 +577,7 @@ window.LV_MOCK = {
     },
     {
       id: "h2", when: "2026-09-27T14:51:40", target: "c11", mic: "MacBook Pro Microphone", seconds: 12, words: 34, delivered: true,
-      text: "Rename the tab to Merge Captain, set the description, and then read the three open PRs on the lattice branch and tell me which one you'd merge first and why.",
+      text: "Rename the tab to Review, set the description, and then read the three open PRs on the retry-admission branch and tell me which one you'd merge first and why.",
     },
     {
       id: "h3", when: "2026-09-27T14:38:05", target: "c11", mic: "MacBook Pro Microphone", seconds: 66, words: 189, delivered: false,
@@ -585,11 +585,11 @@ window.LV_MOCK = {
     },
     {
       id: "h4", when: "2026-09-27T13:20:33", target: "Mail", mic: "AirPods Pro", seconds: 38, words: 96, delivered: true,
-      text: "Hi Priya, thanks for the walkthrough yesterday. Two things from our side. First, we can commit to the October 14 date for the pilot as long as the SSO piece lands by the 7th. Second, on pricing, let's keep the per-seat number where it is and revisit after the first ninety days with real usage. I'll send the revised order form tomorrow morning. If anything in there is off, just call me. Best, Atin",
+      text: "Hi Priya, thanks for the walkthrough yesterday. Two things from our side. First, we can commit to the October 14 date for the pilot as long as the SSO piece lands by the 7th. Second, on pricing, let's keep the per-seat number where it is and revisit after the first ninety days with real usage. I'll send the revised order form tomorrow morning. If anything in there is off, just call me. Best, Sam",
     },
     {
       id: "h5", when: "2026-09-27T12:02:19", target: "Notes", mic: "AirPods Pro", seconds: 24, words: 61, delivered: true,
-      text: "Constellation note. Atlas is the fixed point. Hyperion roams. Anything physical belongs to whichever machine is in the room, which means the office lights are only reachable while the laptop is there. Write this down properly in the cosmology doc and stop re-deriving it every session.",
+      text: "Launch checklist note. The desktop build is the fixed point. The mobile build follows a week later. Anything that touches billing waits for the whole team to sign off, which means the pricing page only changes on release day. Write this down properly in the release doc and stop re-deriving it every sprint.",
     },
     {
       id: "h6", when: "2026-09-27T11:47:58", target: "c11", mic: "Hollyland Lapel Mic", seconds: 9, words: 22, delivered: true,
@@ -597,7 +597,7 @@ window.LV_MOCK = {
     },
     {
       id: "h7", when: "2026-09-27T11:31:02", target: "Slack", mic: "Hollyland Lapel Mic", seconds: 19, words: 47, delivered: true,
-      text: "Heads up, the forgejo sync on Atlas paused itself overnight after three failed pushes. I've restarted it and it's caught up, but if anybody pushed to the GitHub mirror between two and six this morning double check it landed.",
+      text: "Heads up, the nightly sync job paused itself overnight after three failed pushes. I've restarted it and it's caught up, but if anybody pushed to the staging mirror between two and six this morning double check it landed.",
     },
     {
       id: "h8", when: "2026-09-27T10:58:44", target: "c11", mic: "MacBook Pro Microphone", seconds: 53, words: 142, delivered: true,
@@ -613,7 +613,7 @@ window.LV_MOCK = {
     },
     {
       id: "h11", when: "2026-09-26T16:02:51", target: "c11", mic: "AirPods Pro", seconds: 88, words: 251, delivered: true,
-      text: "New task. I want a small command line tool called airq that reads the Aranet4 over Bluetooth and prints CO2, temperature, humidity and pressure as one line, with a JSON flag for agents. It should cache the last reading for sixty seconds so that ten agents asking at once don't hammer the sensor. If the sensor is out of range print a clear error with the last known reading and its age, don't just hang. Use the existing Bluetooth helper in the constellation repo rather than writing a new one. Ship it with a skill file that explains how to call it and how to tell if the reading is stale. Tests should run without the sensor present, so mock the Bluetooth layer. Keep the whole thing under five hundred lines if you can. When it's done, run it for real once, paste the real output into the PR, and tell me how long the cold read took.",
+      text: "New task. I want a small command line tool called sensorq that reads the room sensor over Bluetooth and prints CO2, temperature, humidity and pressure as one line, with a JSON flag for scripts. It should cache the last reading for sixty seconds so that ten scripts asking at once don't hammer the sensor. If the sensor is out of range print a clear error with the last known reading and its age, don't just hang. Use the existing Bluetooth helper in the shared utilities package rather than writing a new one. Ship it with a short readme that explains how to call it and how to tell if the reading is stale. Tests should run without the sensor present, so mock the Bluetooth layer. Keep the whole thing under five hundred lines if you can. When it's done, run it for real once, paste the real output into the PR, and tell me how long the cold read took.",
     },
     {
       id: "h12", when: "2026-09-26T15:21:36", target: "Safari", mic: "MacBook Pro Microphone", seconds: 15, words: 39, delivered: true,
@@ -722,9 +722,9 @@ window.LV = {
   const TERM_LINES = [
     '<span class="p">❯</span> <span class="d">claude --resume</span>',
     '',
-    '<span class="d">Merge Captain · workspace:10 · surface:291</span>',
+    '<span class="d">Review · workspace:10 · surface:291</span>',
     '',
-    'Read the three open PRs on lattice/retry-admission.',
+    'Read the three open PRs on retry-admission.',
     '',
     '  <span class="d">#412</span>  Queue: key admission on job id + lease epoch    <span class="d">+184 −31</span>',
     '  <span class="d">#409</span>  Scheduler: drop the duplicate lease timer         <span class="d">+12 −40</span>',
@@ -751,14 +751,14 @@ window.LV = {
       <div class="c11">
         <div class="titlebar">
           <div class="lights"><i></i><i></i><i></i></div>
-          <div class="tabs"><span class="tab">184: OSS Strategy Partner</span><span class="tab active">291: Merge Captain</span><span class="tab">284: Style Studio</span></div>
+          <div class="tabs"><span class="tab">184: Docs</span><span class="tab active">291: Review</span><span class="tab">284: Style Studio</span></div>
         </div>
         <div class="body">
           <div class="sidebar">
-            <div class="ws">Gregorovich<small>constellation · 2 agents</small></div>
-            <div class="ws active">LiquidVoice<small>Merge Captain · working</small></div>
-            <div class="ws">Stage11 / c11<small>idle</small></div>
-            <div class="ws">Acetate<small>idle</small></div>
+            <div class="ws">api-server<small>2 agents</small></div>
+            <div class="ws active">LiquidVoice<small>Review · working</small></div>
+            <div class="ws">docs-site<small>idle</small></div>
+            <div class="ws">mobile-app<small>idle</small></div>
           </div>
           <div class="term">${TERM_LINES.join("\n")}</div>
         </div>

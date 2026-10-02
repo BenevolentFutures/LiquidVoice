@@ -28,9 +28,10 @@ Atin dictates into Claude Code in c11 all day with the installed app. Text deliv
 
 ```sh
 xcodebuild -project Fluid.xcodeproj -scheme Fluid -configuration Debug -destination 'platform=macOS' \
-  -derivedDataPath DerivedData DEVELOPMENT_TEAM=UKQ4QALWD4 SDK_STAT_CACHE_ENABLE=NO build
+  -derivedDataPath DerivedData DEVELOPMENT_TEAM="$LIQUIDVOICE_DEVELOPMENT_TEAM" SDK_STAT_CACHE_ENABLE=NO build
 ```
 
+- `LIQUIDVOICE_DEVELOPMENT_TEAM` is your own 10-character Apple team ID (the maintainer uses his own; contributors pass theirs). `./build.sh` reads the same variable.
 - Always pass `SDK_STAT_CACHE_ENABLE=NO`. On this machine `clang-stat-cache` hangs at 0% CPU on its second run in a DerivedData folder, and the build sits at "ClangStatCache" with no error. If you see that, kill `clang-stat-cache` and re-run with the flag.
 - Product: `DerivedData/Build/Products/Debug/Liquid Voice Debug.app`.
 - The warning about `CTranscribe.framework/Versions/Current` symlinks is harmless for Debug builds.

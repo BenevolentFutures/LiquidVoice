@@ -1,5 +1,7 @@
 # Liquid Voice install checklist
 
+This is the maintainer's own post-install checklist; contributors do not need it.
+
 Run once after installing a new build. It takes about ten minutes, fifteen the first time after the identity change.
 
 Install with `./build.sh install` (with Atin, never unattended). It quits the app and waits for it to go, backs up the installed one to `~/Backups/liquid-voice-<timestamp>/Liquid Voice.app` and verifies the copy (bundle ID and `codesign --verify --deep --strict`), prints the rollback command, and only then copies the new build next to the old one and swaps it in. Keep that output.

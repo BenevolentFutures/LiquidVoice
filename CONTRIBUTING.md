@@ -27,6 +27,10 @@ if a build sits at `ClangStatCache` and never moves, add `SDK_STAT_CACHE_ENABLE=
 - keep telemetry off, the upstream updater off, and Fluid Intelligence out.
 - don't change `DEVELOPMENT_TEAM` in the project; `build.sh` passes yours at build time. never commit an API key. `scripts/check-team-id.sh` works as a pre-commit hook that catches a team change.
 
+## releases.
+
+maintainers cut releases with `scripts/release.sh`; the steps are in [docs/RELEASING.md](docs/RELEASING.md).
+
 ## upstream.
 
 Liquid Voice ports fixes from [FluidVoice](https://github.com/altic-dev/FluidVoice) by hand; see [UPSTREAM.md](UPSTREAM.md). if your fix also applies to FluidVoice, please send it to them too. they built nearly all of this.

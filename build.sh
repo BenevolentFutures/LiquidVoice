@@ -8,6 +8,7 @@
 #   ./build.sh unsigned           # unsigned Debug build (CI/fallback)
 #   ./build.sh release            # signed Release build -> "Liquid Voice.app"
 #   ./build.sh install            # Release build, back up the installed app, install to /Applications
+#   ./build.sh dist               # Developer ID signed, notarized DMG in dist/ (scripts/release.sh)
 
 set -euo pipefail
 
@@ -465,9 +466,12 @@ case "${PROFILE}" in
     install)
         run_release_build install
         ;;
+    dist)
+        exec "${PROJECT_DIR}/scripts/release.sh" all
+        ;;
     *)
         echo "Unknown build profile: ${PROFILE}"
-        echo "Valid profiles: public/oss/incremental/fast, unsigned/ci, release, install"
+        echo "Valid profiles: public/oss/incremental/fast, unsigned/ci, release, install, dist"
         exit 1
         ;;
 esac

@@ -189,7 +189,7 @@ SettingsStore.xcuserstate
 build_*
 build_dev.sh
 build_and_notarize.sh
-release.sh
+/release.sh
 check_downloads.sh
 
 
@@ -221,3 +221,6 @@ builds/
 # Python bytecode (scripts/)
 __pycache__/
 *.pyc
+
+## Release output (scripts/release.sh)
+dist/

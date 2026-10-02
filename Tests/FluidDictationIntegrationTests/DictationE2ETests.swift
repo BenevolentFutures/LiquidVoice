@@ -3487,10 +3487,13 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         // unsnapped.
         let before = trace.pushes
         var u = t
-        while trace.pushes == before {
+        // Capped (a second of speech pushes about twelve bars): a regression fails, never spins.
+        for _ in 0..<94 where trace.pushes == before {
             trace.ingest(level: 0.95, at: u)
             u += 0.0107
         }
+        XCTAssertGreaterThan(trace.pushes, before, "a loud word pushes a bar within a second")
+        guard trace.pushes > before else { return }
         let pushedAt = trace.lastPush
         let pushesAtWord = trace.pushes
         let target = trace.current[38]
@@ -4249,9 +4252,27 @@ final class SignalFloatShadowTests: XCTestCase {
         super.tearDown()
     }
 
-    /// Lets queued main-queue turns run (the shadow's deferred present, withdraw and alpha).
-    private func mainTurns() async throws {
-        try await Task.sleep(nanoseconds: 60_000_000)
+    /// Waits until the main-queue blocks already queued have run (the shadow's deferred present,
+    /// withdraw and alpha hops), `turns` hops deep: the main queue is FIFO, so a block queued behind
+    /// them runs after them.
+    /// No wall clock, and bounded: a block that never runs fails in seconds, never hangs the suite.
+    private func drainMainQueue(turns: Int = 3) async {
+        for _ in 0..<turns {
+            let drained = XCTestExpectation(description: "main queue turn")
+            DispatchQueue.main.async { drained.fulfill() }
+            await self.fulfillment(of: [drained], timeout: 2)
+        }
+    }
+
+    /// Polls `condition` every 5 ms until it holds or `timeout` passes, for what lands on a timer
+    /// or a layout pass rather than a known number of main-queue turns.
+    private func waitUntil(timeout: TimeInterval = 2, _ condition: () -> Bool) async throws -> Bool {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        while !condition() {
+            guard ProcessInfo.processInfo.systemUptime < deadline else { return false }
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
+        return true
     }
 
     func testTheShadowPanelIsAClickThroughChildUnderTheOverlayThatFollowsIt() async throws {
@@ -4279,21 +4300,23 @@ final class SignalFloatShadowTests: XCTestCase {
             // The start path moves and orders the pill alone; the shadow follows on a later turn.
             XCTAssertNil(shadow.parent, "\(pass): the show orders one window")
             XCTAssertFalse(floatShadow.isPresented)
-            try await self.mainTurns()
+            await self.drainMainQueue()
             let overlay = try XCTUnwrap(shadow.parent, "\(pass): the shadow is a child of the overlay")
             XCTAssertTrue(overlay.childWindows?.contains(shadow) == true)
             XCTAssertEqual(shadow.frame, overlay.frame.insetBy(dx: -margin, dy: -margin), "\(pass): under the pill, not where it was parked")
             XCTAssertEqual(shadow.alphaValue, 1)
-            XCTAssertEqual(floatShadow.state.surface, pillBox, "\(pass): the pill reports its own box")
+            // The pill reports its box from a SwiftUI layout pass, not a known main-queue turn.
+            let reported = try await self.waitUntil { floatShadow.state.surface == pillBox }
+            XCTAssertTrue(reported, "\(pass): the pill reports its own box, \(String(describing: floatShadow.state.surface))")
 
             _ = await controller.hideAndWait()
-            try await self.mainTurns()
+            await self.drainMainQueue()
             XCTAssertEqual(overlay.alphaValue, 0)
             XCTAssertEqual(shadow.alphaValue, 0, "\(pass): alpha 0 casts nothing")
             XCTAssertNil(shadow.parent, "\(pass): withdrawn once hidden")
             // Idle past the parking delay: the pill parks offscreen alone.
-            try await Task.sleep(nanoseconds: 150_000_000)
-            XCTAssertEqual(controller.windowStateForTests?.isParkedOffscreen, true, "\(pass): parked")
+            let parked = try await self.waitUntil { controller.windowStateForTests?.isParkedOffscreen == true }
+            XCTAssertTrue(parked, "\(pass): parked")
             XCTAssertNil(shadow.parent)
         }
     }
@@ -4324,8 +4347,10 @@ final class SignalFloatShadowTests: XCTestCase {
         let cards = DeliveryFailureOverlayController.shared
         cards.showTranscriptionTimeout(.timedOut)
         defer { cards.hide() }
-        try await Task.sleep(nanoseconds: 100_000_000)
         let shadow = cards.floatShadow.panelForTests
+        // The card reports its surface on its first layout pass.
+        let laidOut = try await self.waitUntil { shadow.parent != nil && cards.floatShadow.state.surface != nil }
+        XCTAssertTrue(laidOut, "the card laid out within 2 s")
         XCTAssertNotNil(shadow.parent, "attached under the card's panel")
         XCTAssertTrue(shadow.ignoresMouseEvents)
         let surface = try XCTUnwrap(cards.floatShadow.state.surface, "the card reports its grown pill")
@@ -4333,30 +4358,53 @@ final class SignalFloatShadowTests: XCTestCase {
         XCTAssertEqual(surface.minX, SignalTheme.Metrics.windowInsets.leading + SignalTheme.Metrics.chip + SignalTheme.Metrics.railGap)
     }
 
+    /// A fade is the parent's alpha stepped down (AppKit's animator sets it step by step, each step a
+    /// KVO change), so the test steps it by hand. It never runs a real `NSAnimationContext` fade: its
+    /// frames evidently tick on the display, so while the displays sleep its completion never comes.
+    /// On 2026-10-01 one run took 51 s and ended the moment the displays woke, and a full-suite run
+    /// hung for more than 10 minutes.
     func testTheShadowFollowsItsSurfaceAlphaThroughAFade() async throws {
         let parent = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        parent.alphaValue = 0.6
         let floatShadow = SignalFloatShadow { state in SignalFloatShadowView(state: state) }
         floatShadow.attach(to: parent)
         defer { floatShadow.detach() }
+        let shadow = floatShadow.panelForTests
         let margin = SignalFloatShadow.margin
-        XCTAssertEqual(floatShadow.panelForTests.frame, NSRect(x: 0, y: 0, width: 200, height: 100).insetBy(dx: -margin, dy: -margin))
+        XCTAssertEqual(shadow.frame, NSRect(x: 0, y: 0, width: 200, height: 100).insetBy(dx: -margin, dy: -margin))
         parent.setFrame(NSRect(x: 10, y: 20, width: 300, height: 120), display: false)
-        XCTAssertEqual(floatShadow.panelForTests.frame, NSRect(x: 10, y: 20, width: 300, height: 120).insetBy(dx: -margin, dy: -margin), "follows a resize")
-        await withCheckedContinuation { continuation in
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = SignalTheme.Motion.dismiss
-                parent.animator().alphaValue = 0
-            } completionHandler: {
-                continuation.resume()
-            }
-        }
-        try await self.mainTurns()
-        XCTAssertEqual(floatShadow.panelForTests.alphaValue, 0, "a card's fade takes its shadow along")
+        XCTAssertEqual(shadow.frame, NSRect(x: 10, y: 20, width: 300, height: 120).insetBy(dx: -margin, dy: -margin), "follows a resize")
+        await self.drainMainQueue(turns: 1)
+        XCTAssertEqual(shadow.alphaValue, 0.6, accuracy: 0.001, "mirrors the parent from the attach")
         parent.alphaValue = 1
-        try await self.mainTurns()
-        XCTAssertEqual(floatShadow.panelForTests.alphaValue, 1)
+        await self.drainMainQueue(turns: 1)
+
+        var mirrored: CGFloat = 1
+        for step: CGFloat in [0.75, 0.5, 0.25, 0] {
+            parent.alphaValue = step
+            XCTAssertEqual(shadow.alphaValue, mirrored, accuracy: 0.001, "never inside the parent's own alpha change")
+            await self.drainMainQueue(turns: 1)
+            XCTAssertEqual(shadow.alphaValue, step, accuracy: 0.001, "a card's fade takes its shadow along, step by step")
+            mirrored = step
+        }
+        // A fade superseded in the same turn (a new card cuts back to opaque): the last value wins.
+        parent.alphaValue = 0.4
+        parent.alphaValue = 1
+        await self.drainMainQueue(turns: 1)
+        XCTAssertEqual(shadow.alphaValue, 1)
+        // The animator's own path, as a card uses it: a zero-length group (no frames to wait for).
+        // The completion handler is spelled out: in an async context the bare call is the async
+        // overload, which awaits the completion.
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0
+            parent.animator().alphaValue = 0
+        }, completionHandler: nil)
+        XCTAssertEqual(parent.alphaValue, 0, "a zero-length group sets the value at once")
+        let followed = try await self.waitUntil { shadow.alphaValue == 0 }
+        XCTAssertTrue(followed, "an animator-driven change reaches the shadow")
+
         parent.setFrameOrigin(NSPoint(x: 100_000, y: 100_000))
-        XCTAssertEqual(floatShadow.panelForTests.frame.origin, NSPoint(x: 100_000 - margin, y: 100_000 - margin), "follows a move, parked included")
+        XCTAssertEqual(shadow.frame.origin, NSPoint(x: 100_000 - margin, y: 100_000 - margin), "follows a move, parked included")
     }
 
     private static func pixels(_ view: some View, size: CGSize) throws -> (cg: CGImage, alphaAt: (Int, Int) -> UInt8) {

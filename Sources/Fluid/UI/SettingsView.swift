@@ -171,7 +171,7 @@ struct SettingsView: View {
                             // Launch at startup
                             self.settingsToggleRow(
                                 title: "Launch at startup",
-                                description: "Automatically start Liquid Voice when you log in",
+                                description: "Automatically start MouthKeys when you log in",
                                 footnote: self.settings.launchAtStartupStatusMessage,
                                 errorMessage: self.settings.launchAtStartupErrorMessage,
                                 isOn: self.launchAtStartupBinding
@@ -181,7 +181,7 @@ struct SettingsView: View {
                             // Show window when launched at login
                             self.settingsToggleRow(
                                 title: "Show window when launched at login",
-                                description: "When off, Liquid Voice starts silently in the menu bar at login. Opening the app yourself always shows the window.",
+                                description: "When off, MouthKeys starts silently in the menu bar at login. Opening the app yourself always shows the window.",
                                 isOn: Binding(
                                     get: { SettingsStore.shared.showMainWindowAtLoginLaunch },
                                     set: { SettingsStore.shared.showMainWindowAtLoginLaunch = $0 }
@@ -192,7 +192,7 @@ struct SettingsView: View {
                             // Hide from Dock & App Switcher
                             self.settingsToggleRow(
                                 title: "Hide from Dock & App Switcher",
-                                description: "Keep Liquid Voice in the menu bar only (hides Dock icon and Cmd+Tab entry)",
+                                description: "Keep MouthKeys in the menu bar only (hides Dock icon and Cmd+Tab entry)",
                                 footnote: "Note: May require app restart to take effect.",
                                 isOn: Binding(
                                     get: { SettingsStore.shared.hideFromDockAndAppSwitcher },
@@ -313,7 +313,7 @@ struct SettingsView: View {
                             Divider().opacity(0.2)
 
                             // Updates: the upstream updater is off, so there is nothing to check.
-                            Text("Liquid Voice updates by local rebuild (./build.sh install).")
+                            Text("MouthKeys updates by local rebuild (./build.sh install).")
                                 .font(self.theme.typography.bodySmall)
                                 .foregroundStyle(self.settingsSecondaryText)
                         }
@@ -728,7 +728,7 @@ struct SettingsView: View {
 
                                     self.optionToggleRow(
                                         title: "Pause Media During Transcription",
-                                        description: "Automatically pause currently playing audio/video when transcription starts. Resumes only if Liquid Voice paused it.",
+                                        description: "Automatically pause currently playing audio/video when transcription starts. Resumes only if MouthKeys paused it.",
                                         isOn: Binding(
                                             get: { SettingsStore.shared.pauseMediaDuringTranscription },
                                             set: { SettingsStore.shared.pauseMediaDuringTranscription = $0 }
@@ -741,7 +741,7 @@ struct SettingsView: View {
                                             Text("Analytics")
                                                 .font(self.theme.typography.bodyStrong)
                                                 .foregroundStyle(self.settingsTitleText)
-                                            Text("Liquid Voice sends no analytics or telemetry.")
+                                            Text("MouthKeys sends no analytics or telemetry.")
                                                 .font(self.theme.typography.bodySmall)
                                                 .foregroundStyle(self.settingsSecondaryText)
                                         }
@@ -897,7 +897,7 @@ struct SettingsView: View {
 
                             self.optionToggleRow(
                                 title: "Microphone Changes",
-                                description: "Show an alert when Liquid Voice changes or loses its microphone.",
+                                description: "Show an alert when MouthKeys changes or loses its microphone.",
                                 isOn: Binding(
                                     get: { self.settings.showMicrophoneChangeAlerts },
                                     set: { enabled in
@@ -913,7 +913,7 @@ struct SettingsView: View {
 
                             self.optionToggleRow(
                                 title: "Paste Check",
-                                description: "Show a card when Liquid Voice can't confirm that pasted text landed. Failures it can see for certain always show a card.",
+                                description: "Show a card when MouthKeys can't confirm that pasted text landed. Failures it can see for certain always show a card.",
                                 isOn: Binding(
                                     get: { self.settings.showPasteCheckAlerts },
                                     set: { self.settings.showPasteCheckAlerts = $0 }
@@ -1372,7 +1372,7 @@ struct SettingsView: View {
 
             self.presentInfoAlert(
                 title: "Backup Exported",
-                message: "Saved your Liquid Voice backup to:\n\(url.path)"
+                message: "Saved your MouthKeys backup to:\n\(url.path)"
             )
         } catch {
             self.presentErrorAlert(
@@ -1457,7 +1457,7 @@ struct SettingsView: View {
             let confirm = NSAlert()
             confirm.messageText = "Prune saved audio?"
             confirm.informativeText = """
-            This budget is below current audio usage. Liquid Voice will delete the oldest saved audio first and keep transcript history.
+            This budget is below current audio usage. MouthKeys will delete the oldest saved audio first and keep transcript history.
             """
             confirm.alertStyle = .warning
             confirm.addButton(withTitle: "Apply and Prune")
@@ -1988,14 +1988,14 @@ struct SettingsView: View {
     }
 }
 
-// Spoken Send settings. Ported from altic-dev/FluidVoice@c679506d, plus Liquid Voice's
+// Spoken Send settings. Ported from altic-dev/FluidVoice@c679506d, plus MouthKeys'
 // "Allow in c11" (upstream blocks every terminal).
 private extension SettingsView {
     var spokenSendSettings: some View {
         Group {
             self.optionToggleRow(
                 title: "Spoken Send",
-                description: "End a dictation with a phrase and Liquid Voice presses Return after the text lands.",
+                description: "End a dictation with a phrase and MouthKeys presses Return after the text lands.",
                 isOn: Binding(
                     get: { self.settings.spokenSendEnabled },
                     set: { self.settings.spokenSendEnabled = $0 }
@@ -2132,7 +2132,7 @@ private extension SettingsView {
             )
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-            Text("Liquid Voice tries microphones from top to bottom. Drag to reorder; unavailable devices keep their place.")
+            Text("MouthKeys tries microphones from top to bottom. Drag to reorder; unavailable devices keep their place.")
                 .font(self.theme.typography.bodySmall)
                 .foregroundStyle(self.settingsSecondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -2316,7 +2316,7 @@ private extension SettingsView {
             )
         } else {
             self.microphoneQualityGuidanceRow(
-                message: "This order applies only to Liquid Voice and does not change your macOS input.",
+                message: "This order applies only to MouthKeys and does not change your macOS input.",
                 systemImage: "info.circle",
                 color: self.settingsSecondaryText
             )

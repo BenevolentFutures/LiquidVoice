@@ -1,6 +1,6 @@
 # Upstream
 
-Liquid Voice is a GPL-3 fork of [FluidVoice](https://github.com/altic-dev/FluidVoice) by altic-dev (git remote `upstream`). It is a separate product focused on straight voice to text: no Fluid Intelligence, no telemetry, no upstream updater.
+MouthKeys is a GPL-3 fork of [FluidVoice](https://github.com/altic-dev/FluidVoice) by altic-dev (git remote `upstream`). It is a separate product focused on straight voice to text: no Fluid Intelligence, no telemetry, no upstream updater.
 
 ## Policy
 

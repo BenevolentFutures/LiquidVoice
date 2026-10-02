@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Liquid Voice · Lumen</title>
+<title>MouthKeys · Lumen</title>
 <link rel="stylesheet" href="../shared/stage.css">
 <style>
 /* =====================================================================================
@@ -918,7 +918,7 @@
   }
   function buildMenubar() {
     const slot = LVStage.menubarSlot();
-    slot.innerHTML = `<span class="lv-status" id="lv-status" role="button" aria-haspopup="menu" aria-label="Liquid Voice">
+    slot.innerHTML = `<span class="lv-status" id="lv-status" role="button" aria-haspopup="menu" aria-label="MouthKeys">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path id="lv-mb-wave" fill="currentColor" d="${mbPath(...MB_REST)}"/></svg></span>`;
     el.status = document.getElementById("lv-status");
     el.mbWave = document.getElementById("lv-mb-wave");
@@ -950,7 +950,7 @@
       <div class="mi" data-act="history"><span>History…</span></div>
       <div class="mi" data-act="settings"><span>Settings…</span><span class="sp"></span><kbd>⌘,</kbd></div>
       <div class="sep"></div>
-      <div class="mi" data-act="quit"><span>Quit Liquid Voice</span><span class="sp"></span><kbd>⌘Q</kbd></div>`;
+      <div class="mi" data-act="quit"><span>Quit MouthKeys</span><span class="sp"></span><kbd>⌘Q</kbd></div>`;
     const sub = document.createElement("div");
     sub.className = "lv-menu sub lv-edge"; sub.id = "lv-submenu"; sub.setAttribute("role", "menu");
     document.body.append(m, sub);

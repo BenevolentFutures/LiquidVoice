@@ -1,4 +1,4 @@
-# Liquid Voice visual language: the three directions
+# MouthKeys visual language: the three directions
 
 Round 1, 2026-09-27. Same anatomy in all three (four corner chips on rails, wide fine scrolling trace, target-app icon in the pill, history card, drag with memory). What differs is the aesthetic thesis: what the overlay is *made of*.
 

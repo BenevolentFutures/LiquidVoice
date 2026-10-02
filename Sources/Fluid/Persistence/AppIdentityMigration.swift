@@ -11,10 +11,11 @@ nonisolated protocol AppIdentityMigrationDefaults: AnyObject {
 
 nonisolated extension UserDefaults: AppIdentityMigrationDefaults {}
 
-/// One-time copy of FluidVoice-era data on the first launch of Liquid Voice's own identity.
+/// One-time copy of FluidVoice-era data on the first launch of the app's own identity.
 ///
-/// Liquid Voice ran as `com.FluidApp.app`, with its files in `Application Support/FluidVoice`,
-/// until it became its own app (`com.stage11.liquidvoice`, folder `LiquidVoice`). macOS keys
+/// The app ran as `com.FluidApp.app`, with its files in `Application Support/FluidVoice`,
+/// until it became its own app (`com.stage11.liquidvoice`, folder `LiquidVoice`, both named while
+/// the app was called Liquid Voice and kept on purpose after the MouthKeys rename). macOS keys
 /// UserDefaults by bundle identifier, so without this the new app would start empty. On the
 /// first launch of the installed app it:
 ///
@@ -112,12 +113,12 @@ nonisolated struct AppIdentityMigration {
         let backups: [URL]
 
         var title: String {
-            "Liquid Voice couldn't finish bringing over your settings"
+            "MouthKeys couldn't finish bringing over your settings"
         }
 
         var message: String {
             var lines = [
-                "Copying your settings, history and dictionary from the previous version failed twice, so Liquid Voice has stopped retrying. Nothing was deleted: the previous version's data is untouched.",
+                "Copying your settings, history and dictionary from the previous version failed twice, so MouthKeys has stopped retrying. Nothing was deleted: the previous version's data is untouched.",
             ]
             if self.backups.isEmpty {
                 lines.append("Nothing had to be set aside.")
@@ -705,7 +706,7 @@ nonisolated struct AppIdentityMigration {
         case .requiresApproval:
             self.log(
                 .warning,
-                "\(Self.logPrefix) step=login_item outcome=requires_approval (approve Liquid Voice in System Settings > General > Login Items)"
+                "\(Self.logPrefix) step=login_item outcome=requires_approval (approve MouthKeys in System Settings > General > Login Items)"
             )
         case let .failed(reason):
             self.log(

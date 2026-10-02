@@ -23,7 +23,7 @@ enum KeychainServiceError: Error, LocalizedError {
 final class KeychainService {
     static let shared = KeychainService()
 
-    /// Kept from FluidVoice on purpose when Liquid Voice took its own bundle identifier: a
+    /// Kept from FluidVoice on purpose when the app took its own bundle identifier: a
     /// service name is not tied to the app's identifier, so any key saved before the change
     /// still loads (after macOS asks once to allow the new app), with nothing to migrate.
     nonisolated static let serviceName = "com.fluidvoice.provider-api-keys"

@@ -360,7 +360,7 @@ final class SimpleUpdater {
             backing: .buffered,
             defer: false
         )
-        panel.title = "Installing Liquid Voice \(version)"
+        panel.title = "Installing MouthKeys \(version)"
         panel.level = .floating
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -383,12 +383,12 @@ final class SimpleUpdater {
         icon.imageScaling = .scaleProportionallyUpOrDown
         content.addSubview(icon)
 
-        let title = NSTextField(labelWithString: "Installing Liquid Voice \(version)")
+        let title = NSTextField(labelWithString: "Installing MouthKeys \(version)")
         title.frame = NSRect(x: 92, y: 76, width: 304, height: 24)
         title.font = .systemFont(ofSize: 16, weight: .semibold)
         content.addSubview(title)
 
-        let detail = NSTextField(wrappingLabelWithString: "Downloading the update. Liquid Voice will restart automatically.")
+        let detail = NSTextField(wrappingLabelWithString: "Downloading the update. MouthKeys will restart automatically.")
         detail.frame = NSRect(x: 92, y: 42, width: 304, height: 34)
         detail.font = .systemFont(ofSize: 13)
         detail.textColor = .secondaryLabelColor

@@ -1,6 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
-@testable import Liquid_Voice_Debug
+@testable import MouthKeys_Debug
 import XCTest
 
 // Text delivery tests. Every test that writes a pasteboard uses a private, uniquely named
@@ -9,8 +9,8 @@ import XCTest
 // Pasteboard hygiene tests are ported from altic-dev/FluidVoice's
 // TypingServiceTransientPasteboardTests and PasteDeliveryCoordinatorTests
 // (@b0d64436, @b1184755, @03477453, @a2d6ef32, @bbaedd94, @a3c896a7, @c0118882, @a1a65772,
-// @caedd4ef, @788d04b6, @b1d14044, @adf0216e), adapted to Liquid Voice's serial paste
-// session. The invariant tests at the bottom are Liquid Voice's own.
+// @caedd4ef, @788d04b6, @b1d14044, @adf0216e), adapted to MouthKeys' serial paste
+// session. The invariant tests at the bottom are MouthKeys' own.
 
 // MARK: - Temporary write and snapshot/restore
 
@@ -1014,7 +1014,7 @@ final class DictationTargetPolicyTests: XCTestCase {
         XCTAssertNil(DictationTargetPolicy.selectStopTarget(current: nil, original: nil, returnToStartingField: true, ownPID: self.ownPID))
     }
 
-    func testLiquidVoicesOwnMainWindowIsARealDestination() {
+    func testMouthKeysOwnMainWindowIsARealDestination() {
         let result = DictationTargetPolicy.selectStopTarget(
             current: self.target(self.ownPID), original: self.target(100), returnToStartingField: false,
             ownPID: self.ownPID, ownFocusIsOverlay: false

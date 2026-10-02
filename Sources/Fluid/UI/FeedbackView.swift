@@ -32,7 +32,7 @@ struct FeedbackView: View {
                         VStack(alignment: .leading) {
                             Text("Send Feedback")
                                 .font(.system(size: 28, weight: .bold))
-                            Text("Report a bug or suggest a change on Liquid Voice's GitHub")
+                            Text("Report a bug or suggest a change on the MouthKeys GitHub")
                                 .font(.system(size: 16))
                                 .foregroundStyle(.secondary)
                         }
@@ -48,11 +48,11 @@ struct FeedbackView: View {
                             .foregroundStyle(.pink)
 
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Liquid Voice is built on FluidVoice by altic-dev")
+                            Text("MouthKeys is built on FluidVoice by altic-dev")
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(self.theme.palette.primaryText)
 
-                            Text("FluidVoice is the open-source dictation app this fork comes from. If Liquid Voice is useful to you, consider supporting its original author.")
+                            Text("FluidVoice is the open-source dictation app this fork comes from. If MouthKeys is useful to you, consider supporting its original author.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(self.theme.palette.secondaryText)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -178,7 +178,7 @@ struct FeedbackView: View {
         let version = info?["CFBundleShortVersionString"] as? String ?? "unknown"
         let build = info?["CFBundleVersion"] as? String ?? "unknown"
         return """
-        Liquid Voice \(version) (\(build))
+        MouthKeys \(version) (\(build))
         macOS \(ProcessInfo.processInfo.operatingSystemVersionString)
         """
     }

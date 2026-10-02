@@ -1,19 +1,19 @@
 import Foundation
 
-/// Every outbound link the app opens. Liquid Voice's own links point at its fork; the only
-/// upstream links are deliberate credit to FluidVoice by altic-dev, which Liquid Voice is built on.
+/// Every outbound link the app opens. MouthKeys' own links point at its fork; the only
+/// upstream links are deliberate credit to FluidVoice by altic-dev, which MouthKeys is built on.
 /// Nothing here is fetched: these URLs are only ever opened in the user's browser.
 enum LiquidVoiceLinks {
-    static let newIssue = URL(string: "https://github.com/BenevolentFutures/LiquidVoice/issues/new")!
+    static let newIssue = URL(string: "https://github.com/BenevolentFutures/MouthKeys/issues/new")!
 
-    /// Upstream credit: the project Liquid Voice is forked from, and its maintainer's sponsor page.
+    /// Upstream credit: the project MouthKeys is forked from, and its maintainer's sponsor page.
     static let upstreamRepository = URL(string: "https://github.com/altic-dev/FluidVoice")!
     static let upstreamSponsor = URL(string: "https://github.com/sponsors/altic-dev")!
 
     /// GitHub rejects very long URLs; keep the prefilled issue comfortably under its limit.
     static let maxIssueURLLength = 7500
 
-    /// A new-issue URL on Liquid Voice's GitHub with the title and body prefilled. Opening it
+    /// A new-issue URL on MouthKeys' GitHub with the title and body prefilled. Opening it
     /// sends nothing: the user reviews the draft and submits it on GitHub themselves. When the
     /// URL would be too long, `body` is shortened; `footer` (such as version info) is always kept.
     static func prefilledIssueURL(title: String, body: String, footer: String = "") -> URL {

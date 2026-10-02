@@ -2,7 +2,7 @@ import ApplicationServices
 import Foundation
 
 // Ported from altic-dev/FluidVoice@51e62364 (refuse delivery when focus is certainly not a
-// text field) and @a1a65772 (paste when focus is a window or app) by altic-dev. Liquid Voice
+// text field) and @a1a65772 (paste when focus is a window or app) by altic-dev. MouthKeys
 // additions: every Accessibility read is bounded (see TypingService.axMessagingTimeoutSeconds),
 // and the caller never refuses a c11/Ghostty target, whose GPU-drawn surface always takes Cmd+V.
 

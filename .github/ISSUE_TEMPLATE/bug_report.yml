@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a reproducible Liquid Voice bug.
+description: Report a reproducible MouthKeys bug.
 title: "[BUG] "
 labels: ["bug"]
 body:
@@ -8,7 +8,7 @@ body:
     attributes:
       label: Describe the bug
       description: Briefly describe what is broken.
-      placeholder: Liquid Voice crashes when...
+      placeholder: MouthKeys crashes when...
     validations:
       required: true
   - type: textarea
@@ -17,7 +17,7 @@ body:
       label: Reproduction steps
       description: Provide exact steps a maintainer can follow.
       placeholder: |
-        1. Open Liquid Voice
+        1. Open MouthKeys
         2. Configure...
         3. Press...
         4. Observe...

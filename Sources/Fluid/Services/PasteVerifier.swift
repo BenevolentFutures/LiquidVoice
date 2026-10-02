@@ -6,7 +6,7 @@ import Foundation
 //   @fadaed91 verify paste landed by reading focus back
 //   @caedd4ef wait 1.5 s before a not-landed verdict
 //   @788d04b6 ignore paste read-back after user input
-// Liquid Voice changes: every Accessibility read is bounded (a busy target cannot stall the
+// MouthKeys changes: every Accessibility read is bounded (a busy target cannot stall the
 // check), and a `notLanded` verdict is reported through TypingService's failure path instead
 // of a notification. The check itself is opt-in (Settings > Notifications > Paste Check,
 // @b1d14044) and skipped when a send key follows the paste (@98b5a278).

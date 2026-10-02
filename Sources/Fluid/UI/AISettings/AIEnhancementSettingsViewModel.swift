@@ -589,16 +589,16 @@ final class AIEnhancementSettingsViewModel: ObservableObject {
     }
 
     private func keychainPermissionExplanation(for status: OSStatus) -> String {
-        var message = "Liquid Voice stores provider API keys securely in your macOS Keychain but does not currently have permission to access it."
+        var message = "MouthKeys stores provider API keys securely in your macOS Keychain but does not currently have permission to access it."
         if let detail = SecCopyErrorMessageString(status, nil) as String? {
             message += "\n\nmacOS reported: \(detail) (\(status))"
         }
-        message += "\n\nClick \"Always Allow\" when the Keychain prompt appears, or open Keychain Access > login > Passwords, locate the Liquid Voice entry (com.fluidvoice.provider-api-keys), and grant access."
+        message += "\n\nClick \"Always Allow\" when the Keychain prompt appears, or open Keychain Access > login > Passwords, locate the entry named com.fluidvoice.provider-api-keys, and grant access."
         return message
     }
 
     private func keychainPersistenceExplanation(for error: Error) -> String {
-        var message = "Liquid Voice could not save the API key to your macOS Keychain, so this provider was not verified."
+        var message = "MouthKeys could not save the API key to your macOS Keychain, so this provider was not verified."
         if let keychainError = error as? KeychainServiceError {
             switch keychainError {
             case .invalidData:
@@ -613,7 +613,7 @@ final class AIEnhancementSettingsViewModel: ObservableObject {
         } else {
             message += "\n\n\(error.localizedDescription)"
         }
-        message += "\n\nClick \"Always Allow\" when the Keychain prompt appears, or open Keychain Access > login > Passwords, locate the Liquid Voice entry (com.fluidvoice.provider-api-keys), and grant access."
+        message += "\n\nClick \"Always Allow\" when the Keychain prompt appears, or open Keychain Access > login > Passwords, locate the entry named com.fluidvoice.provider-api-keys, and grant access."
         return message
     }
 
@@ -637,7 +637,7 @@ final class AIEnhancementSettingsViewModel: ObservableObject {
 
     func presentKeychainAccessAlert(message: String) {
         let msg = message.isEmpty
-            ? "Liquid Voice stores provider API keys securely in your macOS Keychain. Please grant access by choosing \"Always Allow\" when prompted."
+            ? "MouthKeys stores provider API keys securely in your macOS Keychain. Please grant access by choosing \"Always Allow\" when prompted."
             : message
 
         let alert = NSAlert()
@@ -1664,7 +1664,7 @@ final class AIEnhancementSettingsViewModel: ObservableObject {
 
     func addCurrentAppPromptBinding(for mode: SettingsStore.PromptMode) {
         guard let target = self.resolveBindingTargetApp() else {
-            self.appPromptBindingErrorMessage = "Could not detect a target app. Focus another app window (outside Liquid Voice) and try again."
+            self.appPromptBindingErrorMessage = "Could not detect a target app. Focus another app window (outside MouthKeys) and try again."
             DebugLogger.shared.info(
                 "App prompt binding skipped: unable to resolve non-Fluid target app",
                 source: "AISettingsView"

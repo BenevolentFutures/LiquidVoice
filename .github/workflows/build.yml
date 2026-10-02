@@ -53,7 +53,7 @@ jobs:
             - '.github/workflows/build.yml'
 
   build:
-    name: Build and test Liquid Voice
+    name: Build and test MouthKeys
     # A manual run always builds; otherwise only when build inputs changed, and never for a draft PR.
     if: >-
       !cancelled() && (github.event_name == 'workflow_dispatch' ||

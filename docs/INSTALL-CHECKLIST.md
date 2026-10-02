@@ -1,10 +1,10 @@
-# Liquid Voice install checklist
+# MouthKeys install checklist
 
 This is the maintainer's own post-install checklist; contributors do not need it.
 
 Run once after installing a new build. It takes about ten minutes, fifteen the first time after the identity change.
 
-Install with `./build.sh install` (with Atin, never unattended). It quits the app and waits for it to go, backs up the installed one to `~/Backups/liquid-voice-<timestamp>/Liquid Voice.app` and verifies the copy (bundle ID and `codesign --verify --deep --strict`), prints the rollback command, and only then copies the new build next to the old one and swaps it in. Keep that output.
+Install with `./build.sh install` (with Atin, never unattended). It quits the app and waits for it to go, backs up the installed one to `~/Backups/liquid-voice-<timestamp>/MouthKeys.app` (and an older `/Applications/MouthKeys.app`, if one is there, to `MouthKeys.app` beside it) and verifies each copy (bundle ID and `codesign --verify --deep --strict`), prints the rollback command, and only then copies the new build next to the old one and swaps it in. Keep that output.
 
 Tail the log in a c11 pane first:
 
@@ -18,14 +18,25 @@ Rollback: run the command `./build.sh install` printed:
 bash ~/Backups/liquid-voice-<timestamp>/rollback.sh
 ```
 
-It quits Liquid Voice, waits for it to go, puts the backed-up app back and opens it. The previous app still finds all of its own data, because the identity migration copies and never moves. Dictations made with the new app are not in the old one.
+It quits the app, waits for it to go, puts every backed-up app back where it was (an old `MouthKeys.app` under its old name), takes out a `MouthKeys.app` that was not there before, and opens what it restored. The previous app still finds all of its own data, because the identity migration copies and never moves. Dictations made with the new app are not in the old one.
+
+## R. First install after the rename to MouthKeys (once)
+
+The app was called Liquid Voice until 2026-10-02. Only the name changed: the bundle ID, `Application Support/LiquidVoice`, the log folder and the keychain item keep their old names, so nothing migrates.
+
+1. `./build.sh install` prints `Backing up /Applications/Liquid Voice.app ...` and `Took out the old /Applications/Liquid Voice.app`. Afterwards `ls /Applications | grep -iE 'liquid|mouthkeys'` shows only `MouthKeys.app`. Two copies with one bundle ID would confuse LaunchServices and the login item.
+2. Open `/Applications/MouthKeys.app`. The menu bar header reads MOUTHKEYS, the window title and the menu items say MouthKeys, and History, Custom Dictionary and Settings are as you left them. `grep IDENTITY_MIGRATION ~/Library/Logs/LiquidVoice/Fluid.log | tail -2` shows nothing new (the migration ran long ago).
+3. Permissions: the signature and bundle ID are unchanged, so Microphone and Accessibility should still be on. If macOS asks again, or dictation does not type, check Privacy & Security > Accessibility: remove a stale "Liquid Voice" row with the minus button and switch on MouthKeys.
+4. Launch at startup, if you had it on: System Settings > General > Login Items lists MouthKeys, not Liquid Voice. If it still says Liquid Voice or is missing, turn Launch at startup off and on in Settings, then log out and in once to confirm MouthKeys starts.
+5. Anyone who installed a Liquid Voice DMG: after installing MouthKeys from its DMG, drag the old Liquid Voice app to the Trash. Settings carry over since the bundle ID is unchanged; macOS may ask for permissions again.
+6. Dictate once into c11. The text lands.
 
 ## 0. First launch after the identity change (once)
 
 The app is now `com.stage11.liquidvoice`, no longer FluidVoice's `com.FluidApp.app`. macOS treats it as a new app: your data comes over on the first launch, but Microphone and Accessibility must be granted again.
 
 0. Before installing: nothing may exist yet under the new identity, or the one-time copy is skipped or merged into it. `defaults read com.stage11.liquidvoice` should say the domain does not exist, and `~/Library/Application Support/LiquidVoice` should not exist. `./build.sh install` checks both on a first install of the new identity; if either exists it explains, prints the commands to move them aside, and installs only after you type `install`. Move them aside unless Cairn says otherwise.
-1. Open `/Applications/Liquid Voice.app`. The window opens on **Getting Started**. Under Quick Setup, **Grant Microphone Permission** and **Enable Accessibility Access** are pending. The voice model shows ready after a second or two (the model cache is shared, nothing downloads).
+1. Open `/Applications/MouthKeys.app`. The window opens on **Getting Started**. Under Quick Setup, **Grant Microphone Permission** and **Enable Accessibility Access** are pending. The voice model shows ready after a second or two (the model cache is shared, nothing downloads).
 2. The log (new folder: `~/Library/Logs/LiquidVoice/`) shows, within a second of launch, with your own counts:
    ```
    IDENTITY_MIGRATION start from=com.FluidApp.app folder=FluidVoice to=com.stage11.liquidvoice folder=LiquidVoice
@@ -36,16 +47,16 @@ The app is now `com.stage11.liquidvoice`, no longer FluidVoice's `com.FluidApp.a
    ```
    Any `outcome=failed` or `result=incomplete`: stop and tell Cairn before dictating. The old data is untouched either way. A failed step is not marked done and runs once more on the next launch. Your old data always wins: a value or file the new app already had and the copy changes is saved first, to `~/Backups/liquid-voice-displaced-defaults-*.plist` or `~/Backups/liquid-voice-displaced-folder-*/`, and logged as `displaced=`. If a retry had to set data aside and still failed, the migration stops retrying: an alert before the app opens names the log and the backup (`outcome=halted`). To try again after a fix: `defaults delete com.stage11.liquidvoice LiquidVoiceIdentityMigrationDefaultsHalted`.
    Other lines: `outcome=merged` means a `LiquidVoice` folder already existed and the old files were merged into it; `skipped_symlink=` or `skipped_unreadable=` name old files left behind, on purpose; `skipped reason=not_installed` means the app was not started from `/Applications`.
-3. Accessibility: click **Open Settings** on that step. System Settings opens at Privacy & Security > Accessibility, with a floating guide. Drag Liquid Voice into the list (or click +, pick `/Applications/Liquid Voice.app`) and switch it on. About 2.5 s after you switch it on, the app restarts itself once. You may see two "Liquid Voice" rows; the one that was already on belongs to the old identifier. Leave it until you no longer need rollback (section 7).
+3. Accessibility: click **Open Settings** on that step. System Settings opens at Privacy & Security > Accessibility, with a floating guide. Drag MouthKeys into the list (or click +, pick `/Applications/MouthKeys.app`) and switch it on. About 2.5 s after you switch it on, the app restarts itself once. You may see an older row next to MouthKeys (named "MouthKeys" or "FluidVoice"); the one that was already on belongs to the old identifier. Leave it until you no longer need rollback (section 7).
 4. Microphone: after the restart, press the dictation hotkey (or click **Grant Access** under Getting Started, or in Settings > Microphone Permission). macOS asks; choose **Allow**. That press does not record; the next one does. If you choose Don't Allow, the hotkey shows a "Microphone access is off" card whose gear opens Privacy & Security > Microphone.
-   If no dialog appears and Liquid Voice is missing from Privacy & Security > Microphone, the app was signed without the microphone entitlement: `codesign -d --entitlements - --xml "/Applications/Liquid Voice.app" | grep -c device.audio-input` must print 1. `build.sh` now refuses to install a build without it (2026-09-28).
-   If macOS asks whether Liquid Voice may use the keychain item `com.fluidvoice.provider-api-keys`, choose Always Allow (only happens when an AI provider key was saved; there is none today).
+   If no dialog appears and MouthKeys is missing from Privacy & Security > Microphone, the app was signed without the microphone entitlement: `codesign -d --entitlements - --xml "/Applications/MouthKeys.app" | grep -c device.audio-input` must print 1. `build.sh` now refuses to install a build without it (2026-09-28).
+   If macOS asks whether MouthKeys may use the keychain item `com.fluidvoice.provider-api-keys`, choose Always Allow (only happens when an AI provider key was saved; there is none today).
 5. Your data carried over:
    - History lists your past dictations.
    - Custom Dictionary lists your entries and replacements.
    - Settings: the same dictation, Paste Last and Reprocess Last hotkeys; the same microphone, overlay position and size, sounds and text insertion mode.
    - `defaults read com.stage11.liquidvoice LiquidVoiceIdentityMigrationDefaults` prints the date and the key count.
-6. Launch at startup, only if you had it on: Settings shows it on, and System Settings > General > Login Items lists Liquid Voice. If the log says `requires_approval`, approve it there; if it says `outcome=failed`, turn Launch at startup on again in Settings. The old app's login item cannot be removed by the new app. It is registered as `com.FluidApp.app` and could start the backup copy, or an old Release build such as `~/Projects/LiquidVoice/DerivedData/Build/Products/Release/Liquid Voice.app`: remove the older "Liquid Voice" entry there with the minus button.
+6. Launch at startup, only if you had it on: Settings shows it on, and System Settings > General > Login Items lists MouthKeys. If the log says `requires_approval`, approve it there; if it says `outcome=failed`, turn Launch at startup on again in Settings. The old app's login item cannot be removed by the new app. It is registered as `com.FluidApp.app` and could start the backup copy, or an old Release build such as `~/Projects/LiquidVoice/DerivedData/Build/Products/Release/Liquid Voice.app`: remove the older "Liquid Voice" or "FluidVoice" entry there with the minus button.
 7. Dictate once into c11. The text lands. Then go on with section 1.
 
 ## 1. Delivery into c11 (must pass)
@@ -97,11 +108,11 @@ The app is now `com.stage11.liquidvoice`, no longer FluidVoice's `com.FluidApp.a
 27. Spoken Send on: say "… send it" and stop talking. SEND (orange) shows at the foot row's right end, then the flat trace with an orange bar draining over 1.5 s and the timer counting 1.5 to 0.0; then "Sent to c11 · N WORDS · RETURN". Again, but press Esc while SEND shows (or click the pill, or the Cancel chip): NO SEND, the bar stops in ink, the dictation keeps recording, and Claude Code does not see the Esc (the turn is not interrupted). Stop: the text lands and the prompt is not submitted. Press Esc twice while SEND shows: the second press cancels the dictation. After a stop, Esc while SEND shows drops the Return; a second Esc only dismisses the pill (the text still lands). In Terminal.app the placard reads NO SEND, dimmed, as soon as the phrase is heard.
 28. Recovery card: focus a button and dictate. The pill grows upward into "Couldn't paste into …" with the reason, the transcript, Copy and Dismiss; the trace row, mic row and chips stay exactly where they were.
 28a. Speech recognition is back (hard to trigger on purpose; check when it happens, or with `grep "Recognition-back notice row" ~/Library/Logs/LiquidVoice/Fluid.log`): the pill shows the headline, "A kept dictation is waiting" and Reprocess · Dismiss in its preview area, with no growth and no orange top rule. Hovering Reprocess draws its own bracket; Reprocess transcribes the kept recording; Dismiss and the Cancel chip close it; left alone it goes after 10 s.
-29. Menu bar: three bars at rest; bars plus a solid square while listening (the bars move); an outlined square only when a pass is slow; a bracket inside the mark on hover and while the menu is open. The menu has the mono LIQUID VOICE header with the state, Start Dictation with the hotkey (it starts one), the microphone, History… (opens History), Copy Last Transcript, Custom Dictionary, Open Liquid Voice, Settings…, Quit.
+29. Menu bar: three bars at rest; bars plus a solid square while listening (the bars move); an outlined square only when a pass is slow; a bracket inside the mark on hover and while the menu is open. The menu has the mono MOUTHKEYS header with the state, Start Dictation with the hotkey (it starts one), the microphone, History… (opens History), Copy Last Transcript, Custom Dictionary, Open MouthKeys, Settings…, Quit.
 30. The Dock and Finder show the new icon: an ink tile, white bars and one orange square (three bars in list views).
 
 ## 8. Cleanup, once rollback is no longer needed (optional)
 - Remove the old identity's permission rows: `tccutil reset Accessibility com.FluidApp.app` and `tccutil reset Microphone com.FluidApp.app`.
 - Archive, then remove, the old data: `defaults export com.FluidApp.app ~/Backups/com.FluidApp.app.plist && defaults delete com.FluidApp.app`, then `~/Library/Application Support/FluidVoice` and `~/Library/Logs/Fluid/`.
 - Every install keeps a full app copy in `~/Backups/liquid-voice-*`. Delete all but the last one or two now and then.
-- The migration runs once. To redo it (say, after a rollback during which you kept dictating in the old app): quit Liquid Voice, `defaults delete com.stage11.liquidvoice`, move `~/Library/Application Support/LiquidVoice` aside, and open the app. That replaces the new app's data with the old app's.
+- The migration runs once. To redo it (say, after a rollback during which you kept dictating in the old app): quit MouthKeys, `defaults delete com.stage11.liquidvoice`, move `~/Library/Application Support/LiquidVoice` aside, and open the app. That replaces the new app's data with the old app's.

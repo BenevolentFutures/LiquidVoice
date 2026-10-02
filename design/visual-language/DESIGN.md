@@ -1,4 +1,4 @@
-# Liquid Voice visual language: Signal
+# MouthKeys visual language: Signal
 
 **Status: locked by Atin, 2026-09-28** ("Awesome. This looks great. Let's go."), after four rounds on the recording overlay; **round 5 (same day) added the states the newer branch has** (Spoken Send, timeouts, recognition recovery, microphone permission, delivery-failure reasons, truthful wording, the app icon), see section 15; **round 6 (2026-10-01) made the pill shorter and gave the trace the room** (section 16), and the same day gave the foot row live counters, words and words per minute, and the Hollyland lapel mic's battery in the mic label (§16). This document is the binding design for the native build. Where it and the prototype disagree, the prototype wins and this file gets fixed.
 
@@ -8,7 +8,7 @@
 
 ## 1. Thesis
 
-Liquid Voice is straight voice to text. Its overlay is seen hundreds of times a day, so the language is **an engineering drawing of an instrument that stays quiet until you reach for it**: square solid surfaces, 1 px rules, square-ended ink bars, mono numerals and placards, and schematic selection brackets that draw outside a box's corners only under the pointer. No gradients, no blur, no glow, no materials, no corner radius. International orange is the only colour, and it only ever marks something live. Every state reads in a tenth of a second, and nothing moves unless it means something.
+MouthKeys is straight voice to text. Its overlay is seen hundreds of times a day, so the language is **an engineering drawing of an instrument that stays quiet until you reach for it**: square solid surfaces, 1 px rules, square-ended ink bars, mono numerals and placards, and schematic selection brackets that draw outside a box's corners only under the pointer. No gradients, no blur, no glow, no materials, no corner radius. International orange is the only colour, and it only ever marks something live. Every state reads in a tenth of a second, and nothing moves unless it means something.
 
 The diagram grammar (brackets, mono, thin rules, status in solid colour and words, never blinking) is inherited from an earlier engineering-drawing deck design of Atin's. Its colours are not.
 
@@ -144,7 +144,7 @@ Round 6 (Atin, 2026-10-01, round 6):
 3. **Transcribing.** Preview frozen and dimmed. Bars flat at 2 pt with the orange sweep crossing every 1.05 s. The square goes hollow, the timer freezes at the final duration. Copy and Reprocess dim. **No status word.** Menu bar: bars plus an outlined square.
 4. **Pasted** (was "Delivered"). The preview area swaps to the orange stamp, "Pasted into c11" and "118 WORDS" in mono. Trace flat, timer frozen (the duration appears once, here). Held 0.6 s, then dismissed. The paste was posted, not verified, hence the word.
 5. **Failed → Copy.** The pill grows upward (80 pt, 96 with a two-line reason; round 6): an orange 2 pt top rule, "Couldn't paste into c11", one reason line ("No text field focused" / "The text is on your clipboard" / "Your newer clipboard was left alone, the text is in History"), the transcript clamped to 3 lines, a solid orange **Copy** (becomes "✓ Copied" at the same width for 1.4 s), **Dismiss**, and "118 WORDS". Trace row, foot row, rails and chips do not move. Stays until dismissed, the next dictation, or 10 s (the countdown pauses while the pointer is over the card and resumes with 4 s when it leaves); it then fades out over 120 ms linear like the pill (a cut under reduced motion).
-6. **History.** The card opens at once, centred on the overlay and 6 pt above it (above a recovery card's grown pill too), with the listening state live underneath (Atin, 2026-10-01). An engineering table: mono index column ("01" over the time), day rows, 1 px rules, transcripts clamped to 4 lines, mono meta with the orange NOT DELIVERED marker where the paste failed, and a title-block footer ("HISTORY · 12 OF 247 · NEWEST FIRST" | "LIQUID VOICE"). Rows invert on hover; click inserts. The History chip stays inverted (latched) while the card is open. Closes on outside click, re-tap, or a row pick.
+6. **History.** The card opens at once, centred on the overlay and 6 pt above it (above a recovery card's grown pill too), with the listening state live underneath (Atin, 2026-10-01). An engineering table: mono index column ("01" over the time), day rows, 1 px rules, transcripts clamped to 4 lines, mono meta with the orange NOT DELIVERED marker where the paste failed, and a title-block footer ("HISTORY · 12 OF 247 · NEWEST FIRST" | "MOUTHKEYS"). Rows invert on hover; click inserts. The History chip stays inverted (latched) while the card is open. Closes on outside click, re-tap, or a row pick.
 
 7. **Send countdown**, 8. **Sent**, 9. **Transcription timed out**, 10. **Speech recognition is back**, 11. **Microphone access is off**: added in round 5, see section 15.
 
@@ -152,7 +152,7 @@ Chip glyphs and SF Symbols: History `clock.arrow.circlepath`, Copy `doc.on.doc`,
 
 ## 10. Menu bar
 
-A 22 × 16 template mark: three square-ended bars at rest; bars plus a solid square while listening (the bars follow the level at 8 Hz) and during the Spoken Send countdown (bars still); bars plus an outlined square while transcribing. The width never changes. The mark never changes while a dictation's stop pipeline runs (a status item image change is a WindowServer round trip on the paste's path): a slow final pass keeps the listening mark until the text is handed off, and the outlined square shows for work outside that pipeline (a reprocess, AI refinement). Hover draws the bracket inside the box. The menu is a plain `NSMenu` with a mono uppercase header: Start Dictation ⌥Space, the current microphone (submenu), History…, Settings…, Quit Liquid Voice.
+A 22 × 16 template mark: three square-ended bars at rest; bars plus a solid square while listening (the bars follow the level at 8 Hz) and during the Spoken Send countdown (bars still); bars plus an outlined square while transcribing. The width never changes. The mark never changes while a dictation's stop pipeline runs (a status item image change is a WindowServer round trip on the paste's path): a slow final pass keeps the listening mark until the text is handed off, and the outlined square shows for work outside that pipeline (a reprocess, AI refinement). Hover draws the bracket inside the box. The menu is a plain `NSMenu` with a mono uppercase header: Start Dictation ⌥Space, the current microphone (submenu), History…, Settings…, Quit MouthKeys.
 
 ## 11. Native mapping (the load-bearing parts)
 
@@ -237,7 +237,7 @@ One anatomy for every problem: the failed card grown upward from the pill with t
 |---|---|---|---|---|---|
 | Failed → Copy | Couldn't paste into c11 | one of the three reasons above | **Copy** → "✓ Copied" | `118 WORDS` | flat, frozen timer / mic |
 | Transcription timed out | Transcription timed out | Your audio is kept | **Reprocess** | none | flat, frozen timer / mic |
-| Microphone access is off | Microphone access is off | Allow Liquid Voice in Privacy & Security | **Open System Settings** (gear; opens Privacy & Security → Microphone) | none | flat, hollow square, `0:00` dim / `NO MICROPHONE` |
+| Microphone access is off | Microphone access is off | Allow MouthKeys in Privacy & Security | **Open System Settings** (gear; opens Privacy & Security → Microphone) | none | flat, hollow square, `0:00` dim / `NO MICROPHONE` |
 
 The Reprocess in a card and the Reprocess chip do the same thing; the chip stays. Card heights: 156 pt for a one-line card, 210 for failed, 226 with the two-line clipboard reason (Atin, 2026-10-01, round 6). Every card leaves after 10 s unless dismissed first (paused while the pointer is over it), fading over 120 ms linear. A card about the dictation the pill is holding takes the pill's place at once, so the pill reads as growing; a card about anything else, while a newer recording is live, sits above the pill.
 

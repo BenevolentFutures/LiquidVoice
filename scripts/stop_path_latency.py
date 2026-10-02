@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Median and p90 per stage of the dictation stop path, from Liquid Voice's own log.
+"""Median and p90 per stage of the dictation stop path, from MouthKeys' own log.
 
 Every build logs one STOP_SUMMARY line per dictation (see StopPathTrace.swift). This script
 reads those lines and prints a table. Nothing is sent anywhere.

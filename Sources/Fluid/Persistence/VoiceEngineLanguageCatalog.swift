@@ -49,7 +49,7 @@ struct VoiceEngineLanguageRoute: Identifiable, Equatable {
     var badgeText: String? {
         switch self.model {
         case .parakeetTDT, .parakeetTDTv2:
-            return "Optimized for Liquid Voice"
+            return "Optimized for MouthKeys"
         default:
             return nil
         }

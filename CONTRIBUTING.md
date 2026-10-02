@@ -1,6 +1,6 @@
 # contributing.
 
-thanks for helping. Liquid Voice is for straight voice to text on macOS. the most welcome changes make that more reliable: recognition, delivery, hotkeys, audio and the overlay.
+thanks for helping. MouthKeys is for straight voice to text on macOS. the most welcome changes make that more reliable: recognition, delivery, hotkeys, audio and the overlay.
 
 ## issues.
 
@@ -33,7 +33,7 @@ maintainers cut releases with `scripts/release.sh`; the steps are in [docs/RELEA
 
 ## upstream.
 
-Liquid Voice ports fixes from [FluidVoice](https://github.com/altic-dev/FluidVoice) by hand; see [UPSTREAM.md](UPSTREAM.md). if your fix also applies to FluidVoice, please send it to them too. they built nearly all of this.
+MouthKeys ports fixes from [FluidVoice](https://github.com/altic-dev/FluidVoice) by hand; see [UPSTREAM.md](UPSTREAM.md). if your fix also applies to FluidVoice, please send it to them too. they built nearly all of this.
 
 ## license.
 

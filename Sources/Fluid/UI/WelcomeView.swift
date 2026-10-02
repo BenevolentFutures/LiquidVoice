@@ -66,9 +66,9 @@ struct WelcomeView: View {
                             .font(self.theme.typography.titleIcon)
                             .foregroundStyle(self.theme.palette.accent)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text((self.asr.isAsrReady || self.asr.modelsExistOnDisk) ? "Getting Started" : "Welcome to Liquid Voice")
+                            Text((self.asr.isAsrReady || self.asr.modelsExistOnDisk) ? "Getting Started" : "Welcome to MouthKeys")
                                 .font(self.theme.typography.title)
-                            Text("Talk anywhere. Liquid Voice types for you.")
+                            Text("Talk anywhere. MouthKeys types for you.")
                                 .font(self.theme.typography.bodySmall)
                                 .foregroundStyle(.secondary)
                         }
@@ -119,8 +119,8 @@ struct WelcomeView: View {
                                     step: 2,
                                     title: self.asr.micStatus == .authorized ? "Microphone Permission Granted" : "Grant Microphone Permission",
                                     description: self.asr.micStatus == .authorized
-                                        ? "Liquid Voice has access to your microphone"
-                                        : "Allow Liquid Voice to access your microphone for voice input",
+                                        ? "MouthKeys has access to your microphone"
+                                        : "Allow MouthKeys to access your microphone for voice input",
                                     status: self.asr.micStatus == .authorized ? .completed : .pending,
                                     action: {
                                         if self.asr.micStatus == .notDetermined {
@@ -727,20 +727,20 @@ struct OnboardingFlowView: View {
             case .aiEnhancement:
                 return "Set Up AI Enhancement"
             case .playground:
-                return "Try Liquid Voice"
+                return "Try MouthKeys"
             }
         }
 
         var subtitle: String {
             switch self {
             case .landing:
-                return "Talk anywhere. Liquid Voice types for you."
+                return "Talk anywhere. MouthKeys types for you."
             case .language:
                 return "Pick the language you speak most."
             case .voiceModel:
                 return "Choose the best local engine for your language."
             case .permissions:
-                return "Allow Liquid Voice to listen and type into other apps."
+                return "Allow MouthKeys to listen and type into other apps."
             case .aiEnhancement:
                 return "Optional: Configure AI post-processing or skip this step."
             case .playground:
@@ -1040,7 +1040,7 @@ struct OnboardingFlowView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Welcome to Liquid Voice")
+            Text("Welcome to MouthKeys")
                 .font(self.theme.typography.title)
                 .foregroundStyle(self.theme.palette.primaryText)
 
@@ -1769,7 +1769,7 @@ struct OnboardingFlowView: View {
                             FluidOnboardingCompactAppIconMark(size: 66)
                                 .padding(.bottom, 22)
 
-                            Text("Let Liquid Voice\nlisten and type")
+                            Text("Let MouthKeys\nlisten and type")
                                 .font(.system(size: 28, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .multilineTextAlignment(.center)
@@ -1786,7 +1786,7 @@ struct OnboardingFlowView: View {
                                     stepNumber: 1,
                                     title: self.isMicrophoneReady ? "Microphone access allowed" : "Allow microphone",
                                     subtitle: self.isMicrophoneReady
-                                        ? "Choose the microphone you want Liquid Voice to use."
+                                        ? "Choose the microphone you want MouthKeys to use."
                                         : "macOS will ask once. Click Allow to start dictating.",
                                     systemImage: "mic.fill",
                                     isReady: self.isMicrophoneReady,
@@ -1819,7 +1819,7 @@ struct OnboardingFlowView: View {
                                 }
 
                                 if !self.isAccessibilityReady {
-                                    Text("Already enabled it? Liquid Voice will update when macOS confirms access.")
+                                    Text("Already enabled it? MouthKeys will update when macOS confirms access.")
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundStyle(Color.white.opacity(0.42))
                                         .padding(.top, 2)
@@ -1899,7 +1899,7 @@ struct OnboardingFlowView: View {
                             FluidOnboardingCompactAppIconMark(size: 66)
                                 .padding(.bottom, 22)
 
-                            Text("Liquid Voice is ready.")
+                            Text("MouthKeys is ready.")
                                 .font(.system(size: 28, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .multilineTextAlignment(.center)
@@ -3050,7 +3050,7 @@ private struct OnboardingMicrophoneSetupPanel: View {
                     .pickerStyle(.menu)
                     .frame(width: 248)
                     .tint(.white)
-                    .accessibilityHint("Moves the selected microphone to first in Liquid Voice priority")
+                    .accessibilityHint("Moves the selected microphone to first in MouthKeys priority")
                 }
             }
             .padding(.horizontal, 18)

@@ -1,4 +1,4 @@
-// Liquid Voice prototype stage. Direction-agnostic host: mock desktop, menu bar, c11 window,
+// MouthKeys prototype stage. Direction-agnostic host: mock desktop, menu bar, c11 window,
 // state switcher, appearance toggle, simulated microphone level, PROTOTYPE badge.
 //
 // Usage from a direction page:
@@ -123,7 +123,7 @@
       `<button data-state="${s.id}" aria-pressed="false"><span>${s.label}</span><kbd>${i + 1}</kbd></button>`).join("");
     c.innerHTML = `
       <h1>${S.name} · prototype controls</h1>
-      <p class="sub">Liquid Voice visual language · direction ${S.name}</p>
+      <p class="sub">MouthKeys visual language · direction ${S.name}</p>
       <div class="row"><label>Appearance</label><div class="seg" id="lv-theme">
         <button data-theme="dark" aria-pressed="true">Dark</button>
         <button data-theme="light" aria-pressed="false">Light</button>

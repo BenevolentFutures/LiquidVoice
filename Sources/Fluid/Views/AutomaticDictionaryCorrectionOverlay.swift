@@ -509,12 +509,12 @@ private struct MicrophoneChangeOverlayView: View {
             return "Choose an available microphone in Settings."
         }
         if self.notice.presentation == .startupSelection {
-            return "Liquid Voice will try this microphone first when you dictate."
+            return "MouthKeys will try this microphone first when you dictate."
         }
         if self.notice.presentation == .selectionChange {
-            return "Liquid Voice selected this microphone for capture."
+            return "MouthKeys selected this microphone for capture."
         }
-        return "Liquid Voice confirmed this microphone is capturing audio."
+        return "MouthKeys confirmed this microphone is capturing audio."
     }
 }
 
@@ -648,7 +648,7 @@ private struct AutomaticDictionaryCorrectionOverlayView: View {
 
             self.correctionPair
 
-            Text("Save only this correction, or teach Liquid Voice other pronunciations.")
+            Text("Save only this correction, or teach MouthKeys other pronunciations.")
                 .font(.system(size: 11))
                 .foregroundStyle(.white.opacity(0.58))
                 .lineLimit(1)
@@ -681,12 +681,12 @@ private struct AutomaticDictionaryCorrectionOverlayView: View {
             self.correctionPair
 
             VStack(alignment: .leading, spacing: 9) {
-                Text("Teach Liquid Voice your pronunciation")
+                Text("Teach MouthKeys your pronunciation")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.94))
 
                 if self.session.isReady {
-                    Label("Liquid Voice got it right 3 times in a row.", systemImage: "checkmark.circle.fill")
+                    Label("MouthKeys got it right 3 times in a row.", systemImage: "checkmark.circle.fill")
                         .font(.system(size: 10.5, weight: .medium))
                         .foregroundStyle(self.accent)
                 } else {
@@ -694,7 +694,7 @@ private struct AutomaticDictionaryCorrectionOverlayView: View {
                         self.trainingInstruction(number: 1, text: "Press Start once.")
                         self.trainingInstruction(
                             number: 2,
-                            text: "Say the word, then pause. Liquid Voice captures it and listens again."
+                            text: "Say the word, then pause. MouthKeys captures it and listens again."
                         )
                         self.trainingInstruction(number: 3, text: "Repeat naturally until the circle reaches 3/3.")
                     }

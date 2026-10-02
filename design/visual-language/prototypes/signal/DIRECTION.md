@@ -239,7 +239,7 @@ The pill grows upward by 25 pt for a one-line card, and the history card clears 
 |---|---|---|---|---|---|
 | `failed` | Couldn't paste into c11 | `nofocus` (default) "No text field focused" · `clipboard` "The text is on your clipboard" · `clipboardkept` "Your newer clipboard was left alone, the text is in History" (two lines, +17 pt) | **Copy** (doc.on.doc), which becomes "✓ Copied" in the same width | `118 WORDS` | flat, 0:41 / mic |
 | `timedout` | Transcription timed out | Your audio is kept | **Reprocess** (arrow.clockwise) | none (the frozen timer shows 0:41) | flat, 0:41 / mic |
-| `micoff` | Microphone access is off | Allow Liquid Voice in Privacy & Security | **Open System Settings** (gearshape) | none | flat, hollow square, 0:00 dim / `NO MICROPHONE` |
+| `micoff` | Microphone access is off | Allow MouthKeys in Privacy & Security | **Open System Settings** (gearshape) | none | flat, hollow square, 0:00 dim / `NO MICROPHONE` |
 
 The Reprocess in a card and the Reprocess chip do the same thing, and the chip stays. Pixel heights: generic card 174 pt (+25), failed 231 pt (+82), failed with the two-line reason 248 pt (+99).
 

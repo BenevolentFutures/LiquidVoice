@@ -14,7 +14,7 @@ import UniformTypeIdentifiers
 //   @ebbff23a / @c0118882 tag the synthetic Cmd+V and release Command after it
 //
 // What differs from upstream, on purpose:
-//   - No @MainActor coordinator. Liquid Voice keeps its serial typing worker (dictations queue,
+//   - No @MainActor coordinator. MouthKeys keeps its serial typing worker (dictations queue,
 //     never drop), so one session at a time owns the pasteboard from snapshot to restore,
 //     serialized by a semaphore, and restore timing stays per target (terminals 1 s, other
 //     apps until the paste is seen in the field or 5 s).
@@ -616,7 +616,7 @@ nonisolated final class ClipboardPasteSession: @unchecked Sendable {
     /// Puts the transcript on the clipboard as an ordinary copy (visible in clipboard history)
     /// after a failed or unconfirmed delivery. Waits for any paste still holding the pasteboard.
     ///
-    /// The write only happens when every clipboard change since `revision` was Liquid Voice's own
+    /// The write only happens when every clipboard change since `revision` was MouthKeys' own
     /// (a paste, a restore, an earlier backup): anything the user copied since is never replaced.
     /// `revision` defaults to the clipboard as it is now; pass the revision seen when the problem
     /// started (for example right after the paste a read-back later found missing).
@@ -675,7 +675,7 @@ nonisolated final class ClipboardPasteSession: @unchecked Sendable {
 
 /// The synthesized paste keystrokes.
 nonisolated enum PasteCommandEvents {
-    /// Marks events Liquid Voice synthesized, so its own hotkey tap passes them through.
+    /// Marks events MouthKeys synthesized, so its own hotkey tap passes them through.
     static let synthesizedEventUserData: Int64 = 0x46565353
 
     /// Global paste through the HID stream: Command down, V down, V up, Command up. Pressing and

@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Liquid Voice · Signal</title>
+<title>MouthKeys · Signal</title>
 <style>
-/* Liquid Voice prototype stage: a mock macOS desktop that hosts each direction's overlay.
+/* MouthKeys prototype stage: a mock macOS desktop that hosts each direction's overlay.
    Direction-agnostic. Each direction supplies its own overlay CSS on top. */
 
 :root {
@@ -544,7 +544,7 @@ body {
 </head>
 <body>
 <script>
-// Liquid Voice — shared mock data for the visual-language prototypes.
+// MouthKeys — shared mock data for the visual-language prototypes.
 // Realistic dictations: prompts to coding agents in c11, emails, notes.
 // Durations in seconds, word counts real, mics and target apps as they appear on a Mac.
 // Not wired to real data.
@@ -650,7 +650,7 @@ window.LV = {
 
 </script>
 <script>
-// Liquid Voice prototype stage. Direction-agnostic host: mock desktop, menu bar, c11 window,
+// MouthKeys prototype stage. Direction-agnostic host: mock desktop, menu bar, c11 window,
 // state switcher, appearance toggle, simulated microphone level, PROTOTYPE badge.
 //
 // Usage from a direction page:
@@ -775,7 +775,7 @@ window.LV = {
       `<button data-state="${s.id}" aria-pressed="false"><span>${s.label}</span><kbd>${i + 1}</kbd></button>`).join("");
     c.innerHTML = `
       <h1>${S.name} · prototype controls</h1>
-      <p class="sub">Liquid Voice visual language · direction ${S.name}</p>
+      <p class="sub">MouthKeys visual language · direction ${S.name}</p>
       <div class="row"><label>Appearance</label><div class="seg" id="lv-theme">
         <button data-theme="dark" aria-pressed="true">Dark</button>
         <button data-theme="light" aria-pressed="false">Light</button>
@@ -1045,7 +1045,7 @@ window.LV = {
         ${TK}
         <header><b>Recent dictations</b><span>Click to insert</span></header>
         <ol>${historyRows()}</ol>
-        <footer><span>History · ${Math.min(12, M.history.length)} of ${HISTORY_TOTAL} · Newest first</span><span>Liquid Voice</span></footer>
+        <footer><span>History · ${Math.min(12, M.history.length)} of ${HISTORY_TOTAL} · Newest first</span><span>MouthKeys</span></footer>
       </div>
     </div>
     <div class="sg-pill">
@@ -1267,7 +1267,7 @@ window.LV = {
     failed:   { head: () => `Couldn’t paste into ${TARGET}`, reason: () => REASONS[OPT.reason], text: true, action: "copy", meta: () => `${H0.words} words` },
     // No meta here: the frozen timer below already shows the duration (each fact appears once).
     timedout: { head: () => "Transcription timed out", reason: () => "Your audio is kept", action: "reprocess", meta: () => "" },
-    micoff:   { head: () => "Microphone access is off", reason: () => "Allow Liquid Voice in Privacy & Security", action: "settings", meta: () => "" },
+    micoff:   { head: () => "Microphone access is off", reason: () => "Allow MouthKeys in Privacy & Security", action: "settings", meta: () => "" },
   };
   const ACTIONS = {
     copy: { label: "Copy", glyph: G.copy, done: "Copied", title: "Copy the transcription to the clipboard" },
@@ -1522,14 +1522,14 @@ window.LV = {
   const menu = document.createElement("div");
   menu.className = "sg-menu"; menu.setAttribute("role", "menu");
   menu.innerHTML = `
-    <div class="sg-mh"><span>Liquid Voice</span><b><i></i><span class="sg-mh-state">Ready</span></b></div>
+    <div class="sg-mh"><span>MouthKeys</span><b><i></i><span class="sg-mh-state">Ready</span></b></div>
     <div class="sg-msep"></div>
     <div class="sg-mi" data-act="toggle" role="menuitem"><span class="sg-mi-toggle">Start Dictation</span><kbd>⌥Space</kbd></div>
     <div class="sg-mi" data-act="mic" role="menuitem"><span>Microphone</span><em>${esc(MIC)}</em>${G.chev}</div>
     <div class="sg-mi" data-act="history" role="menuitem"><span>History…</span></div>
     <div class="sg-mi" data-act="settings" role="menuitem"><span>Settings…</span><kbd>⌘,</kbd></div>
     <div class="sg-msep"></div>
-    <div class="sg-mi" data-act="quit" role="menuitem"><span>Quit Liquid Voice</span><kbd>⌘Q</kbd></div>`;
+    <div class="sg-mi" data-act="quit" role="menuitem"><span>Quit MouthKeys</span><kbd>⌘Q</kbd></div>`;
   document.body.appendChild(menu);
   function renderMenuHead() {
     const st = LVStage.state, live = st === "listening" || st === "history";
@@ -1614,7 +1614,7 @@ window.LV = {
     host().appendChild(root);
     LVStage.makeDraggable(root, "signal");
     const slot = LVStage.menubarSlot();
-    slot.innerHTML = `<span class="lv-status" role="button" aria-label="Liquid Voice" title="Liquid Voice"></span>`;
+    slot.innerHTML = `<span class="lv-status" role="button" aria-label="MouthKeys" title="MouthKeys"></span>`;
     statusEl = slot.firstElementChild;
     statusEl.addEventListener("mousedown", (e) => { e.stopPropagation(); menu.classList.contains("is-open") ? closeMenu() : openMenu(); });
     readColours(); layoutTrace();

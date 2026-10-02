@@ -23,7 +23,7 @@ final class SettingsStore: ObservableObject {
     private(set) var launchAtStartupEnabled = false
     private(set) var launchAtStartupErrorMessage: String?
     private(set) var launchAtStartupStatusMessage =
-        "Liquid Voice reflects the actual macOS login item state. Unsigned or development builds may fail to enable this."
+        "MouthKeys reflects the actual macOS login item state. Unsigned or development builds may fail to enable this."
 
     private init() {
         self.migrateTranscriptionStartSoundIfNeeded()
@@ -1320,7 +1320,7 @@ final class SettingsStore: ObservableObject {
     /// Anonymous analytics toggle (default: OFF in this fork).
     ///
     /// Upstream defaults this to ON so installs that predate analytics opt in silently.
-    /// Liquid Voice has no analytics backend at all (`AnalyticsConfig.isConfigured` is
+    /// MouthKeys has no analytics backend at all (`AnalyticsConfig.isConfigured` is
     /// hard-wired to `false`), so defaulting to ON here would only misreport the app's
     /// behaviour in Settings. The toggle is kept so a restored backup round-trips cleanly.
     var shareAnonymousAnalytics: Bool {
@@ -1530,7 +1530,7 @@ final class SettingsStore: ObservableObject {
         return self.retiredFluidIntelligenceProviderIDs.contains(trimmed)
     }
 
-    /// Liquid Voice has no Fluid Intelligence. Settings carried over from an upstream FluidVoice
+    /// MouthKeys has no Fluid Intelligence. Settings carried over from an upstream FluidVoice
     /// install that pointed at it are retired to plain dictation: any dictation slot that routed
     /// to Fluid Intelligence is turned Off, and every FI provider entry, verification, model list
     /// and runtime key is dropped. Prompts pinned to FI keep that provider on purpose, so they fail
@@ -4981,11 +4981,11 @@ final class SettingsStore: ObservableObject {
             }
         }
 
-        /// Optional badge text for the card (e.g., "Liquid Voice Pick")
+        /// Optional badge text for the card (e.g., "MouthKeys Pick")
         var badgeText: String? {
             switch self {
-            case .parakeetTDT: return "Liquid Voice Pick"
-            case .parakeetTDTv2: return "Liquid Voice Pick"
+            case .parakeetTDT: return "MouthKeys Pick"
+            case .parakeetTDTv2: return "MouthKeys Pick"
             case .parakeetRealtime: return "Beta"
             case .qwen3Asr: return "Beta"
             case .cohereTranscribeSixBit: return "New"

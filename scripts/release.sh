@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Liquid Voice release: a Developer ID signed, notarized, stapled app in a DMG.
+# MouthKeys release: a Developer ID signed, notarized, stapled app in a DMG.
 #
 # Usage:
 #   scripts/release.sh                 # build, then package (same as ./build.sh dist)
@@ -33,9 +33,9 @@ DIST_DIR="${LIQUIDVOICE_DIST_DIR:-${PROJECT_DIR}/dist}"
 NOTARY_PROFILE="${LIQUIDVOICE_NOTARY_PROFILE:-liquidvoice-notary}"
 TEAM="${LIQUIDVOICE_DEVELOPMENT_TEAM:-${FLUIDVOICE_DEVELOPMENT_TEAM:-}}"
 SKIP_NOTARIZE="${LIQUIDVOICE_SKIP_NOTARIZE:-0}"
-BUILT_APP="${DERIVED_DATA_PATH}/Build/Products/Release/Liquid Voice.app"
-APP_NAME="Liquid Voice.app"
-VOLUME_NAME="Liquid Voice"
+BUILT_APP="${DERIVED_DATA_PATH}/Build/Products/Release/MouthKeys.app"
+APP_NAME="MouthKeys.app"
+VOLUME_NAME="MouthKeys"
 
 IDENTITY=""
 
@@ -350,12 +350,12 @@ run_package() {
     version="$(app_version "${source_app}")"
     build="$(app_build "${source_app}")"
     [ -n "${version}" ] || die "cannot read CFBundleShortVersionString from ${source_app}."
-    echo "Packaging Liquid Voice ${version} (${build})"
+    echo "Packaging MouthKeys ${version} (${build})"
 
     mkdir -p "${DIST_DIR}"
     app="${DIST_DIR}/${APP_NAME}"
-    zip="${DIST_DIR}/LiquidVoice-${version}-notarize.zip"
-    dmg="${DIST_DIR}/LiquidVoice-${version}.dmg"
+    zip="${DIST_DIR}/MouthKeys-${version}-notarize.zip"
+    dmg="${DIST_DIR}/MouthKeys-${version}.dmg"
 
     # Work on a copy, so the build product is never modified.
     rm -rf "${app}"

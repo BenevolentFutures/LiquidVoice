@@ -14,7 +14,7 @@ struct AnalyticsConfig {
         return AnalyticsConfig(postHogApiKey: key, postHogHost: host.isEmpty ? AnalyticsConfig.defaultEUHost : host)
     }
 
-    /// Liquid Voice ships with analytics permanently disabled.
+    /// MouthKeys ships with analytics permanently disabled.
     ///
     /// Upstream FluidVoice sends aggregate usage events to PostHog and enables this by
     /// default (see `SettingsStore.analyticsConsentEnabled`, which returns `true` when the

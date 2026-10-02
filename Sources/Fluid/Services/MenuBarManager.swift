@@ -19,6 +19,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
     private var statusMenuItem: NSMenuItem?
     private var headerView: SignalMenuHeaderView?
     private var toggleDictationMenuItem: NSMenuItem?
+    private var hotkeysPausedMenuItem: NSMenuItem?
     private var headerRefreshTimer: Timer?
 
     // The Signal menu bar mark (DESIGN.md §10).
@@ -559,6 +560,63 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         statusItem.menu = self.menu
 
         self.updateMenu()
+        self.registerDebugTriggersIfEnabled()
+    }
+
+    #if DEBUG
+    private var debugTriggerObservers: [NSObjectProtocol] = []
+    #endif
+
+    /// Debug builds with `LiquidVoiceDebugDeliveryTriggers` on: distributed notifications that
+    /// open Settings (at the top or at the microphone and hotkey cards) and the status menu, so a VM run can screenshot them without synthesized
+    /// clicks (which need the Accessibility grant a VM cannot give).
+    private func registerDebugTriggersIfEnabled() {
+        #if DEBUG
+        guard UserDefaults.standard.bool(forKey: DeliveryDebugTriggers.enabledDefaultsKey), self.debugTriggerObservers.isEmpty else {
+            return
+        }
+        let center = DistributedNotificationCenter.default()
+        self.debugTriggerObservers.append(center.addObserver(
+            forName: Notification.Name("com.stage11.liquidvoice.debug.openSettings"), object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.openPreferencesFromUI() }
+        })
+        self.debugTriggerObservers.append(center.addObserver(
+            forName: Notification.Name("com.stage11.liquidvoice.debug.openMicrophoneSettings"), object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.openMicrophoneSettingsFromUI() }
+        })
+        self.debugTriggerObservers.append(center.addObserver(
+            forName: Notification.Name("com.stage11.liquidvoice.debug.scrollMainWindow"), object: nil, queue: .main
+        ) { note in
+            // object: the y offset (points from the top) for the tallest scroll view in the main window.
+            let offset = CGFloat(Double((note.object as? String) ?? "0") ?? 0)
+            MainActor.assumeIsolated {
+                guard let content = NSApp.windows.first(where: { $0.isVisible && $0.title.hasPrefix("MouthKeys") })?.contentView else { return }
+                func scrollViews(in view: NSView) -> [NSScrollView] {
+                    if let scrollView = view as? NSScrollView { return [scrollView] }
+                    return view.subviews.flatMap(scrollViews)
+                }
+                guard let scrollView = scrollViews(in: content)
+                    .max(by: { ($0.documentView?.bounds.height ?? 0) < ($1.documentView?.bounds.height ?? 0) }) else { return }
+                scrollView.contentView.scroll(to: NSPoint(x: 0, y: offset))
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }
+        })
+        self.debugTriggerObservers.append(center.addObserver(
+            forName: Notification.Name("com.stage11.liquidvoice.debug.openStatusMenu"), object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                // Opens the menu on the next turn so this observer returns before menu tracking.
+                DispatchQueue.main.async { self?.statusItem?.button?.performClick(nil) }
+            }
+        })
+        self.debugTriggerObservers.append(center.addObserver(
+            forName: Notification.Name("com.stage11.liquidvoice.debug.closeStatusMenu"), object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.menu?.cancelTracking() }
+        })
+        #endif
     }
 
     // MARK: - Menu bar mark
@@ -671,6 +729,14 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         menu.addItem(toggleItem)
         self.toggleDictationMenuItem = toggleItem
 
+        // Shown only while configured hotkeys cannot fire for lack of permission, so they never
+        // look lost (2026-10-02: a stale Accessibility grant left them silently dead).
+        let pausedItem = NSMenuItem(title: "", action: #selector(resolveHotkeysPaused), keyEquivalent: "")
+        pausedItem.target = self
+        pausedItem.isHidden = true
+        menu.addItem(pausedItem)
+        self.hotkeysPausedMenuItem = pausedItem
+
         let microphoneSubmenu = NSMenu(title: "Microphone")
         let microphoneMenuItem = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
         microphoneMenuItem.submenu = microphoneSubmenu
@@ -741,7 +807,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
                 ? "Sending"
                 : "Listening \(SignalOverlayModel.formatDuration(Date().timeIntervalSince(start)))"
         } else {
-            state = self.isProcessingActive ? "Working" : "Ready"
+            state = self.isProcessingActive ? "Working" : (Self.hotkeysPaused ? "Paused" : "Ready")
         }
         self.headerView?.stateText = state
         self.headerView?.isLive = live
@@ -759,6 +825,28 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         }
         self.copyLastTranscriptMenuItem?.isEnabled = self.canCopyLastTranscript
         self.microphoneMenuItem?.isEnabled = true
+        if let pausedItem = self.hotkeysPausedMenuItem {
+            let tapState = AccessibilityTrustMonitor.shared.hotkeyTapState
+            pausedItem.isHidden = !tapState.isPausedForPermission
+            pausedItem.attributedTitle = Self.titleWithDetail(
+                "Hotkeys Paused",
+                detail: tapState == .failedTrusted ? "Relaunch MouthKeys" : "Needs Accessibility…"
+            )
+        }
+    }
+
+    private static var hotkeysPaused: Bool {
+        AccessibilityTrustMonitor.shared.hotkeyTapState.isPausedForPermission
+    }
+
+    @objc private func resolveHotkeysPaused() {
+        let monitor = AccessibilityTrustMonitor.shared
+        if monitor.hotkeyTapState == .failedTrusted, monitor.isTrusted {
+            AppRelauncher.relaunch(reason: "menu_hotkeys_paused")
+        } else {
+            self.openMainWindow()
+            monitor.openAccessibilitySettings()
+        }
     }
 
     /// A menu row with a secondary detail right-aligned after a tab ("Start Dictation  ⌥Space").

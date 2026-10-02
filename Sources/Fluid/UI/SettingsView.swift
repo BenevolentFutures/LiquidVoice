@@ -27,6 +27,7 @@ struct SettingsView: View {
     @Environment(\.theme) private var theme
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @ObservedObject private var settings = SettingsStore.shared
+    @ObservedObject private var permissionMonitor = AccessibilityTrustMonitor.shared
     @ObservedObject var microphonePreferenceCoordinator: MicrophonePreferenceCoordinator
     @Binding var appear: Bool
     @Binding var visualizerNoiseThreshold: Double
@@ -416,6 +417,10 @@ struct SettingsView: View {
                                             .font(.caption.weight(.semibold))
                                             .foregroundStyle(self.settingsSecondaryText)
                                     }
+                                } else if self.permissionMonitor.hotkeyTapState == .failedTrusted {
+                                    Text("Paused")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(self.theme.palette.warning)
                                 } else {
                                     Text("Initializing…")
                                         .font(.caption.weight(.semibold))
@@ -434,6 +439,12 @@ struct SettingsView: View {
                                             .font(.caption)
                                             .foregroundStyle(.orange)
                                     }
+                                } else if self.permissionMonitor.hint == .relaunch {
+                                    AccessibilityRecoveryHintView(
+                                        hint: .relaunch,
+                                        openAccessibilitySettings: { self.permissionMonitor.openAccessibilitySettings() },
+                                        relaunch: self.restartApp
+                                    )
                                 } else if !self.hotkeyManagerInitialized {
                                     HStack(spacing: 8) {
                                         ProgressView()
@@ -770,15 +781,16 @@ struct SettingsView: View {
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         HStack(spacing: 6) {
-                                            Image(systemName: "exclamationmark.triangle.fill")
+                                            Image(systemName: "pause.circle.fill")
                                                 .foregroundStyle(self.theme.palette.warning)
-                                            Text("Accessibility permissions required")
+                                            Text(AccessibilityHintPolicy.pausedSummary)
                                                 .font(self.theme.typography.bodyStrong)
                                                 .foregroundStyle(self.theme.palette.warning)
                                         }
-                                        Text("Required for global hotkey functionality")
+                                        Text(self.pausedShortcutsDetail)
                                             .font(self.theme.typography.bodySmall)
                                             .foregroundStyle(self.settingsSecondaryText)
+                                            .fixedSize(horizontal: false, vertical: true)
                                     }
                                     Spacer()
 
@@ -789,6 +801,13 @@ struct SettingsView: View {
                                     .tint(self.theme.palette.accent)
                                     .controlSize(.regular)
                                 }
+
+                                AccessibilityRecoveryHintView(
+                                    hint: self.permissionMonitor.hint,
+                                    conflictingCopies: self.permissionMonitor.conflictingCopies,
+                                    openAccessibilitySettings: { self.permissionMonitor.openAccessibilitySettings() },
+                                    relaunch: self.restartApp
+                                )
 
                                 self.instructionsBox(
                                     title: "Follow these steps to enable Accessibility:",
@@ -1760,6 +1779,15 @@ struct SettingsView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill((warningStyle ? self.theme.palette.warning : self.theme.palette.accent).opacity(0.12))
         )
+    }
+
+    /// The saved shortcuts, so a paused card never reads as if they were lost.
+    private var pausedShortcutsDetail: String {
+        let shortcuts = self.primaryDictationShortcuts.map(\.displayString).filter { !$0.isEmpty }
+        guard !shortcuts.isEmpty else {
+            return "Global hotkeys start as soon as macOS confirms access."
+        }
+        return "Your shortcuts are saved (\(shortcuts.joined(separator: ", "))) and resume as soon as macOS confirms access."
     }
 
     @ViewBuilder

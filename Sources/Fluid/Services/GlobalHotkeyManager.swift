@@ -604,8 +604,10 @@ final class GlobalHotkeyManager: NSObject {
     private var isInitialized = false
     private var initializationTask: Task<Void, Never>?
     private var healthCheckTask: Task<Void, Never>?
-    private var maxRetryAttempts = 5
-    private var retryDelay: TimeInterval = 0.5
+    private var tapInstallPolicy = HotkeyTapInstallPolicy()
+    private var tapRetryTask: Task<Void, Never>?
+    private var trustObserver: AnyCancellable?
+    private var activationObserver: AnyCancellable?
     private var healthCheckInterval: TimeInterval = 30.0
     private var activeShortcutLogScheduled = false
     private lazy var holdReleaseStopLatch = HoldReleaseStopLatch(
@@ -679,6 +681,27 @@ final class GlobalHotkeyManager: NSObject {
                 }
             }
 
+        // A grant made in System Settings arms the tap at once, without waiting for the next
+        // backoff tick or a relaunch.
+        if !TestHostQuietMode.isActive {
+            self.trustObserver = AccessibilityTrustMonitor.shared.$isTrusted
+                .removeDuplicates()
+                .dropFirst()
+                .filter { $0 }
+                .sink { [weak self] _ in
+                    Task { @MainActor [weak self] in
+                        self?.retryTapInstallNow(reason: "trust_granted")
+                    }
+                }
+            self.activationObserver = NotificationCenter.default
+                .publisher(for: NSApplication.didBecomeActiveNotification)
+                .sink { [weak self] _ in
+                    Task { @MainActor [weak self] in
+                        self?.retryTapInstallNow(reason: "app_active")
+                    }
+                }
+        }
+
         self.initializeWithDelay()
     }
 
@@ -693,7 +716,7 @@ final class GlobalHotkeyManager: NSObject {
             }
 
             await MainActor.run { [weak self] in
-                self?.setupGlobalHotkeyWithRetry()
+                self?.attemptTapInstall(reason: "startup")
             }
         }
     }
@@ -813,46 +836,90 @@ final class GlobalHotkeyManager: NSObject {
         self.reprocessLastDictationCallback = callback
     }
 
-    private func setupGlobalHotkeyWithRetry() {
-        for attempt in 1...self.maxRetryAttempts {
-            DebugLogger.shared.debug("Setup attempt \(attempt)/\(self.maxRetryAttempts)", source: "GlobalHotkeyManager")
+    /// Tries to install the keyboard tap once and schedules the next try by
+    /// `HotkeyTapInstallPolicy`: a capped backoff while macOS does not trust us yet, a few fast
+    /// retries if it trusts us but refuses the tap. Only state changes are logged (`HOTKEY_TAP`).
+    private func attemptTapInstall(reason: String) {
+        self.tapRetryTask?.cancel()
+        self.tapRetryTask = nil
+        // A pending start-up or reinitialize attempt would tear down whatever this one installs.
+        self.initializationTask?.cancel()
+        self.initializationTask = nil
 
-            if self.setupGlobalHotkey() {
-                self.isInitialized = true
-                DebugLogger.shared.info("Successfully initialized on attempt \(attempt)", source: "GlobalHotkeyManager")
-                self.startHealthCheckTimer()
-                return
-            }
-
-            if attempt < self.maxRetryAttempts {
-                DebugLogger.shared.warning("Attempt \(attempt) failed, retrying in \(self.retryDelay) seconds...", source: "GlobalHotkeyManager")
-                Task { [weak self] in
-                    try? await Task.sleep(nanoseconds: UInt64((self?.retryDelay ?? 0.5) * 1_000_000_000))
-                    await MainActor.run { [weak self] in
-                        self?.setupGlobalHotkeyWithRetry()
-                    }
-                }
-                return
+        let outcome = self.setupGlobalHotkey()
+        let step = self.tapInstallPolicy.record(outcome)
+        if step.transitioned {
+            let line = HotkeyTapInstallPolicy.logLine(for: step, reason: reason)
+            if step.state == .failedTrusted {
+                DebugLogger.shared.error(
+                    line + " detail=accessibility_on_but_tap_refused (a relaunch, or removing and re-adding the app in Accessibility, clears it)",
+                    source: "GlobalHotkeyManager"
+                )
+            } else {
+                DebugLogger.shared.info(line, source: "GlobalHotkeyManager")
             }
         }
+        AccessibilityTrustMonitor.shared.reportHotkeyTapState(step.state)
 
-        DebugLogger.shared.error("Failed to initialize after \(self.maxRetryAttempts) attempts", source: "GlobalHotkeyManager")
+        if outcome == .installed {
+            self.isInitialized = true
+            self.startHealthCheckTimer()
+        } else {
+            self.isInitialized = false
+            // The retry below polls from here; the 30 s health check would only repeat its warning.
+            self.healthCheckTask?.cancel()
+            self.healthCheckTask = nil
+        }
+
+        guard let delay = step.retryAfter else { return }
+        self.tapRetryTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run { [weak self] in
+                self?.attemptTapInstall(reason: "retry")
+            }
+        }
     }
 
-    @discardableResult
-    private func setupGlobalHotkey() -> Bool {
+    /// Retries at once when the tap is not live (trust flipped, the app came to the front).
+    func retryTapInstallNow(reason: String) {
+        switch self.tapInstallPolicy.state {
+        case .idle:
+            return // the start-up attempt is still pending
+        case .installed:
+            guard !self.isEventTapEnabled() else { return }
+            // macOS disables a live tap briefly on a timeout; re-enable before rebuilding it.
+            if let tap = self.eventTap {
+                CGEvent.tapEnable(tap: tap, enable: true)
+                if self.isEventTapEnabled() { return }
+            }
+        case .installing, .waitingForAccessibility, .failedTrusted:
+            break
+        }
+        self.attemptTapInstall(reason: reason)
+    }
+
+    /// Where the keyboard tap stands (tests and diagnostics).
+    var tapState: HotkeyTapState {
+        self.tapInstallPolicy.state
+    }
+
+    private func setupGlobalHotkey() -> HotkeyTapInstallPolicy.Outcome {
         self.finishInterruptedMouseShortcutPress(reason: "hotkey tap reinitialized")
         self.cleanupEventTap()
 
         // The XCTest host never intercepts the operator's keyboard or mouse.
         guard !TestHostQuietMode.isActive else {
             DebugLogger.shared.info("Hotkey event taps skipped in test host quiet mode", source: "GlobalHotkeyManager")
-            return true
+            return .installed
         }
 
         if !AXIsProcessTrusted() {
-            DebugLogger.shared.debug("Accessibility permissions not granted", source: "GlobalHotkeyManager")
-            return false
+            return .untrusted
         }
 
         self.eventTap = CGEvent.tapCreate(
@@ -908,30 +975,32 @@ final class GlobalHotkeyManager: NSObject {
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         )
 
+        // Failures log at debug: the HOTKEY_TAP transition line is the one the log keeps.
         guard let tap = eventTap else {
-            DebugLogger.shared.error("Failed to create CGEvent tap", source: "GlobalHotkeyManager")
-            return false
+            DebugLogger.shared.debug("Failed to create CGEvent tap", source: "GlobalHotkeyManager")
+            return .tapFailed
         }
 
         self.runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         guard let source = runLoopSource else {
-            DebugLogger.shared.error("Failed to create CFRunLoopSource", source: "GlobalHotkeyManager")
-            return false
+            DebugLogger.shared.debug("Failed to create CFRunLoopSource", source: "GlobalHotkeyManager")
+            self.cleanupEventTap()
+            return .tapFailed
         }
 
         CFRunLoopAddSource(self.keyboardTapRunLoopStartingIfNeeded(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
 
         if !self.isEventTapEnabled() {
-            DebugLogger.shared.error("Event tap could not be enabled", source: "GlobalHotkeyManager")
+            DebugLogger.shared.debug("Event tap could not be enabled", source: "GlobalHotkeyManager")
             self.cleanupEventTap()
-            return false
+            return .tapFailed
         }
 
         DebugLogger.shared.info("Event tap successfully created and enabled", source: "GlobalHotkeyManager")
         self.logActiveShortcuts(reason: "event tap ready")
         self.setupMouseTaps()
-        return true
+        return .installed
     }
 
     private nonisolated func cleanupEventTap() {
@@ -1891,7 +1960,7 @@ final class GlobalHotkeyManager: NSObject {
 
         if !self.isEventTapEnabled() {
             DebugLogger.shared.warning("Event tap re-enable failed — recreating tap", source: "GlobalHotkeyManager")
-            self.setupGlobalHotkeyWithRetry()
+            self.attemptTapInstall(reason: "tap_disabled")
         }
     }
 
@@ -2808,6 +2877,8 @@ final class GlobalHotkeyManager: NSObject {
 
         self.initializationTask?.cancel()
         self.healthCheckTask?.cancel()
+        self.tapRetryTask?.cancel()
+        self.tapRetryTask = nil
         self.resetModifierOnlyShortcutTracking(reason: .reinitialize)
         self.isInitialized = false
         self.initializeWithDelay()
@@ -2830,14 +2901,8 @@ final class GlobalHotkeyManager: NSObject {
                     guard let self else { return }
                     if !self.validateEventTapHealth() {
                         DebugLogger.shared.warning("Health check failed, attempting to recover", source: "GlobalHotkeyManager")
-
-                        if self.setupGlobalHotkey() {
-                            self.isInitialized = true
-                            DebugLogger.shared.info("Health check recovery successful", source: "GlobalHotkeyManager")
-                        } else {
-                            DebugLogger.shared.error("Health check recovery failed", source: "GlobalHotkeyManager")
-                            self.isInitialized = false
-                        }
+                        // A revoked grant lands in waiting_for_accessibility and polls from there.
+                        self.attemptTapInstall(reason: "health_check")
                     } else {
                         self.recoverMouseTapsIfNeeded()
                     }
@@ -2849,6 +2914,7 @@ final class GlobalHotkeyManager: NSObject {
     deinit {
         initializationTask?.cancel()
         healthCheckTask?.cancel()
+        tapRetryTask?.cancel()
         cleanupEventTap()
     }
 }

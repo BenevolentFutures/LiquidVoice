@@ -217,6 +217,7 @@ struct ContentView: View {
     @StateObject private var rewriteModeService = RewriteModeService()
     @EnvironmentObject private var menuBarManager: MenuBarManager
     @ObservedObject private var settings = SettingsStore.shared
+    @ObservedObject private var permissionMonitor = AccessibilityTrustMonitor.shared
 
     /// Computed properties to access shared services from AppServices container
     /// This maintains backward compatibility with the existing code while
@@ -301,8 +302,6 @@ struct ContentView: View {
     @State private var showRestartPrompt: Bool = false
     @State private var didOpenAccessibilityPane: Bool = false
     private let accessibilityRestartFlagKey = "FluidVoice_AccessibilityRestartPending"
-    private let hasAutoRestartedForAccessibilityKey = "FluidVoice_HasAutoRestartedForAccessibility"
-    @State private var accessibilityPollingTask: Task<Void, Never>?
     @State private var accessibilityGuidePanel: NSPanel?
     @State private var accessibilityGuideMonitorTask: Task<Void, Never>?
     @State private var accessibilityGuideRequestID: UUID?
@@ -368,6 +367,22 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 self.refreshAccessibilityPermissionState()
             }
+            .onReceive(self.permissionMonitor.$isTrusted.removeDuplicates()) { trusted in
+                if trusted != self.accessibilityEnabled {
+                    self.accessibilityEnabled = trusted
+                }
+            }
+            .onReceive(self.permissionMonitor.$microphoneStatus.removeDuplicates()) { status in
+                if status != self.asr.micStatus {
+                    self.asr.micStatus = status
+                }
+            }
+            .onReceive(self.permissionMonitor.$hotkeyTapState.removeDuplicates()) { state in
+                let installed = state == .installed
+                if installed != self.hotkeyManagerInitialized {
+                    self.hotkeyManagerInitialized = installed
+                }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .openCustomDictionaryFromVoiceEngine)) { _ in
                 self.selectedSidebarItem = .customDictionary
             }
@@ -426,8 +441,8 @@ struct ContentView: View {
                 // intentionally kept alive so the overlay remains fully functional when the
                 // settings window is closed. No retain cycle risk since ContentView is a value type.
 
-                // Stop accessibility polling
                 self.finishAccessibilityPermissionFlow()
+                self.permissionMonitor.endObserving()
                 self.removeShortcutCaptureMonitor()
             }
             .onChange(of: self.primaryDictationShortcuts) { _, newValue in
@@ -467,9 +482,9 @@ struct ContentView: View {
                     self.finishAccessibilityPermissionFlow()
                 }
 
-                if enabled && self.hotkeyManager != nil && !self.hotkeyManagerInitialized {
-                    DebugLogger.shared.debug("Accessibility enabled, reinitializing hotkey manager", source: "ContentView")
-                    self.hotkeyManager?.reinitialize()
+                if enabled {
+                    // Arms the tap now; a no-op if it is already live.
+                    self.hotkeyManager?.retryTapInstallNow(reason: "accessibility_enabled")
                 }
             }
             .onChange(of: self.selectedModel) { _, newValue in
@@ -615,14 +630,12 @@ struct ContentView: View {
         }
         self.handlePendingAppNavigation()
 
-        if !self.accessibilityEnabled {
-            UserDefaults.standard.set(false, forKey: self.hasAutoRestartedForAccessibilityKey)
-        }
-
         self.menuBarManager.initializeMenuBar()
         self.scheduleDelayedAudioInitialization()
         self.configureNotchCallbacks()
-        self.startAccessibilityPolling()
+        // Live permission state: re-read every 0.5 s while this window is on screen and on every
+        // activation, so a grant turns the step green within a second, no relaunch.
+        self.permissionMonitor.beginObserving()
         self.initializeHotkeyManagerIfNeeded()
 
         Task {
@@ -4179,7 +4192,8 @@ extension ContentView {
 
     @discardableResult
     private func refreshAccessibilityPermissionState() -> Bool {
-        let trusted = self.checkAccessibilityPermissions()
+        self.permissionMonitor.refresh()
+        let trusted = self.permissionMonitor.isTrusted
         if trusted != self.accessibilityEnabled {
             self.accessibilityEnabled = trusted
         }
@@ -4195,7 +4209,7 @@ extension ContentView {
         }
         self.didOpenAccessibilityPane = true
         UserDefaults.standard.set(true, forKey: self.accessibilityRestartFlagKey)
-        self.startAccessibilityPolling()
+        self.permissionMonitor.noteOpenedAccessibilitySettings()
         self.positionWindowBesideSystemSettings(requestID: requestID)
         self.showAccessibilityGuidePanel(requestID: requestID)
         self.activateSystemSettingsSoon(requestID: requestID)
@@ -4383,7 +4397,6 @@ extension ContentView {
         self.showRestartPrompt = false
         UserDefaults.standard.set(false, forKey: self.accessibilityRestartFlagKey)
         self.closeAccessibilityGuidePanel()
-        self.stopAccessibilityPolling()
     }
 
     private func closeAccessibilityGuidePanel() {
@@ -4450,61 +4463,10 @@ extension ContentView {
     }
 
     func restartApp() {
-        let appPath = Bundle.main.bundlePath
-        let process = Process()
-        process.launchPath = "/usr/bin/open"
-        process.arguments = ["-n", appPath]
         // Clear pending flag and hide prompt before restarting
         UserDefaults.standard.set(false, forKey: self.accessibilityRestartFlagKey)
         self.showRestartPrompt = false
-        try? process.run()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            NSApp.terminate(nil)
-        }
-    }
-
-    func startAccessibilityPolling() {
-        // Keep polling until macOS reports the current process is trusted. The restart guard
-        // only prevents restart loops; it must not prevent the UI from noticing permission changes.
-        guard !self.accessibilityEnabled else { return }
-
-        // Cancel any existing polling task
-        self.accessibilityPollingTask?.cancel()
-
-        // Start background polling
-        self.accessibilityPollingTask = Task {
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 2_000_000_000) // Poll every 2 seconds
-
-                // Check if permission was granted
-                let nowTrusted = AXIsProcessTrusted()
-                if nowTrusted && !self.accessibilityEnabled {
-                    await MainActor.run {
-                        DebugLogger.shared.info("Accessibility permission granted", source: "ContentView")
-                        self.refreshAccessibilityPermissionState()
-                        self.finishAccessibilityPermissionFlow()
-
-                        guard !UserDefaults.standard.bool(forKey: self.hasAutoRestartedForAccessibilityKey) else {
-                            self.hotkeyManager?.reinitialize()
-                            return
-                        }
-
-                        // Mark that we've auto-restarted to prevent loops.
-                        UserDefaults.standard.set(true, forKey: self.hasAutoRestartedForAccessibilityKey)
-                        DebugLogger.shared.info("Auto-restarting app after accessibility grant", source: "ContentView")
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            self.restartApp()
-                        }
-                    }
-                    break // Stop polling after triggering restart
-                }
-            }
-        }
-    }
-
-    private func stopAccessibilityPolling() {
-        self.accessibilityPollingTask?.cancel()
-        self.accessibilityPollingTask = nil
+        AppRelauncher.relaunch(reason: "user")
     }
 }
 

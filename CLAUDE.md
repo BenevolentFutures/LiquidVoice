@@ -59,3 +59,16 @@ Scripted delivery checks (Debug builds only): `defaults write com.stage11.liquid
 - `gh repo set-default` is `BenevolentFutures/MouthKeys` (renamed from `BenevolentFutures/LiquidVoice`; GitHub redirects the old URL). The integration branch is `liquid-voice`.
 - Always `gh pr create --repo BenevolentFutures/MouthKeys --base liquid-voice`. Never open anything against `altic-dev/FluidVoice`.
 - Upstream fixes are ported by hand, never merged. Policy, watermark and ledger: `UPSTREAM.md`.
+
+## Agent pitfalls
+
+### A new signature leaves a stale Accessibility grant, and other copies of the bundle ID poison it
+
+**The incident (2026-10-02):** Atin replaced an Apple Development-signed build with the Developer ID-signed 0.1.0 DMG (same bundle ID, new signature). MouthKeys showed as switched on in Privacy & Security > Accessibility, yet `AXIsProcessTrusted()` stayed false: onboarding kept saying Open Settings and the hotkeys were silently dead (the old retry logged `Attempt 1 failed` every 0.5 s, forever). Removing the row with − and switching it on again did not help. tccd logged `Failed to match existing code requirement for subject com.stage11.liquidvoice and service kTCCServiceAccessibility`: other copies with the same bundle ID and a different signer were registered with LaunchServices (`~/.Trash/Liquid Voice.app`, a `~/Library/Caches/com.apple.SwiftUI.Drag-*/` copy, an old DerivedData Release build), and System Settings recorded one of their code requirements when the switch was flipped.
+
+**What the app does now:** `AccessibilityTrustMonitor` re-reads trust every 0.5 s while a permission surface is visible and on every activation; the hotkey tap arms itself the moment trust flips (`HOTKEY_TAP state=waiting_for_accessibility`, then `state=installed`, transitions logged once). Still untrusted 3 s after the user returns from System Settings, the step shows "Already switched on?", and `ConflictingAppCopyDetector` names any registered copy whose designated requirement the running app does not satisfy (`PERMISSION_DIAG conflicting_copies=N paths=...`) with Show in Finder. Trusted but the tap refused after five tries: `state=failed_trusted` and a Relaunch MouthKeys button. It never deletes anything.
+
+**The rules:**
+1. Before the first launch of a build with a new signature, delete other copies of `com.stage11.liquidvoice` signed by someone else and empty the Trash. `./build.sh install` lists them after installing (read-only).
+2. Diagnose from the log first: `grep -E 'HOTKEY_TAP|ACCESSIBILITY|PERMISSION_DIAG|PERMISSION_HINT' ~/Library/Logs/LiquidVoice/Fluid.log`, and tccd's view with `log show --last 10m --predicate 'process == "tccd"' | grep liquidvoice`.
+3. Agents never touch TCC (`tccutil`) or delete Atin's copies. Hand him the paths and the steps.

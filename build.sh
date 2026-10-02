@@ -14,6 +14,8 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROFILE="${1:-${BUILD_PROFILE:-public}}"
 DERIVED_DATA_PATH="${FLUIDVOICE_DERIVED_DATA_PATH:-${PROJECT_DIR}/DerivedData}"
+# LIQUIDVOICE_DEVELOPMENT_TEAM picks the signing team; the older FLUIDVOICE_DEVELOPMENT_TEAM still works.
+DEVELOPMENT_TEAM_OVERRIDE="${LIQUIDVOICE_DEVELOPMENT_TEAM:-${FLUIDVOICE_DEVELOPMENT_TEAM:-}}"
 
 resolve_development_team() {
     local identity
@@ -22,8 +24,8 @@ resolve_development_team() {
         | awk 'NR == 1 { identity = $0 } END { print identity }')"
     [ -n "${identity}" ] || return 0
 
-    if [ -n "${FLUIDVOICE_DEVELOPMENT_TEAM:-}" ]; then
-        printf '%s\n' "${FLUIDVOICE_DEVELOPMENT_TEAM}"
+    if [ -n "${DEVELOPMENT_TEAM_OVERRIDE}" ]; then
+        printf '%s\n' "${DEVELOPMENT_TEAM_OVERRIDE}"
         return
     fi
 
@@ -55,9 +57,9 @@ run_public_build() {
 
     development_team="$(resolve_development_team)"
     if [ -z "${development_team}" ]; then
-        if [ -n "${FLUIDVOICE_DEVELOPMENT_TEAM:-}" ]; then
-            printf >&2 'FLUIDVOICE_DEVELOPMENT_TEAM is set to %s, but no Apple Development signing identity was found.\n\n' \
-                "${FLUIDVOICE_DEVELOPMENT_TEAM}"
+        if [ -n "${DEVELOPMENT_TEAM_OVERRIDE}" ]; then
+            printf >&2 'LIQUIDVOICE_DEVELOPMENT_TEAM is set to %s, but no Apple Development signing identity was found.\n\n' \
+                "${DEVELOPMENT_TEAM_OVERRIDE}"
             printf >&2 '%s\n\n' \
                 "The team override selects an installed signing identity; it does not replace a certificate."
         else
@@ -71,7 +73,7 @@ For stable Accessibility permission across rebuilds, add any Apple Account in:
 Then open Manage Certificates and create an Apple Development certificate.
 
 A free Personal Team is sufficient for local development. If you have multiple
-teams, set FLUIDVOICE_DEVELOPMENT_TEAM to the desired 10-character Team ID.
+teams, set LIQUIDVOICE_DEVELOPMENT_TEAM to the desired 10-character Team ID.
 
 To build without signing instead, run:
   ./build.sh unsigned
@@ -423,7 +425,7 @@ run_release_build() {
     development_team="$(resolve_development_team)"
     if [ -z "${development_team}" ]; then
         printf >&2 'No Apple Development signing identity was found.\n'
-        printf >&2 'Set FLUIDVOICE_DEVELOPMENT_TEAM or add an account in Xcode > Settings > Accounts.\n'
+        printf >&2 'Set LIQUIDVOICE_DEVELOPMENT_TEAM or add an account in Xcode > Settings > Accounts.\n'
         exit 1
     fi
 

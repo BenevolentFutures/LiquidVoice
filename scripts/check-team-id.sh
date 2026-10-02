@@ -2,7 +2,7 @@
 # Pre-commit hook: refuse commits that change DEVELOPMENT_TEAM in the Xcode project.
 # To install: cp scripts/check-team-id.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 #
-# build.sh passes your own team at build time (FLUIDVOICE_DEVELOPMENT_TEAM, or the
+# build.sh passes your own team at build time (LIQUIDVOICE_DEVELOPMENT_TEAM, or the
 # team of your Apple Development certificate), so the value in the project never
 # needs to change. Setting a team in Xcode's Signing pane writes it into
 # project.pbxproj; this hook keeps that edit out of a commit.

@@ -286,7 +286,7 @@ run_verify() {
     codesign --verify --deep --strict --verbose=2 "${app}" 2>&1 || failed=1
 
     out="$(codesign -dvv "${app}" 2>&1)"
-    printf '%s\n' "${out}" | grep -E '^(Identifier|Authority=Developer ID Application|TeamIdentifier|Timestamp)=' || true
+    printf '%s\n' "${out}" | grep -E '^(Identifier=|Authority=Developer ID Application|TeamIdentifier=|Timestamp=)' || true
     printf '%s\n' "${out}" | grep -q 'flags=.*runtime' || { echo "FAIL: hardened runtime is not on"; failed=1; }
     printf '%s\n' "${out}" | grep -q '^Authority=Developer ID Application' \
         || { echo "FAIL: not signed with a Developer ID Application identity"; failed=1; }

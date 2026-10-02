@@ -44,6 +44,11 @@ final class SignalOverlayModel: ObservableObject {
     @Published private(set) var stopPlacard: SignalPlacard = .none
 
     private(set) var trace = SignalTraceModel()
+    /// The foot row's live counters' smoothing (DESIGN.md §16), kept across view updates.
+    let counterClock = SignalCounterClock()
+    /// The pill holds a recording of this session, so its live counters mean something; false for
+    /// a reprocess, which has no live text (DESIGN.md §16).
+    private(set) var countsLiveWords = false
 
     /// Holds a hover state for renders and inspection, like the prototype's `?hover=1` and
     /// `?hoverChip=`: "pill", or a chip id ("history", "copy", "cancel", "reprocess").
@@ -77,6 +82,7 @@ final class SignalOverlayModel: ObservableObject {
         self.frozenDuration = frozenDuration ?? 0
         self.frozenPreview = ""
         self.frozenWordCount = nil
+        self.countsLiveWords = false
         self.sendDrain = nil
         self.stopPlacard = .none
         self.isFading = false
@@ -105,6 +111,7 @@ final class SignalOverlayModel: ObservableObject {
         self.frozenDuration = nil
         self.frozenPreview = ""
         self.frozenWordCount = nil
+        self.countsLiveWords = true
         self.isFading = false
         self.phase = .listening
     }
@@ -129,6 +136,8 @@ final class SignalOverlayModel: ObservableObject {
         case .listening, .stopped, .idle:
             if self.phase == .listening {
                 self.stopRecording(preview: self.frozenPreview)
+            } else if self.phase == .idle {
+                self.countsLiveWords = false
             }
             if self.frozenDuration == nil { self.frozenDuration = 0 }
             self.trace.flatten()
@@ -188,6 +197,7 @@ final class SignalOverlayModel: ObservableObject {
 
     /// Hidden: nothing to show until the next presentation.
     func reset() {
+        self.countsLiveWords = false
         self.sendDrain = nil
         self.stopPlacard = .none
         self.trace.flatten()

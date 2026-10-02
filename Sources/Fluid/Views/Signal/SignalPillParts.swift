@@ -125,14 +125,18 @@ struct SignalTraceRow: View {
 
 /// The foot row (DESIGN.md §4, round 6, Atin 2026-10-01): the target-app icon (16 pt) and the
 /// microphone, centred as a pair, the same in every visible state; the live word count at the left
-/// end and Spoken Send's placard at the right end, both absolute so the pair never moves.
+/// end and, at the right end, Spoken Send's placard or (while the placard is empty) words per
+/// minute, all absolute so the pair never moves (DESIGN.md §16, Atin 2026-10-01).
 struct SignalFootRow: View {
     let icon: NSImage?
     let micText: String
     /// NO MICROPHONE reads in full ink.
     var isMicEmphasized = false
-    /// "118 WORDS" while a dictation is live, stopped, transcribing or counting down; nil hides it.
-    var wordCount: Int?
+    /// The live counters while a dictation is live, stopped, transcribing or counting down; nil
+    /// hides them.
+    var counters: SignalCounterInput?
+    /// Holds the counters' smoothing across updates (the overlay model's).
+    var counterClock: SignalCounterClock?
     var placard: SignalPlacard = .none
 
     @Environment(\.signalPalette) private var palette
@@ -167,22 +171,20 @@ struct SignalFootRow: View {
                     .help("Microphone")
             }
 
+            if let clock = self.counterClock {
+                // SEND / NO SEND takes the right end back whenever the placard has content.
+                SignalLiveCounters(input: self.counters, showsWPM: self.placard == .none, clock: clock)
+            }
+
             HStack(spacing: 0) {
-                SignalMonoLabel(text: self.wordCount.map(Self.wordCountText) ?? "", role: role, color: self.palette.text2)
-                    .fixedSize()
-                    .help("Words so far")
                 Spacer(minLength: 0)
                 SignalMonoLabel(text: self.placard.text, role: SignalTheme.Typography.placard, color: self.placardColor)
                     .fixedSize()
                     .frame(width: metrics.placardWidth, alignment: .trailing)
-                    .help("Spoken Send")
+                    .help(self.placard == .none ? "" : "Spoken Send")
             }
         }
         .frame(height: metrics.micRowHeight)
-    }
-
-    static func wordCountText(_ count: Int) -> String {
-        count == 1 ? "1 word" : "\(count) words"
     }
 
     private var placardColor: Color {

@@ -4655,40 +4655,39 @@ final class LapelMicBatteryTests: XCTestCase {
         XCTAssertFalse(SignalMicBattery.isLow(16))
     }
 
-    /// Nothing beside the label moves as the percent appears or changes width: the label's box is
-    /// reserved for "100%", fits the mic's 160, and the icon and label still clear the word count
-    /// and WPM at the foot row's ends (round 6).
-    func testTheLabelReservesItsWidthAndFitsTheFootRow() {
+    /// Nothing beside the label moves as a percent appears, changes width or goes, or a second
+    /// transmitter links: one box for every lapel state, inside the mic's 160, and the icon and
+    /// label still clear the word count and WPM at the foot row's ends (round 6).
+    func testTheLabelReservesOneWidthAndFitsTheFootRow() {
         let role = SignalTheme.Typography.micLabel
         let max = SignalTheme.Metrics.micMaxWidth
         func layout(_ prefix: String = "", linked: Int, _ percents: [Int]) -> SignalMicLabel.Layout {
             SignalMicLabel.layout(prefix: prefix, battery: SignalMicBattery(linkedCount: linked, percents: percents), maxWidth: max, width: role.width(of:))
         }
         let one = [layout(linked: 0, []), layout(linked: 1, []), layout(linked: 1, [5]), layout(linked: 1, [33]), layout(linked: 1, [100])]
-        XCTAssertEqual(Set(one.map(\.width)).count, 1, "\(one.map(\.width))")
-        XCTAssertEqual(one[0].width, role.width(of: "HOLLYLAND LAPEL 100%") + 1)
-        XCTAssertTrue(one.allSatisfy { $0.name == "Hollyland lapel" })
-        XCTAssertLessThanOrEqual(one[0].width, max)
-
         // Two mics: "HOLLYLAND LAPEL 100% 100%" passes 160, so the name is HOLLYLAND for every
-        // reading, in a box reserved for "HOLLYLAND 100% 100%".
+        // two-mic reading.
         let two = [layout(linked: 2, []), layout(linked: 2, [33, 80]), layout(linked: 2, [100, 80]), layout(linked: 2, [100, 100]), layout(linked: 2, [9, 9])]
         XCTAssertGreaterThan(role.width(of: "HOLLYLAND LAPEL 100% 100%") + 1, max)
-        XCTAssertTrue(two.allSatisfy { $0.name == "Hollyland" && $0.width == role.width(of: "HOLLYLAND 100% 100%") + 1 }, "\(two)")
+        XCTAssertTrue(one.allSatisfy { $0.name == "Hollyland lapel" })
+        XCTAssertTrue(two.allSatisfy { $0.name == "Hollyland" })
+        let widths = Set((one + two).map(\.width))
+        XCTAssertEqual(widths, [role.width(of: "HOLLYLAND LAPEL 100%") + 1], "one box for one mic, two, stale or none")
         for entry in one + two {
             let text = (entry.name + entry.percents.map { " \($0)%" }.joined()).uppercased()
             XCTAssertLessThanOrEqual(role.width(of: text) + 1, entry.width, text)
         }
-        // A mode word before it ("EDIT · ") keeps the label inside 160 too, and still reserved.
-        let edit = [layout("Edit · ", linked: 1, []), layout("Edit · ", linked: 1, [100])]
-        XCTAssertEqual(edit.map(\.name), ["Hollyland", "Hollyland"])
-        XCTAssertEqual(edit[0].width, edit[1].width)
+        // A mode word before it ("EDIT · "): HOLLYLAND, one box, inside 160; two mics there would
+        // pass 160 and truncate inside the box rather than widen it.
+        let edit = [layout("Edit · ", linked: 1, []), layout("Edit · ", linked: 1, [100]), layout("Edit · ", linked: 2, [100, 100])]
+        XCTAssertEqual(edit.map(\.name), ["Hollyland", "Hollyland", "Hollyland"])
+        XCTAssertEqual(Set(edit.map(\.width)).count, 1)
         XCTAssertLessThanOrEqual(edit[0].width, max)
 
         // The pair, centred, clears the word count's box at the left end and WPM's slot at the right.
         let inner = SignalOverlayGeometry.forSize(.medium).innerWidth
         let words = role.width(of: SignalCounterSmoother.padded(9999, places: 4)) + SignalCounterFace.labelGap + role.width(of: "WORDS")
-        for width in [one[0].width, two[0].width, edit[0].width] {
+        for width in [one[0].width, edit[0].width] {
             let pair = SignalTheme.Metrics.targetIcon + SignalTheme.Metrics.footGap + width
             let left = (inner - pair) / 2
             XCTAssertGreaterThanOrEqual(left, words, "the pair clears \"9999 WORDS\" at \(width)")
@@ -4702,12 +4701,14 @@ final class LapelMicBatteryTests: XCTestCase {
         XCTAssertTrue(TestHostQuietMode.isActive)
         XCTAssertEqual(LarkA1HIDTransport().heartbeat(), .noDevice)
         LapelMicBatteryMonitor.shared.noteSelectedInput(uid: "hollyland-lapel-mic")
+        XCTAssertNil(LapelMicBatteryMonitor.shared.followedInputUID, "the monitor never starts in quiet mode")
         XCTAssertNil(SignalOverlayModel.shared.micBattery)
     }
 
-    /// The listening overlay with the lapel mic selected, for design review: no reading, 33%, low,
-    /// both mics (design/visual-language/native-renders when LIQUID_VOICE_RENDER_DIR is set).
-    func testRendersTheLapelLabel() throws {
+    /// Renders only, for design review (the geometry is asserted above): the listening overlay with
+    /// the lapel mic selected, no reading, 33%, low and both mics (design/visual-language/
+    /// native-renders when LIQUID_VOICE_RENDER_DIR is set).
+    func testRendersTheLapelLabelForReview() throws {
         let states: [(String, SignalMicBattery)] = [
             ("lapel-none", SignalMicBattery(linkedCount: 0, percents: [])),
             ("lapel-33", SignalMicBattery(linkedCount: 1, percents: [33])),
@@ -4715,7 +4716,6 @@ final class LapelMicBatteryTests: XCTestCase {
             ("lapel-two", SignalMicBattery(linkedCount: 2, percents: [33, 80])),
         ]
         let folder = ProcessInfo.processInfo.environment["LIQUID_VOICE_RENDER_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
-        var sizes: [CGSize] = []
         for appearance in [NSAppearance.Name.darkAqua, .aqua] {
             let theme = appearance == .darkAqua ? "dark" : "light"
             for (name, battery) in states {
@@ -4723,12 +4723,10 @@ final class LapelMicBatteryTests: XCTestCase {
                 SignalOverlayModel.shared.microphoneName = "Hollyland Lapel Mic"
                 SignalOverlayModel.shared.micBattery = battery
                 let rep = try SignalRenderStage.render(BottomOverlayView(), appearance: appearance)
-                sizes.append(rep.size)
                 if let folder {
                     try SignalRenderStage.write(rep, to: folder.appendingPathComponent("\(theme)-23-\(name).png"))
                 }
             }
         }
-        XCTAssertTrue(sizes.allSatisfy { $0 == sizes[0] }, "the overlay keeps its size: \(sizes)")
     }
 }

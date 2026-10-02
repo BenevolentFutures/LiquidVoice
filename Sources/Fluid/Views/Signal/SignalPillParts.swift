@@ -155,13 +155,13 @@ struct SignalMicBattery: Equatable {
     }
 }
 
-/// The lapel mic's label: "HOLLYLAND LAPEL 33%", the name alone with no reading. Its width is
-/// reserved for the widest reading ("100%" in every place), so the icon and label, centred as a
-/// pair, never move as a percent appears or changes width; the text sits leading in that box. The
-/// name is the longest whose widest reading fits the mic's 160 pt: with two mics linked ("HOLLYLAND
-/// LAPEL 100% 100%" is 170) or a mode word in front ("EDIT · "), it is "HOLLYLAND", whatever the
-/// reading, so the name never switches as the numbers change and the pair keeps clear of the word
-/// count (a full 160 would touch "9999 WORDS").
+/// The lapel mic's label: "HOLLYLAND LAPEL 33%", the name alone with no reading. One box for every
+/// lapel state, so the icon and label, centred as a pair, never move as a percent appears, changes
+/// width or goes, or a second transmitter links: the text sits leading in it and only the words
+/// change. For each count of places (one mic, two) the name is the longest whose widest reading
+/// ("100%" in every place) fits the mic's 160 pt; with two mics ("HOLLYLAND LAPEL 100% 100%" is 170)
+/// or a mode word in front ("EDIT · ") that is "HOLLYLAND". The box is the wider of the two widest
+/// readings, so the pair keeps clear of the word count (a full 160 would touch "9999 WORDS").
 enum SignalMicLabel {
     static let names = ["Hollyland lapel", "Hollyland"]
 
@@ -178,16 +178,24 @@ enum SignalMicLabel {
         maxWidth: CGFloat,
         width: (String) -> CGFloat
     ) -> Layout {
-        let places = max(1, min(2, max(battery.linkedCount, battery.percents.count)))
-        let widest = String(repeating: " 100%", count: places)
-        for name in self.names {
-            let reserved = width((prefix + name + widest).uppercased()) + 1
-            if reserved <= maxWidth {
-                return Layout(name: name, percents: battery.percents, width: reserved)
+        /// The longest name whose widest reading in `places` fits, and that reading's width.
+        func fit(places: Int) -> (name: String, width: CGFloat)? {
+            let widest = String(repeating: " 100%", count: places)
+            for name in self.names {
+                let reserved = width((prefix + name + widest).uppercased()) + 1
+                if reserved <= maxWidth { return (name, reserved) }
             }
+            return nil
         }
-        // A long mode prefix ("LOADING MODEL · EDIT · "): the mic's full width, tail-truncated.
-        return Layout(name: self.names[self.names.count - 1], percents: battery.percents, width: maxWidth)
+        let shortest = self.names[self.names.count - 1]
+        // A long mode prefix ("LOADING MODEL · EDIT · ") that fits neither takes the full 160.
+        let one = fit(places: 1) ?? (shortest, maxWidth)
+        // Two mics that cannot fit (only behind a mode word) truncate inside the one-mic box rather
+        // than widen it to 160, where the pair would touch the word count.
+        let two = fit(places: 2)
+        let box = max(one.width, two?.width ?? 0)
+        let name = max(battery.linkedCount, battery.percents.count) >= 2 ? (two?.name ?? shortest) : one.name
+        return Layout(name: name, percents: battery.percents, width: box)
     }
 }
 

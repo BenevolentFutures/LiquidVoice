@@ -7,7 +7,9 @@ import Foundation
 /// resolved input (`noteSelectedInput`, one comparison and one async hop); a background utility
 /// queue resolves whether that input is the receiver (Core Audio, by USB IDs, through an
 /// aggregate's sub-devices too), and while it is, sends the heartbeat 1 s after the input became
-/// it and every 30 s after. The main actor keeps the last reading with its time and sets
+/// it and every 30 s after. The 30 s timer runs for whatever input is selected, re-resolving it
+/// each tick (two Core Audio property reads), so a receiver replugged or added to the aggregate is
+/// picked up; the HID heartbeat goes out only on ticks where the input is the receiver. The main actor keeps the last reading with its time and sets
 /// `SignalOverlayModel.micBattery` only when what the label shows changes; the overlay reads that
 /// and nothing else. A reading older than 2 minutes reads as none. Under `TestHostQuietMode` it
 /// does nothing at all, so no test ever opens a HID device.
@@ -16,8 +18,9 @@ final class LapelMicBatteryMonitor {
     static let shared = LapelMicBatteryMonitor()
 
     static let pollInterval: TimeInterval = 30
-    /// The first heartbeat waits this long after the input becomes the receiver, so it never
-    /// shares the moment capture starts on the same USB device.
+    /// The first heartbeat after the input becomes the receiver waits this long, so it does not
+    /// land on the capture start that resolved it. Later ticks run whether or not a recording is
+    /// live; a status query on the receiver's HID interface does not touch its audio stream.
     static let firstPollDelay: TimeInterval = 1
 
     private let worker = Worker()
@@ -29,6 +32,11 @@ final class LapelMicBatteryMonitor {
     private var expiry: DispatchWorkItem?
 
     private init() {}
+
+    /// The input the monitor is following, nil until one is reported (and always in quiet mode).
+    var followedInputUID: String? {
+        self.selectedUID
+    }
 
     /// The input capture resolved. Cheap enough for the start path: a repeat of the same input
     /// returns at once, and a change only hands the UID to the background queue.

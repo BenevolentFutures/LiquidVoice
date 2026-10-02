@@ -221,6 +221,7 @@ builds/
 # Python bytecode (scripts/)
 __pycache__/
 *.pyc
+design/visual-language/native-renders/
 
 ## Release output (scripts/release.sh)
 dist/

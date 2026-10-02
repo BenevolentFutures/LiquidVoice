@@ -410,7 +410,8 @@ install_app() {
 
     echo "Installed: ${installed}"
     codesign -dv "${installed}" 2>&1 | grep -E 'Identifier|TeamIdentifier' || true
-    echo "Log: ~/Library/Logs/LiquidVoice/Fluid.log. After an identity change, follow docs/INSTALL-CHECKLIST.md."
+    echo "Next: open Liquid Voice, grant Microphone and Accessibility when asked (System Settings > Privacy & Security), pick a speech model, then try a dictation."
+    echo "Log: ~/Library/Logs/LiquidVoice/Fluid.log. (docs/INSTALL-CHECKLIST.md is the maintainer's own post-install checklist; you do not need it.)"
     if [ -n "${backup_dir}" ]; then
         echo "Rollback: bash \"${backup_dir}/rollback.sh\""
     fi

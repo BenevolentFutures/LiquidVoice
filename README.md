@@ -33,6 +33,10 @@ Liquid Voice is a fork of [FluidVoice](https://github.com/altic-dev/FluidVoice) 
 - **a faster stop.** in a headless benchmark with a 13,600-entry history, stop-path work outside the model fell from a 145 ms median to 4 ms; model time is unchanged. a stalled model no longer loses the recording: it is kept for Reprocess, even across a restart. [#9], [#10]
 - **hotkey, mic and media fixes.** holds that always end, removed mics that stay removed, media resumed only if we paused it, a hung mic routed around, and a hotkey to reprocess the last dictation. [#2], [`8295536`][8295536], [`68afebc`][68afebc], [`0e2948a`][0e2948a]
 
+<p align="center"><img src="docs/images/history.png" width="480" alt="The Liquid Voice history browser: recent dictations newest first, each with its time, word count and the app it went to. Click a row to insert it again."></p>
+
+<p align="center"><sub>the history browser: every dictation, newest first. click one to insert it again.</sub></p>
+
 ### what's left out.
 
 Liquid Voice is narrower on purpose.

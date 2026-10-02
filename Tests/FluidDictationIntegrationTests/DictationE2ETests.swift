@@ -4680,6 +4680,8 @@ final class LapelMicBatteryTests: XCTestCase {
         XCTAssertEqual(LarkA1Protocol.logLine(for: .reading(lower), previous: first), "MIC_BATTERY device=lark-a1 mic1=off mic2=32% result=ok")
         let odd = try LarkA1Protocol.parseHeartbeatReply(Self.reply(payload: [0x01, 0x00, 0xC8, 0x00])).get()
         XCTAssertEqual(LarkA1Protocol.logLine(for: .reading(odd), previous: nil), "MIC_BATTERY device=lark-a1 mic1=linked mic2=off result=ok")
+        let both = try LarkA1Protocol.parseHeartbeatReply(Self.reply(payload: [0x01, 0x01, 0x50, 0x21])).get()
+        XCTAssertEqual(LarkA1Protocol.logLine(for: .reading(both), previous: first), "MIC_BATTERY device=lark-a1 mic1=80% mic2=33% result=ok", "the log keeps both mics; only the label shows one")
         XCTAssertEqual(LarkA1Protocol.logLine(for: .noDevice, previous: first), "MIC_BATTERY device=lark-a1 mic1=- mic2=- result=no-device")
         XCTAssertNil(LarkA1Protocol.logLine(for: .noDevice, previous: .noDevice))
         XCTAssertEqual(
@@ -4690,52 +4692,60 @@ final class LapelMicBatteryTests: XCTestCase {
     }
 
     /// The overlay reads only the cache: nil for any other mic, the name alone with no reading, and
-    /// a reading older than 2 minutes reads as none.
+    /// a reading older than 2 minutes reads as none. One percent always: with both mics linked the
+    /// lower, since the receiver does not say which one is being spoken into.
     func testTheCacheIsFreshForTwoMinutes() throws {
         let status = try LarkA1Protocol.parseHeartbeatReply(Self.capturedReply).get()
         let now = Date()
+        func battery(_ reading: LarkA1Status?, age: TimeInterval = 0) -> SignalMicBattery? {
+            SignalMicBattery.from(inputIsReceiver: true, reading: reading, readAt: reading.map { _ in now.addingTimeInterval(-age) }, now: now)
+        }
         XCTAssertNil(SignalMicBattery.from(inputIsReceiver: false, reading: status, readAt: now, now: now))
-        XCTAssertEqual(SignalMicBattery.from(inputIsReceiver: true, reading: nil, readAt: nil, now: now), SignalMicBattery(linkedCount: 0, percents: []))
-        XCTAssertEqual(SignalMicBattery.from(inputIsReceiver: true, reading: status, readAt: now.addingTimeInterval(-119), now: now), SignalMicBattery(linkedCount: 1, percents: [33]))
-        XCTAssertEqual(SignalMicBattery.from(inputIsReceiver: true, reading: status, readAt: now.addingTimeInterval(-121), now: now), SignalMicBattery(linkedCount: 0, percents: []))
+        XCTAssertEqual(battery(nil), SignalMicBattery(percent: nil))
+        XCTAssertEqual(battery(status, age: 119), SignalMicBattery(percent: 33))
+        XCTAssertEqual(battery(status, age: 121), SignalMicBattery(percent: nil))
+        let both = try LarkA1Protocol.parseHeartbeatReply(Self.reply(payload: [0x01, 0x01, 0x50, 0x21])).get()
+        XCTAssertEqual(battery(both), SignalMicBattery(percent: 33), "both linked: the lower, whichever mic it is")
+        let bothOtherWay = try LarkA1Protocol.parseHeartbeatReply(Self.reply(payload: [0x01, 0x01, 0x09, 0x50])).get()
+        XCTAssertEqual(battery(bothOtherWay), SignalMicBattery(percent: 9))
+        let oneUnread = try LarkA1Protocol.parseHeartbeatReply(Self.reply(payload: [0x01, 0x01, 0xFF, 0x50])).get()
+        XCTAssertEqual(battery(oneUnread), SignalMicBattery(percent: 80), "a linked mic with no percent leaves the other's")
+        let none = try LarkA1Protocol.parseHeartbeatReply(Self.reply(payload: [0x00, 0x00, 0x40, 0x50])).get()
+        XCTAssertEqual(battery(none), SignalMicBattery(percent: nil))
         XCTAssertTrue(SignalMicBattery.isLow(15), "15% and below in accent (our assumption)")
         XCTAssertTrue(SignalMicBattery.isLow(0))
         XCTAssertFalse(SignalMicBattery.isLow(16))
     }
 
-    /// Nothing beside the label moves as a percent appears, changes width or goes, or a second
-    /// transmitter links: one box for every lapel state, inside the mic's 160, and the icon and
-    /// label still clear the word count and WPM at the foot row's ends (round 6).
+    /// Nothing beside the label moves as a percent appears, changes width or goes: one box for
+    /// every lapel state, inside the mic's 160, and the icon and label still clear the word count
+    /// and WPM at the foot row's ends (round 6).
     func testTheLabelReservesOneWidthAndFitsTheFootRow() {
         let role = SignalTheme.Typography.micLabel
         let max = SignalTheme.Metrics.micMaxWidth
-        func layout(_ prefix: String = "", linked: Int, _ percents: [Int]) -> SignalMicLabel.Layout {
-            SignalMicLabel.layout(prefix: prefix, battery: SignalMicBattery(linkedCount: linked, percents: percents), maxWidth: max, width: role.width(of:))
+        func layout(_ percent: Int?, after prefix: String = "") -> SignalMicLabel.Layout {
+            SignalMicLabel.layout(prefix: prefix, battery: SignalMicBattery(percent: percent), maxWidth: max, width: role.width(of:))
         }
-        let one = [layout(linked: 0, []), layout(linked: 1, []), layout(linked: 1, [5]), layout(linked: 1, [33]), layout(linked: 1, [100])]
-        // Two mics: "HOLLYLAND LAPEL 100% 100%" passes 160, so the name is HOLLYLAND for every
-        // two-mic reading.
-        let two = [layout(linked: 2, []), layout(linked: 2, [33, 80]), layout(linked: 2, [100, 80]), layout(linked: 2, [100, 100]), layout(linked: 2, [9, 9])]
-        XCTAssertGreaterThan(role.width(of: "HOLLYLAND LAPEL 100% 100%") + 1, max)
-        XCTAssertTrue(one.allSatisfy { $0.name == "Hollyland lapel" })
-        XCTAssertTrue(two.allSatisfy { $0.name == "Hollyland" })
-        let widths = Set((one + two).map(\.width))
-        XCTAssertEqual(widths, [role.width(of: "HOLLYLAND LAPEL 100%") + 1], "one box for one mic, two, stale or none")
-        for entry in one + two {
-            let text = (entry.name + entry.percents.map { " \($0)%" }.joined()).uppercased()
+        let lapel = [layout(nil), layout(0), layout(5), layout(33), layout(100)]
+        XCTAssertTrue(lapel.allSatisfy { $0.name == "Hollyland lapel" }, "LAPEL in every lapel state")
+        XCTAssertEqual(lapel.map(\.percent), [nil, 0, 5, 33, 100])
+        XCTAssertEqual(Set(lapel.map(\.width)), [role.width(of: "HOLLYLAND LAPEL 100%") + 1], "one box with a percent or none")
+        for entry in lapel {
+            let text = (entry.name + (entry.percent.map { " \($0)%" } ?? "")).uppercased()
             XCTAssertLessThanOrEqual(role.width(of: text) + 1, entry.width, text)
         }
-        // A mode word before it ("EDIT · "): HOLLYLAND, one box, inside 160; two mics there would
-        // pass 160 and truncate inside the box rather than widen it.
-        let edit = [layout("Edit · ", linked: 1, []), layout("Edit · ", linked: 1, [100]), layout("Edit · ", linked: 2, [100, 100])]
+        // A mode word before it ("EDIT · "): "EDIT · HOLLYLAND LAPEL 100%" passes 160, so HOLLYLAND,
+        // one box, inside 160.
+        XCTAssertGreaterThan(role.width(of: "EDIT · HOLLYLAND LAPEL 100%") + 1, max)
+        let edit = [layout(nil, after: "Edit · "), layout(9, after: "Edit · "), layout(100, after: "Edit · ")]
         XCTAssertEqual(edit.map(\.name), ["Hollyland", "Hollyland", "Hollyland"])
-        XCTAssertEqual(Set(edit.map(\.width)).count, 1)
+        XCTAssertEqual(Set(edit.map(\.width)), [role.width(of: "EDIT · HOLLYLAND 100%") + 1])
         XCTAssertLessThanOrEqual(edit[0].width, max)
 
         // The pair, centred, clears the word count's box at the left end and WPM's slot at the right.
         let inner = SignalOverlayGeometry.forSize(.medium).innerWidth
         let words = role.width(of: SignalCounterSmoother.padded(9999, places: 4)) + SignalCounterFace.labelGap + role.width(of: "WORDS")
-        for width in [one[0].width, edit[0].width] {
+        for width in [lapel[0].width, edit[0].width] {
             let pair = SignalTheme.Metrics.targetIcon + SignalTheme.Metrics.footGap + width
             let left = (inner - pair) / 2
             XCTAssertGreaterThanOrEqual(left, words, "the pair clears \"9999 WORDS\" at \(width)")
@@ -4754,14 +4764,13 @@ final class LapelMicBatteryTests: XCTestCase {
     }
 
     /// Renders only, for design review (the geometry is asserted above): the listening overlay with
-    /// the lapel mic selected, no reading, 33%, low and both mics (design/visual-language/
+    /// the lapel mic selected, no reading, 33% and low (design/visual-language/
     /// native-renders when LIQUID_VOICE_RENDER_DIR is set).
     func testRendersTheLapelLabelForReview() throws {
         let states: [(String, SignalMicBattery)] = [
-            ("lapel-none", SignalMicBattery(linkedCount: 0, percents: [])),
-            ("lapel-33", SignalMicBattery(linkedCount: 1, percents: [33])),
-            ("lapel-9", SignalMicBattery(linkedCount: 1, percents: [9])),
-            ("lapel-two", SignalMicBattery(linkedCount: 2, percents: [33, 80])),
+            ("lapel-none", SignalMicBattery(percent: nil)),
+            ("lapel-33", SignalMicBattery(percent: 33)),
+            ("lapel-9", SignalMicBattery(percent: 9)),
         ]
         let folder = ProcessInfo.processInfo.environment["LIQUID_VOICE_RENDER_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
         for appearance in [NSAppearance.Name.darkAqua, .aqua] {

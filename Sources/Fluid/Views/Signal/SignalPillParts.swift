@@ -128,11 +128,10 @@ struct SignalTraceRow: View {
 /// `LapelMicBatteryMonitor` only while the selected input is the Lark A1 receiver (directly or
 /// through an aggregate); nil for every other microphone, which keeps its own name.
 struct SignalMicBattery: Equatable {
-    /// Linked transmitters, 0–2: how many percent places the label reserves.
-    var linkedCount: Int
-    /// Each linked mic's percent, mic 1 first. Empty with no reading yet, none linked, or a reading
-    /// older than `freshness`.
-    var percents: [Int]
+    /// The one percent the label shows: the linked mic's, or with both linked the lower of the two
+    /// (the receiver does not say which one is being spoken into, Atin 2026-10-01). Nil with no
+    /// reading yet, none linked, or a reading older than `freshness`.
+    var percent: Int?
 
     /// A reading older than this reads as no reading.
     static let freshness: TimeInterval = 120
@@ -149,25 +148,24 @@ struct SignalMicBattery: Equatable {
     static func from(inputIsReceiver: Bool, reading: LarkA1Status?, readAt: Date?, now: Date) -> SignalMicBattery? {
         guard inputIsReceiver else { return nil }
         guard let reading, let readAt, now.timeIntervalSince(readAt) <= self.freshness else {
-            return SignalMicBattery(linkedCount: 0, percents: [])
+            return SignalMicBattery(percent: nil)
         }
-        return SignalMicBattery(linkedCount: reading.linkedCount, percents: reading.linkedPercents)
+        return SignalMicBattery(percent: reading.linkedPercents.min())
     }
 }
 
 /// The lapel mic's label: "HOLLYLAND LAPEL 33%", the name alone with no reading. One box for every
 /// lapel state, so the icon and label, centred as a pair, never move as a percent appears, changes
-/// width or goes, or a second transmitter links: the text sits leading in it and only the words
-/// change. For each count of places (one mic, two) the name is the longest whose widest reading
-/// ("100%" in every place) fits the mic's 160 pt; with two mics ("HOLLYLAND LAPEL 100% 100%" is 170)
-/// or a mode word in front ("EDIT · ") that is "HOLLYLAND". The box is the wider of the two widest
-/// readings, so the pair keeps clear of the word count (a full 160 would touch "9999 WORDS").
+/// width or goes: the text sits leading in it and only the digits change. The name is the longest
+/// whose widest reading ("100%") fits the mic's 160 pt: "HOLLYLAND LAPEL", or "HOLLYLAND" behind a
+/// mode word ("EDIT · "). The box is that widest reading, so the pair keeps clear of the word count
+/// (a full 160 would touch "9999 WORDS").
 enum SignalMicLabel {
     static let names = ["Hollyland lapel", "Hollyland"]
 
     struct Layout: Equatable {
         let name: String
-        let percents: [Int]
+        let percent: Int?
         /// The label's frame, its tracking included, plus 1 pt so SwiftUI's measure never truncates.
         let width: CGFloat
     }
@@ -178,24 +176,12 @@ enum SignalMicLabel {
         maxWidth: CGFloat,
         width: (String) -> CGFloat
     ) -> Layout {
-        /// The longest name whose widest reading in `places` fits, and that reading's width.
-        func fit(places: Int) -> (name: String, width: CGFloat)? {
-            let widest = String(repeating: " 100%", count: places)
-            for name in self.names {
-                let reserved = width((prefix + name + widest).uppercased()) + 1
-                if reserved <= maxWidth { return (name, reserved) }
-            }
-            return nil
+        for name in self.names {
+            let reserved = width((prefix + name + " 100%").uppercased()) + 1
+            if reserved <= maxWidth { return Layout(name: name, percent: battery.percent, width: reserved) }
         }
-        let shortest = self.names[self.names.count - 1]
         // A long mode prefix ("LOADING MODEL · EDIT · ") that fits neither takes the full 160.
-        let one = fit(places: 1) ?? (shortest, maxWidth)
-        // Two mics that cannot fit (only behind a mode word) truncate inside the one-mic box rather
-        // than widen it to 160, where the pair would touch the word count.
-        let two = fit(places: 2)
-        let box = max(one.width, two?.width ?? 0)
-        let name = max(battery.linkedCount, battery.percents.count) >= 2 ? (two?.name ?? shortest) : one.name
-        return Layout(name: name, percents: battery.percents, width: box)
+        return Layout(name: self.names[self.names.count - 1], percent: battery.percent, width: maxWidth)
     }
 }
 
@@ -282,13 +268,12 @@ struct SignalFootRow: View {
             width: role.width(of:)
         )
         var text = Text((self.micPrefix + layout.name).uppercased())
-        for percent in layout.percents {
+        var spoken = "Hollyland lapel"
+        if let percent = layout.percent {
             text = text + Text(" ") + Text("\(percent)%")
                 .foregroundStyle(SignalMicBattery.isLow(percent) ? self.palette.accent : self.palette.text2)
+            spoken += ", battery \(percent) percent"
         }
-        let spoken = layout.percents.isEmpty
-            ? "Hollyland lapel"
-            : "Hollyland lapel, battery " + layout.percents.map { "\($0) percent" }.joined(separator: " and ")
         return text
             .font(role.font)
             .tracking(role.tracking)

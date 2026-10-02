@@ -268,7 +268,7 @@ final class TypingService {
     // MARK: - Delivery target (captured at stop)
 
     // Ported from altic-dev/FluidVoice@5a67d658 (snapshot target and route at stop) and
-    // @b0d64436 (restore the exact recording target) by altic-dev / grohith327. Liquid Voice
+    // @b0d64436 (restore the exact recording target) by altic-dev / grohith327. MouthKeys
     // keeps every Accessibility read bounded and off the main thread (the hotkey tap runs on
     // it), gives the whole preparation one deadline, and counts a c11/Ghostty target as ready
     // once the terminal is in front: its panes take Cmd+V whatever element AX reports.

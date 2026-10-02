@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Liquid Voice · Obsidian</title>
+<title>MouthKeys · Obsidian</title>
 <link rel="stylesheet" href="../shared/stage.css">
 <style>
 /* =====================================================================================
@@ -848,7 +848,7 @@
   const slot = LVStage.menubarSlot();
   const MARK_X = [3.8, 6.2, 8.6, 11.0];
   const MARK_IDLE = [2.0, 4.4, 2.8, 1.4];
-  slot.innerHTML = `<span class="lv-status ob-status" role="button" aria-haspopup="menu" aria-label="Liquid Voice" title="Liquid Voice">
+  slot.innerHTML = `<span class="lv-status ob-status" role="button" aria-haspopup="menu" aria-label="MouthKeys" title="MouthKeys">
     <svg class="ob-mark" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
       <rect x="1.1" y="3.6" width="13.8" height="8.8" rx="3.4" fill="none" stroke="currentColor" stroke-width="1.2"/>
       ${MARK_X.map((x, i) => `<rect class="b" x="${x}" y="${8 - MARK_IDLE[i] / 2}" width="1.2" height="${MARK_IDLE[i]}" rx="0.6" fill="currentColor"/>`).join("")}
@@ -885,7 +885,7 @@
       <div class="ob-mi" data-mi="history" role="menuitem"><span>History…</span></div>
       <div class="ob-mi" data-mi="settings" role="menuitem"><span>Settings…</span><kbd>⌘,</kbd></div>
       <div class="ob-msep"></div>
-      <div class="ob-mi" data-mi="quit" role="menuitem"><span>Quit Liquid Voice</span><kbd>⌘Q</kbd></div>
+      <div class="ob-mi" data-mi="quit" role="menuitem"><span>Quit MouthKeys</span><kbd>⌘Q</kbd></div>
       <div class="ob-sub" hidden role="menu">
         <div class="ob-mhead">Input</div>
         ${M.mics.map((m) => `<div class="ob-mi" data-mic="${esc(m.name)}" role="menuitemradio" aria-checked="${m.name === mic}">${m.name === mic ? `<span class="ob-tick">${GL.check}</span>` : ""}<span>${esc(m.name)}</span></div>`).join("")}

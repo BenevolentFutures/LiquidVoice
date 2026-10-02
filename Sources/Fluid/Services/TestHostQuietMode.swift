@@ -3,7 +3,7 @@ import ObjectiveC
 
 /// Keeps the app invisible and silent when it runs as the XCTest host.
 ///
-/// App-hosted tests launch `Liquid Voice Debug.app` on the operator's machine while Atin is
+/// App-hosted tests launch `MouthKeys Debug.app` on the operator's machine while Atin is
 /// working (and dictating with the installed app). In quiet mode the app:
 /// - never activates or shows in the Dock (`.prohibited`), so it cannot take focus;
 /// - never puts a window on screen: window ordering is swallowed process-wide (`install()`),

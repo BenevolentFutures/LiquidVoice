@@ -1,9 +1,9 @@
 import AppKit
 import AVFoundation
-@testable import Liquid_Voice_Debug
+@testable import MouthKeys_Debug
 import XCTest
 
-/// The one-time copy of FluidVoice-era data into Liquid Voice's own identity. Every test runs on
+/// The one-time copy of FluidVoice-era data into the app's own identity. Every test runs on
 /// throwaway preferences suites and temporary folders; nothing here reads or writes the
 /// installed app's domain or folders.
 @MainActor
@@ -365,7 +365,7 @@ final class AppIdentityMigrationTests: XCTestCase {
     }
 
     private let fiveBoostTerms = #"{"terms":["Cairn","c11","Gregorovich","Atlas","Hyperion"]}"#
-    private let defaultVocabulary = #"{"terms":["Liquid Voice"]}"#
+    private let defaultVocabulary = #"{"terms":["MouthKeys"]}"#
 
     /// The reviewer's case: opening Custom Dictionary writes a default vocabulary file into the
     /// new folder. Atin's own five boost terms must still win, and the default is kept aside.
@@ -503,21 +503,21 @@ final class AppIdentityMigrationTests: XCTestCase {
         XCTAssertNil(AppIdentityMigration.forInstalledApp())
         XCTAssertNil(AppIdentityMigration.forInstalledApp(
             bundleIdentifier: "com.stage11.liquidvoice",
-            bundleURL: URL(fileURLWithPath: "/Applications/Liquid Voice.app"),
+            bundleURL: URL(fileURLWithPath: "/Applications/MouthKeys.app"),
             isTestHost: false
         ))
         XCTAssertNil(AppIdentityMigration.launchReport)
     }
 
     func testOnlyAnAppInApplicationsCountsAsInstalled() {
-        XCTAssertTrue(AppIdentityMigration.isInstalledLocation(URL(fileURLWithPath: "/Applications/Liquid Voice.app")))
+        XCTAssertTrue(AppIdentityMigration.isInstalledLocation(URL(fileURLWithPath: "/Applications/MouthKeys.app")))
         XCTAssertTrue(AppIdentityMigration.isInstalledLocation(
-            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications/Liquid Voice.app")
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications/MouthKeys.app")
         ))
         XCTAssertFalse(AppIdentityMigration.isInstalledLocation(
-            URL(fileURLWithPath: "/Users/someone/Projects/LiquidVoice/DerivedData/Build/Products/Release/Liquid Voice.app")
+            URL(fileURLWithPath: "/Users/someone/Projects/LiquidVoice/DerivedData/Build/Products/Release/MouthKeys.app")
         ))
-        XCTAssertFalse(AppIdentityMigration.isInstalledLocation(URL(fileURLWithPath: "/ApplicationsElsewhere/Liquid Voice.app")))
+        XCTAssertFalse(AppIdentityMigration.isInstalledLocation(URL(fileURLWithPath: "/ApplicationsElsewhere/MouthKeys.app")))
     }
 
     func testTheNewIdentifiersAreUsedEverywhereTheOldOnesWere() {

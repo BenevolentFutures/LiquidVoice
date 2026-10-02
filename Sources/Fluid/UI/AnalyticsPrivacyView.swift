@@ -10,7 +10,7 @@ struct AnalyticsPrivacyView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Analytics")
                         .font(.system(size: 18, weight: .semibold))
-                    Text("Liquid Voice sends no analytics or telemetry")
+                    Text("MouthKeys sends no analytics or telemetry")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
@@ -25,7 +25,7 @@ struct AnalyticsPrivacyView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    self.sectionTitle("What Liquid Voice sends")
+                    self.sectionTitle("What MouthKeys sends")
                     self.bullet("No usage analytics, crash reports, or telemetry. The analytics backend upstream FluidVoice uses is switched off in this build, so there is nothing to opt in to or out of.")
                     self.bullet("Your transcripts and audio stay on this Mac unless you set up a cloud AI provider yourself. Then the text you choose to enhance goes to that provider.")
 

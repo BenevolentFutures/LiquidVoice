@@ -1,4 +1,4 @@
-# Liquid Voice recording overlay: anatomy
+# MouthKeys recording overlay: anatomy
 
 Read-only survey of the bottom recording overlay as it stands on `design/visual-language` at `68afebce` (2026-09-27). Every number comes from the code. Values marked **(derived)** are arithmetic on those constants. Values marked **(est.)** depend on SF Symbol glyph metrics that were not measured on screen.
 

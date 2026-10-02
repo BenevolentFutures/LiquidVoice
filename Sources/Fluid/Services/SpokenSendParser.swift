@@ -5,7 +5,7 @@ import Foundation
 //   @c679506d add spoken send commands (the parser, the "literal" escape, the countdown checks)
 //   @95fe1b15 complete spoken send after quiet countdown (no fresh-partial requirement)
 //   @60480451 hold the armed phrase across noisy partials (arming state, near-miss final parse)
-// Liquid Voice additions:
+// MouthKeys additions:
 // - The phrase is part of the sentence, not a command, when a question mark follows it ("Can
 //   you send it?") or when the word before it is a negation, subject pronoun, modal or "to"
 //   ("but don't send it", "I'll send it", "can you send it", "want to send it"). This holds for

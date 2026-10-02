@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-// Signal: Liquid Voice's visual language (design/visual-language/DESIGN.md, binding prototype
+// Signal: MouthKeys' visual language (design/visual-language/DESIGN.md, binding prototype
 // design/visual-language/prototypes/signal/index.html). The single source of colour, type,
 // spacing and motion for the recording overlay, its cards, the history card and the menu bar.
 //

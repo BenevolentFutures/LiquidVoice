@@ -300,7 +300,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private func isMainWindow(_ window: NSWindow) -> Bool {
         guard window.level == .normal else { return false }
         guard window.styleMask.contains(.titled) else { return false }
-        return window.title == "Liquid Voice" || window.title.contains("Liquid Voice")
+        return window.title == "MouthKeys" || window.title.contains("MouthKeys")
     }
 
     // MARK: - Periodic Update Checks
@@ -323,10 +323,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     @objc func checkForUpdatesManually() {
         if Self.upstreamUpdatesDisabled {
-            DebugLogger.shared.info("Manual update check refused (Liquid Voice fork)", source: "AppDelegate")
+            DebugLogger.shared.info("Manual update check refused (MouthKeys fork)", source: "AppDelegate")
             self.showUpdateAlert(
                 title: "Updates Are Managed Locally",
-                message: "Liquid Voice is a local fork of FluidVoice. Pull the latest source and run ./build.sh install to update."
+                message: "MouthKeys is a local fork of FluidVoice. Pull the latest source and run ./build.sh install to update."
             )
             return
         }
@@ -367,7 +367,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                         title: isBeta ? "No Beta Updates" : "No Updates",
                         message: isBeta
                             ? "You're already running the latest build available in the beta channel."
-                            : "You're already running the latest version of Liquid Voice!"
+                            : "You're already running the latest version of MouthKeys!"
                     )
                 } else {
                     DebugLogger.shared.error("Update check failed: \(error)", source: "AppDelegate")
@@ -382,14 +382,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     // MARK: - Automatic Update Check
 
-    /// Liquid Voice is a fork. The upstream updater replaces the app bundle in
+    /// MouthKeys is a fork. The upstream updater replaces the app bundle in
     /// place from altic-dev/Fluid-oss, which would overwrite this build with
     /// stock FluidVoice. Updates come from a local rebuild instead.
     static let upstreamUpdatesDisabled = true
 
     private func checkForUpdatesAutomatically() {
         if Self.upstreamUpdatesDisabled {
-            DebugLogger.shared.debug("Upstream update check skipped (Liquid Voice fork)", source: "AppDelegate")
+            DebugLogger.shared.debug("Upstream update check skipped (MouthKeys fork)", source: "AppDelegate")
             return
         }
 
@@ -463,7 +463,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         let alert = NSAlert()
         alert.messageText = "Update Available"
-        alert.informativeText = "Liquid Voice \(version) is now available. Would you like to install it now?\n\nThe app will restart automatically after installation."
+        alert.informativeText = "MouthKeys \(version) is now available. Would you like to install it now?\n\nThe app will restart automatically after installation."
         alert.alertStyle = .informational
         alert.addButton(withTitle: "Install Now")
         alert.addButton(withTitle: "Later")

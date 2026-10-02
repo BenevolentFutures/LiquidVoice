@@ -1,4 +1,4 @@
-/* Liquid Voice prototype stage: a mock macOS desktop that hosts each direction's overlay.
+/* MouthKeys prototype stage: a mock macOS desktop that hosts each direction's overlay.
    Direction-agnostic. Each direction supplies its own overlay CSS on top. */
 
 :root {

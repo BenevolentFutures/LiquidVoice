@@ -59,7 +59,7 @@ enum SignalMenuBarMark {
             return true
         }
         image.isTemplate = true
-        image.accessibilityDescription = "Liquid Voice"
+        image.accessibilityDescription = "MouthKeys"
         if self.cache.count > 256 { self.cache.removeAll() }
         self.cache[key] = image
         return image
@@ -88,7 +88,7 @@ enum SignalMenuBarMark {
     }
 }
 
-/// The menu's header row: "LIQUID VOICE" on the left and the state on the right, mono 10 pt
+/// The menu's header row: "MOUTHKEYS" on the left and the state on the right, mono 10 pt
 /// uppercase, with the orange square while listening (DESIGN.md §10).
 final class SignalMenuHeaderView: NSView {
     var stateText = "Ready" {
@@ -119,7 +119,7 @@ final class SignalMenuHeaderView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let inset: CGFloat = 14
-        let label = self.attributed("Liquid Voice", weight: .medium, color: .secondaryLabelColor)
+        let label = self.attributed("MouthKeys", weight: .medium, color: .secondaryLabelColor)
         let labelSize = label.size()
         label.draw(at: NSPoint(x: inset, y: (self.bounds.height - labelSize.height) / 2))
 

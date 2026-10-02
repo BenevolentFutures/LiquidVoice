@@ -268,7 +268,7 @@ struct ContentView: View {
     @State private var playgroundUsed: Bool = SettingsStore.shared.playgroundUsed
     @State private var recordingAppInfo: (name: String, bundleId: String, windowTitle: String)? = nil
     /// The focused field when recording started; the destination when "Return to Starting
-    /// Field" is on, or when Liquid Voice's own UI holds focus at stop.
+    /// Field" is on, or when MouthKeys' own UI holds focus at stop.
     @State private var recordingStartTarget: DictationTarget? = nil
     @State private var recordingPrecedingText: String = ""
 
@@ -1273,7 +1273,7 @@ struct ContentView: View {
         }
         .listStyle(.sidebar)
         .animation(nil, value: self.selectedSidebarItem)
-        .navigationTitle("Liquid Voice")
+        .navigationTitle("MouthKeys")
         .tint(self.theme.palette.accent)
     }
 
@@ -1501,8 +1501,8 @@ struct ContentView: View {
                     self.instructionStep(number: "2", text: "Choose **Allow** in the system dialog")
                 } else if self.asr.micStatus == .denied {
                     self.instructionStep(number: "1", text: "Click **Open Settings** above")
-                    self.instructionStep(number: "2", text: "Find **Liquid Voice** in the microphone list")
-                    self.instructionStep(number: "3", text: "Toggle **Liquid Voice ON** to allow access")
+                    self.instructionStep(number: "2", text: "Find **MouthKeys** in the microphone list")
+                    self.instructionStep(number: "3", text: "Toggle **MouthKeys ON** to allow access")
                 }
             }
             .padding(.leading, 4)
@@ -2491,7 +2491,7 @@ struct ContentView: View {
         let frontmostApp = NSWorkspace.shared.frontmostApplication
         let frontmostName = frontmostApp?.localizedName ?? "Unknown"
         let stopTarget = await stopTargetCapture?.value
-        // With a destination chosen at stop, clicking into Liquid Voice while it transcribes
+        // With a destination chosen at stop, clicking into MouthKeys while it transcribes
         // must not swallow the text: the stop target decides, not the app in front now.
         let isFluidFrontmost = stopTarget.map { $0.pid == ProcessInfo.processInfo.processIdentifier }
             ?? (frontmostApp?.bundleIdentifier == Bundle.main.bundleIdentifier)
@@ -2519,7 +2519,7 @@ struct ContentView: View {
                 model: transcriptionModelInfo.model
             )
         }
-        // "Copy to Clipboard" is a backup the user asked for, so it applies even when Liquid Voice
+        // "Copy to Clipboard" is a backup the user asked for, so it applies even when MouthKeys
         // itself is frontmost and nothing is typed externally (ported from
         // altic-dev/FluidVoice@7d6d0e7c).
         let shouldCopyToClipboard = shouldPersistOutputs &&
@@ -4224,7 +4224,7 @@ extension ContentView {
     private func positionWindowBesideSystemSettings(requestID: UUID) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
             guard self.accessibilityGuideRequestID == requestID else { return }
-            guard let window = NSApp.windows.first(where: { $0.isVisible && $0.title == "Liquid Voice" }) ?? NSApp.keyWindow else {
+            guard let window = NSApp.windows.first(where: { $0.isVisible && $0.title == "MouthKeys" }) ?? NSApp.keyWindow else {
                 return
             }
 
@@ -4393,7 +4393,7 @@ extension ContentView {
     private func cancelAccessibilityPermissionFlow() {
         self.finishAccessibilityPermissionFlow()
         NSApp.activate(ignoringOtherApps: true)
-        (NSApp.windows.first { $0.isVisible && $0.title == "Liquid Voice" } ?? NSApp.keyWindow)?
+        (NSApp.windows.first { $0.isVisible && $0.title == "MouthKeys" } ?? NSApp.keyWindow)?
             .makeKeyAndOrderFront(nil)
     }
 
@@ -4458,7 +4458,7 @@ extension ContentView {
             return runningAppURL
         }
 
-        let installedURL = URL(fileURLWithPath: "/Applications/Liquid Voice.app")
+        let installedURL = URL(fileURLWithPath: "/Applications/MouthKeys.app")
         if FileManager.default.fileExists(atPath: installedURL.path) {
             return installedURL
         }

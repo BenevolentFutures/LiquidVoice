@@ -1,12 +1,12 @@
 import AppKit
 import Combine
 import CoreGraphics
-@testable import Liquid_Voice_Debug
+@testable import MouthKeys_Debug
 import XCTest
 
 // Parser tests ported from altic-dev/FluidVoice by altic-dev (@c679506d, @95fe1b15,
-// @4310f143, @60480451). The delivery, policy, overlay-state and countdown tests are Liquid
-// Voice's own; the terminal paste-then-send guarantees live in
+// @4310f143, @60480451). The delivery, policy, overlay-state and countdown tests are
+// MouthKeys' own; the terminal paste-then-send guarantees live in
 // TypingServiceTransientPasteboardTests.swift next to the terminal paste tests they extend.
 
 final class SpokenSendParserTests: XCTestCase {
@@ -14,7 +14,7 @@ final class SpokenSendParserTests: XCTestCase {
         SpokenSendParser.parse(text, phrase: phrase, enabled: true)
     }
 
-    // MARK: Liquid Voice's correctness bar
+    // MARK: MouthKeys' correctness bar
 
     func testPhraseAtTheTrueEndSendsWhateverThePunctuationAndCase() {
         XCTAssertEqual(self.parse("Fix the typo in the README, send it"), SpokenSendParseResult(text: "Fix the typo in the README.", shouldSend: true))
@@ -236,7 +236,7 @@ final class SpokenSendParserTests: XCTestCase {
     }
 
     func testRepeatedTerminalPhrasesAreAllRemoved() {
-        // Liquid Voice: "wanna" makes the first "send it" the sentence's own; the repeat is the command.
+        // MouthKeys: "wanna" makes the first "send it" the sentence's own; the repeat is the command.
         XCTAssertEqual(self.parse("I wanna send it, send it."), SpokenSendParseResult(text: "I wanna send it.", shouldSend: true))
         XCTAssertEqual(self.parse("Ready SEND IT send it"), SpokenSendParseResult(text: "Ready.", shouldSend: true))
         XCTAssertEqual(self.parse("send it, send it."), SpokenSendParseResult(text: "", shouldSend: true))
@@ -603,7 +603,7 @@ final class SpokenSendPolicyTests: XCTestCase {
         XCTAssertEqual(SettingsStore.SpokenSendKey.commandEnter.eventFlags, .maskCommand)
     }
 
-    /// Our own Return must never trigger a Liquid Voice hotkey. PR #2 passes every keystroke this
+    /// Our own Return must never trigger a MouthKeys hotkey. PR #2 passes every keystroke this
     /// process posts straight through the tap by its source PID; the send key's events are made
     /// by this process, so they carry it.
     func testTheSendKeyNeverTriggersAHotkey() throws {

@@ -78,8 +78,8 @@ extension SettingsStore {
 
             if self.launchAtStartupEnabled != enabled {
                 let mismatchMessage = enabled
-                    ? "macOS did not enable Liquid Voice in Login Items. Check System Settings > General > Login Items."
-                    : "macOS still shows Liquid Voice in Login Items. Check System Settings > General > Login Items."
+                    ? "macOS did not enable MouthKeys in Login Items. Check System Settings > General > Login Items."
+                    : "macOS still shows MouthKeys in Login Items. Check System Settings > General > Login Items."
                 self.applyLaunchAtStartupErrorMessage(mismatchMessage)
                 DebugLogger.shared.warning(mismatchMessage, source: "SettingsStore")
             }
@@ -126,16 +126,16 @@ extension SettingsStore {
             lowercasedDescription.contains("sign") ||
             lowercasedDescription.contains("entitlement")
         {
-            return "Liquid Voice could not \(action) launch at startup. This build may not be signed correctly for macOS Login Items."
+            return "MouthKeys could not \(action) launch at startup. This build may not be signed correctly for macOS Login Items."
         }
 
         if lowercasedDescription.contains("approval") ||
             lowercasedDescription.contains("authorize")
         {
-            return "macOS needs approval before Liquid Voice can \(action) launch at startup. Check System Settings > General > Login Items."
+            return "macOS needs approval before MouthKeys can \(action) launch at startup. Check System Settings > General > Login Items."
         }
 
-        return "Liquid Voice could not \(action) launch at startup. macOS reported: \(nsError.localizedDescription)"
+        return "MouthKeys could not \(action) launch at startup. macOS reported: \(nsError.localizedDescription)"
     }
 
     private func cleanupLegacyCompatibilityLoginItemAfterDisable() {
@@ -166,7 +166,7 @@ extension SettingsStore {
     }
 
     private var compatibilityLoginItemName: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Liquid Voice"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "MouthKeys"
     }
 
     private func appleScriptEscaped(_ value: String) -> String {
@@ -217,11 +217,11 @@ private enum LaunchAtStartupSystemState {
     var message: String {
         switch self {
         case .enabled:
-            return "Liquid Voice reflects the actual macOS login item state."
+            return "MouthKeys reflects the actual macOS login item state."
         case .disabled:
-            return "Liquid Voice reflects the actual macOS login item state. Unsigned or development builds may fail to enable this."
+            return "MouthKeys reflects the actual macOS login item state. Unsigned or development builds may fail to enable this."
         case .requiresApproval:
-            return "macOS requires approval for Liquid Voice in Login Items before launch at startup becomes active."
+            return "macOS requires approval for MouthKeys in Login Items before launch at startup becomes active."
         }
     }
 }

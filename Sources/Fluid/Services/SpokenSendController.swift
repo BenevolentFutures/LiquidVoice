@@ -6,7 +6,7 @@ import Foundation
 // runs the quiet countdown, decides at stop whether a key follows the text, and hands the
 // delivery to the typing worker. Behavior ported from altic-dev/FluidVoice by altic-dev
 // (@c679506d, @95fe1b15, @60480451, and the Spoken Send parts of @4310f143 and @4cb6683f);
-// upstream keeps this state in ContentView, Liquid Voice keeps it here so the dictation stop
+// upstream keeps this state in ContentView, MouthKeys keeps it here so the dictation stop
 // path only asks two questions (what text, which key) and the overlay can observe it.
 
 /// What Spoken Send decided for one finished dictation.

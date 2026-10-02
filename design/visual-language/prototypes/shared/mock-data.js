@@ -1,4 +1,4 @@
-// Liquid Voice — shared mock data for the visual-language prototypes.
+// MouthKeys — shared mock data for the visual-language prototypes.
 // Realistic dictations: prompts to coding agents in c11, emails, notes.
 // Durations in seconds, word counts real, mics and target apps as they appear on a Mac.
 // Not wired to real data.

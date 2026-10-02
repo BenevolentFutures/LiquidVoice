@@ -2,7 +2,8 @@ import Foundation
 
 /// This app's identity and where each build keeps its files.
 ///
-/// Liquid Voice is its own app (`com.stage11.liquidvoice`). Debug builds have their own bundle
+/// MouthKeys is its own app (`com.stage11.liquidvoice`; the identifiers here keep the name it had
+/// as Liquid Voice on purpose, so a rename never moves anyone's data). Debug builds have their own bundle
 /// identifier too (`com.stage11.liquidvoice.dev`, which also separates UserDefaults) and their
 /// own folders, so a development or test run can never read or overwrite the data of the
 /// installed app someone is dictating with.

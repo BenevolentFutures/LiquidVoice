@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# Liquid Voice Build Profile Router
+# MouthKeys Build Profile Router
 #
 # Usage:
 #   ./build.sh                    # signed Debug build
 #   ./build.sh public             # signed Debug build
 #   ./build.sh unsigned           # unsigned Debug build (CI/fallback)
-#   ./build.sh release            # signed Release build -> "Liquid Voice.app"
+#   ./build.sh release            # signed Release build -> "MouthKeys.app"
 #   ./build.sh install            # Release build, back up the installed app, install to /Applications
 #   ./build.sh dist               # Developer ID signed, notarized DMG in dist/ (scripts/release.sh)
 
@@ -51,7 +51,7 @@ run_public_build() {
     cd "${PROJECT_DIR}"
 
     if [ "${signing_mode}" = "unsigned" ]; then
-        echo "Running unsigned Liquid Voice Debug build..."
+        echo "Running unsigned MouthKeys Debug build..."
         echo "Accessibility permission may need to be granted again after rebuilding."
         exec xcodebuild "${build_args[@]}" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
     fi
@@ -84,8 +84,8 @@ EOF
         exit 1
     fi
 
-    echo "Running signed Liquid Voice Debug build..."
-    echo "Build product: ${DERIVED_DATA_PATH}/Build/Products/Debug/Liquid Voice Debug.app"
+    echo "Running signed MouthKeys Debug build..."
+    echo "Build product: ${DERIVED_DATA_PATH}/Build/Products/Debug/MouthKeys Debug.app"
     exec xcodebuild "${build_args[@]}" DEVELOPMENT_TEAM="${development_team}"
 }
 
@@ -191,11 +191,36 @@ bundle_id() {
     /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist" 2>/dev/null || true
 }
 
-# Quits Liquid Voice and waits up to 10 s for it to go.
-quit_liquid_voice() {
-    osascript -e 'quit app "Liquid Voice"' >/dev/null 2>&1 || true
+
+# The app was called Liquid Voice until 2026-10-02 and installed as "Liquid Voice.app". It keeps
+# its bundle ID, so two copies in /Applications would confuse LaunchServices and the login item:
+# install backs the old one up with everything else it replaces, then takes it out.
+LEGACY_APP_NAME="Liquid Voice.app"
+# Process names of the installed app, current and legacy.
+APP_PROCESS_NAMES=("MouthKeys" "Liquid Voice")
+
+# True while any copy of the app (MouthKeys or the older Liquid Voice) is running.
+app_is_running() {
+    local name
+    for name in "${APP_PROCESS_NAMES[@]}"; do
+        if pgrep -x "${name}" >/dev/null 2>&1; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Quits every running copy of the app and waits up to 10 s for them to go. Only a running
+# process is asked to quit, so this never launches anything.
+quit_running_app() {
+    local name
+    for name in "${APP_PROCESS_NAMES[@]}"; do
+        if pgrep -x "${name}" >/dev/null 2>&1; then
+            osascript -e "quit app \"${name}\"" >/dev/null 2>&1 || true
+        fi
+    done
     local waited=0
-    while pgrep -x "Liquid Voice" >/dev/null 2>&1; do
+    while app_is_running; do
         if [ "${waited}" -ge 20 ]; then
             return 1
         fi
@@ -204,56 +229,113 @@ quit_liquid_voice() {
     done
 }
 
-# Writes <backup dir>/rollback.sh, which puts the backed-up app back with the same
-# move-aside swap as install: nothing is removed until the backup copy is in place.
+# Writes <backup dir>/rollback.sh, which puts every backed-up app back where it was with the
+# same move-aside swap as install: nothing is removed until the backup copies are in place.
+# Arguments: backup dir, install path, 1 when nothing was at the install path before (the new
+# app then comes out after the restore), then one "<backup copy>|<original path>|<bundle ID>"
+# entry per backed-up app.
 write_rollback_script() {
     local backup_dir="$1"
     local installed="$2"
-    local backup_id="$3"
-    cat > "${backup_dir}/rollback.sh" <<ROLLBACK
-#!/bin/bash
-# Puts back the Liquid Voice (${backup_id}) that ./build.sh install replaced. Its own settings
-# and data were never changed, so it picks up where it was (without dictations made in the
-# newer app).
-set -euo pipefail
-installed="${installed}"
-backup="${backup_dir}/Liquid Voice.app"
-staged="\${installed}.rollback"
-replaced="\${installed}.replaced-\$(date +%Y%m%d-%H%M%S)"
-osascript -e 'quit app "Liquid Voice"' >/dev/null 2>&1 || true
+    local remove_new="$3"
+    shift 3
+    local script="${backup_dir}/rollback.sh"
+    local entry
+    {
+        echo '#!/bin/bash'
+        echo "# Puts back the app(s) that ./build.sh install replaced on $(date '+%Y-%m-%d %H:%M'). Their own"
+        echo '# settings and data were never changed, so they pick up where they were (without'
+        echo '# dictations made in the newer app).'
+        echo 'set -euo pipefail'
+        printf 'installed=%q\n' "${installed}"
+        printf 'remove_new=%q\n' "${remove_new}"
+        printf 'process_names=(%q %q)\n' "${APP_PROCESS_NAMES[@]}"
+        echo 'restores=()'
+        for entry in "$@"; do
+            printf 'restores+=(%q)\n' "${entry}"
+        done
+        cat <<'ROLLBACK'
+stamp="$(date +%Y%m%d-%H%M%S)"
+running() {
+    local name
+    for name in "${process_names[@]}"; do
+        pgrep -x "${name}" >/dev/null 2>&1 && return 0
+    done
+    return 1
+}
+for name in "${process_names[@]}"; do
+    if pgrep -x "${name}" >/dev/null 2>&1; then
+        osascript -e "quit app \"${name}\"" >/dev/null 2>&1 || true
+    fi
+done
 waited=0
-while pgrep -x "Liquid Voice" >/dev/null 2>&1; do
-    if [ "\${waited}" -ge 20 ]; then
-        echo "Liquid Voice is still running. Quit it, then run this again. Nothing was changed." >&2
+while running; do
+    if [ "${waited}" -ge 20 ]; then
+        echo "The app is still running. Quit it, then run this again. Nothing was changed." >&2
         exit 1
     fi
     sleep 0.5
-    waited=\$((waited + 1))
+    waited=$((waited + 1))
 done
-rm -rf "\${staged}"
-ditto "\${backup}" "\${staged}"
-if [ ! -f "\${staged}/Contents/Info.plist" ] || \\
-    [ "\$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "\${staged}/Contents/Info.plist")" != "${backup_id}" ]; then
-    rm -rf "\${staged}"
-    echo "The copy of the backup is incomplete. Nothing was changed." >&2
-    exit 1
-fi
-if [ -e "\${installed}" ]; then
-    mv "\${installed}" "\${replaced}"
-fi
-if ! mv "\${staged}" "\${installed}"; then
-    if [ -e "\${replaced}" ] && mv "\${replaced}" "\${installed}"; then
-        echo "Could not put the backup in place; the current app was left as it was." >&2
-    else
-        echo "Could not put the backup in place. The app that was installed is at \${replaced}; the backup is at \${backup}." >&2
+
+# Copy every backup next to where it goes and check it before anything is moved.
+for entry in "${restores[@]}"; do
+    IFS='|' read -r backup target id <<< "${entry}"
+    rm -rf "${target}.rollback"
+    ditto "${backup}" "${target}.rollback"
+    if [ ! -f "${target}.rollback/Contents/Info.plist" ] || \
+        [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${target}.rollback/Contents/Info.plist")" != "${id}" ]; then
+        for staged_entry in "${restores[@]}"; do
+            IFS='|' read -r _ staged_target _ <<< "${staged_entry}"
+            rm -rf "${staged_target}.rollback"
+        done
+        echo "The copy of ${backup} is incomplete. Nothing was changed." >&2
+        exit 1
     fi
-    exit 1
+done
+
+# Swap each one in.
+replaced=()
+restored=()
+for entry in "${restores[@]}"; do
+    IFS='|' read -r backup target id <<< "${entry}"
+    if [ -e "${target}" ]; then
+        mv "${target}" "${target}.replaced-${stamp}"
+        replaced+=("${target}.replaced-${stamp}")
+    fi
+    if ! mv "${target}.rollback" "${target}"; then
+        if [ -e "${target}.replaced-${stamp}" ] && mv "${target}.replaced-${stamp}" "${target}"; then
+            echo "Could not put ${backup} back at ${target}; what was there was left as it was." >&2
+        else
+            echo "Could not put ${backup} back at ${target}. What was there is at ${target}.replaced-${stamp}." >&2
+        fi
+        if [ "${#restored[@]}" -gt 0 ]; then
+            echo "Already restored: ${restored[*]}" >&2
+        fi
+        exit 1
+    fi
+    restored+=("${target}")
+    echo "Restored ${id} to ${target}."
+done
+
+# Nothing was at the install path before the install, so the app it added comes out too.
+if [ "${remove_new}" = "1" ] && [ -e "${installed}" ]; then
+    case " ${restored[*]} " in
+        *" ${installed} "*) ;;
+        *)
+            mv "${installed}" "${installed}.replaced-${stamp}"
+            replaced+=("${installed}.replaced-${stamp}")
+            echo "Took out ${installed}, which the install had added."
+            ;;
+    esac
 fi
-rm -rf "\${replaced}"
-echo "Restored ${backup_id} to \${installed}."
-open "\${installed}"
+if [ "${#replaced[@]}" -gt 0 ]; then
+    rm -rf "${replaced[@]}"
+fi
+open "${restored[0]}"
 ROLLBACK
-    chmod +x "${backup_dir}/rollback.sh"
+    } > "${script}"
+    chmod +x "${script}"
 }
 
 # Before the first install of a new bundle identifier: the new app copies FluidVoice-era data
@@ -308,77 +390,129 @@ WARN
     fi
 }
 
-# Installs the built app, keeping the one it replaces so one command brings it back. Nothing
-# destructive happens before the backup is verified and the rollback command is printed, and
-# the new app is copied next to the old one first, then swapped in with mv.
-# LIQUIDVOICE_INSTALL_PATH, LIQUIDVOICE_BACKUP_ROOT, LIQUIDVOICE_DATA_DOMAIN and
-# LIQUIDVOICE_DATA_FOLDER only exist to try this step on scratch folders.
+# An earlier install that stopped between its moves leaves an app it was replacing at
+# <path>.previous. Put it back when no app is installed at any of the given paths; otherwise
+# keep it in the backups. Never delete it.
+recover_previous() {
+    local target="$1"
+    local backup_root="$2"
+    shift 2
+    local previous="${target}.previous"
+    [ -e "${previous}" ] || return 0
+
+    local other present=""
+    for other in "$@"; do
+        if [ -n "${other}" ] && [ -e "${other}" ]; then
+            present=1
+        fi
+    done
+    if [ -z "${present}" ]; then
+        echo "Found ${previous} from an interrupted install and no app installed: moving it back first."
+        mv "${previous}" "${target}"
+    else
+        local leftover
+        leftover="${backup_root}/liquid-voice-leftover-$(date +%Y%m%d-%H%M%S)-$$"
+        mkdir -p "${leftover}"
+        mv "${previous}" "${leftover}/$(basename "${target}")"
+        echo "Kept a leftover ${previous} as ${leftover}/$(basename "${target}")."
+    fi
+}
+
+# Copies an installed app into the backup folder and checks the copy. Prints the rollback
+# entry ("<backup copy>|<original path>|<bundle ID>") on success; stops the install otherwise.
+backup_app() {
+    local source="$1"
+    local backup_dir="$2"
+    local copy
+    copy="${backup_dir}/$(basename "${source}")"
+    local source_id backup_id
+    source_id="$(bundle_id "${source}")"
+    echo "Backing up ${source} to ${copy} ..." >&2
+    ditto "${source}" "${copy}"
+    backup_id="$(bundle_id "${copy}")"
+    if [ -z "${backup_id}" ] || [ "${backup_id}" != "${source_id}" ]; then
+        printf >&2 'The backup at %s has bundle ID "%s", not "%s". Nothing was installed.\n' \
+            "${copy}" "${backup_id}" "${source_id}"
+        exit 1
+    fi
+    if ! codesign --verify --deep --strict "${copy}" >/dev/null 2>&1; then
+        if codesign --verify --deep --strict "${source}" >/dev/null 2>&1; then
+            printf >&2 'The backup at %s fails codesign verification but %s passes. Nothing was installed.\n' \
+                "${copy}" "${source}"
+            exit 1
+        fi
+        echo "Note: ${source} itself fails strict codesign verification; the backup is an exact copy of it." >&2
+    fi
+    echo "Backed up ${backup_id}." >&2
+    printf '%s|%s|%s\n' "${copy}" "${source}" "${backup_id}"
+}
+
+# Installs the built app, keeping what it replaces so one command brings it back. Nothing
+# destructive happens before the backups are verified and the rollback command is printed, and
+# the new app is copied next to the old one first, then swapped in with mv. An older
+# "Liquid Voice.app" beside it is backed up the same way and taken out in the same swap.
+# LIQUIDVOICE_INSTALL_PATH, LIQUIDVOICE_LEGACY_INSTALL_PATH, LIQUIDVOICE_BACKUP_ROOT,
+# LIQUIDVOICE_DATA_DOMAIN and LIQUIDVOICE_DATA_FOLDER only exist to try this step on scratch folders.
 install_app() {
     local product="$1"
-    local installed="${LIQUIDVOICE_INSTALL_PATH:-/Applications/Liquid Voice.app}"
+    local installed="${LIQUIDVOICE_INSTALL_PATH:-/Applications/MouthKeys.app}"
+    local legacy="${LIQUIDVOICE_LEGACY_INSTALL_PATH:-$(dirname "${installed}")/${LEGACY_APP_NAME}}"
     local backup_root="${LIQUIDVOICE_BACKUP_ROOT:-${HOME}/Backups}"
     local data_domain="${LIQUIDVOICE_DATA_DOMAIN:-com.stage11.liquidvoice}"
     local data_folder="${LIQUIDVOICE_DATA_FOLDER:-${HOME}/Library/Application Support/LiquidVoice}"
     local staged="${installed}.new"
     local previous="${installed}.previous"
+    local legacy_previous=""
     local backup_dir=""
     local product_id installed_id=""
+
+    [ "${legacy}" != "${installed}" ] || legacy=""
+    [ -z "${legacy}" ] || legacy_previous="${legacy}.previous"
 
     product_id="$(bundle_id "${product}")"
     [ -n "${product_id}" ] || { printf >&2 'Cannot read the bundle ID of %s. Nothing was installed.\n' "${product}"; exit 1; }
 
-    # An earlier install that stopped between its two moves leaves the old app at .previous.
-    # Put it back (or, when an app is installed again, keep it in the backups); never delete it.
-    if [ -e "${previous}" ]; then
-        if [ ! -e "${installed}" ]; then
-            echo "Found ${previous} from an interrupted install and no app at ${installed}: moving it back first."
-            mv "${previous}" "${installed}"
-        else
-            local leftover
-            leftover="${backup_root}/liquid-voice-leftover-$(date +%Y%m%d-%H%M%S)"
-            mkdir -p "${leftover}"
-            mv "${previous}" "${leftover}/Liquid Voice.app"
-            echo "Kept a leftover ${previous} as ${leftover}/Liquid Voice.app."
-        fi
+    recover_previous "${installed}" "${backup_root}" "${installed}" "${legacy}"
+    if [ -n "${legacy}" ]; then
+        recover_previous "${legacy}" "${backup_root}" "${installed}" "${legacy}"
     fi
     if [ -d "${installed}" ]; then
         installed_id="$(bundle_id "${installed}")"
+    elif [ -n "${legacy}" ] && [ -d "${legacy}" ]; then
+        installed_id="$(bundle_id "${legacy}")"
     fi
     preflight_existing_identity_data "${product_id}" "${installed_id}" "${data_domain}" "${data_folder}"
 
     echo "Installing ${product_id} to ${installed} ..."
     # The running app must be gone before it is replaced (and before the new one migrates
     # its data), or it would keep writing its settings and hotkeys beside the new app.
-    if ! quit_liquid_voice; then
-        printf >&2 'Liquid Voice is still running after 10 s. Quit it, then run install again. Nothing was installed.\n'
+    if ! quit_running_app; then
+        printf >&2 'The app is still running after 10 s. Quit it, then run install again. Nothing was installed.\n'
         exit 1
     fi
 
-    # Keep the app being replaced, verified, so one command brings it back.
-    if [ -d "${installed}" ]; then
+    # Keep every app being replaced, verified, so one command brings them back.
+    local had_installed="" had_legacy="" remove_new=1
+    [ ! -d "${installed}" ] || had_installed=1
+    [ -z "${legacy}" ] || [ ! -d "${legacy}" ] || had_legacy=1
+    if [ -n "${had_installed}" ] || [ -n "${had_legacy}" ]; then
         backup_dir="${backup_root}/liquid-voice-$(date +%Y%m%d-%H%M%S)"
         # Two installs within one second must not share (and merge into) one backup.
         [ ! -e "${backup_dir}" ] || backup_dir="${backup_dir}-$$"
         mkdir -p "${backup_dir}"
-        echo "Backing up the current app to ${backup_dir}/Liquid Voice.app ..."
-        ditto "${installed}" "${backup_dir}/Liquid Voice.app"
-        local backup_id
-        backup_id="$(bundle_id "${backup_dir}/Liquid Voice.app")"
-        if [ -z "${backup_id}" ] || [ "${backup_id}" != "${installed_id}" ]; then
-            printf >&2 'The backup at %s has bundle ID "%s", not "%s". Nothing was installed.\n' \
-                "${backup_dir}" "${backup_id}" "${installed_id}"
-            exit 1
+        local -a restores=()
+        local entry
+        if [ -n "${had_installed}" ]; then
+            entry="$(backup_app "${installed}" "${backup_dir}")"
+            restores+=("${entry}")
+            remove_new=0
         fi
-        if ! codesign --verify --deep --strict "${backup_dir}/Liquid Voice.app" >/dev/null 2>&1; then
-            if codesign --verify --deep --strict "${installed}" >/dev/null 2>&1; then
-                printf >&2 'The backup at %s fails codesign verification but the installed app passes. Nothing was installed.\n' "${backup_dir}"
-                exit 1
-            fi
-            echo "Note: the installed app itself fails strict codesign verification; the backup is an exact copy of it."
+        if [ -n "${had_legacy}" ]; then
+            entry="$(backup_app "${legacy}" "${backup_dir}")"
+            restores+=("${entry}")
         fi
-        write_rollback_script "${backup_dir}" "${installed}" "${backup_id}"
-        echo "Backed up ${backup_id}."
-        echo "Rollback, if needed (restores the previous app; its own settings and data were never changed):"
+        write_rollback_script "${backup_dir}" "${installed}" "${remove_new}" "${restores[@]}"
+        echo "Rollback, if needed (restores what was installed; its own settings and data were never changed):"
         echo "  bash \"${backup_dir}/rollback.sh\""
     fi
 
@@ -390,15 +524,31 @@ install_app() {
         printf >&2 'The copy at %s is incomplete. The installed app was not touched.\n' "${staged}"
         exit 1
     fi
-    if [ -d "${installed}" ]; then
+    if [ -n "${had_installed}" ]; then
         mv "${installed}" "${previous}"
     fi
+    if [ -n "${had_legacy}" ] && ! mv "${legacy}" "${legacy_previous}"; then
+        if [ -n "${had_installed}" ]; then
+            mv "${previous}" "${installed}" || true
+        fi
+        rm -rf "${staged}"
+        printf >&2 'Could not move %s aside. Nothing was installed.\n' "${legacy}"
+        exit 1
+    fi
     if ! mv "${staged}" "${installed}"; then
-        if [ -e "${previous}" ] && mv "${previous}" "${installed}"; then
+        local put_back=1
+        if [ -n "${had_installed}" ] && ! mv "${previous}" "${installed}"; then
+            put_back=""
+        fi
+        if [ -n "${had_legacy}" ] && ! mv "${legacy_previous}" "${legacy}"; then
+            put_back=""
+        fi
+        if [ -n "${put_back}" ]; then
             printf >&2 'Could not move the new app into place; the previous app was put back.\n'
         else
             printf >&2 'Could not move the new app into place, nor put the previous app back.\n'
-            printf >&2 'The previous app is at %s. Move it back to %s, run install again (it moves it back first)' "${previous}" "${installed}"
+            printf >&2 'It is at %s. Move it back, run install again (it moves it back first)' \
+                "$([ -e "${previous}" ] && echo "${previous}" || echo "${legacy_previous}")"
             if [ -n "${backup_dir}" ]; then
                 printf >&2 ', or run: bash "%s/rollback.sh"' "${backup_dir}"
             fi
@@ -407,10 +557,14 @@ install_app() {
         exit 1
     fi
     rm -rf "${previous}"
+    if [ -n "${had_legacy}" ]; then
+        rm -rf "${legacy_previous}"
+        echo "Took out the old ${legacy}; its backup is in ${backup_dir}. Settings carry over (same bundle ID)."
+    fi
 
     echo "Installed: ${installed}"
     codesign -dv "${installed}" 2>&1 | grep -E 'Identifier|TeamIdentifier' || true
-    echo "Next: open Liquid Voice, grant Microphone and Accessibility when asked (System Settings > Privacy & Security), pick a speech model, then try a dictation."
+    echo "Next: open MouthKeys, grant Microphone and Accessibility when asked (System Settings > Privacy & Security), pick a speech model, then try a dictation."
     echo "Log: ~/Library/Logs/LiquidVoice/Fluid.log. (docs/INSTALL-CHECKLIST.md is the maintainer's own post-install checklist; you do not need it.)"
     if [ -n "${backup_dir}" ]; then
         echo "Rollback: bash \"${backup_dir}/rollback.sh\""
@@ -420,7 +574,7 @@ install_app() {
 run_release_build() {
     local do_install="$1"
     local development_team
-    local product="${DERIVED_DATA_PATH}/Build/Products/Release/Liquid Voice.app"
+    local product="${DERIVED_DATA_PATH}/Build/Products/Release/MouthKeys.app"
 
     cd "${PROJECT_DIR}"
 
@@ -431,7 +585,7 @@ run_release_build() {
         exit 1
     fi
 
-    echo "Running signed Release build of Liquid Voice..."
+    echo "Running signed Release build of MouthKeys..."
     xcodebuild \
         -project Fluid.xcodeproj \
         -scheme Fluid \

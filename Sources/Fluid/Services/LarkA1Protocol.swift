@@ -1,6 +1,6 @@
 import Foundation
 
-/// The Hollyland Lark A1 receiver's status query, as pure data: the one frame Liquid Voice sends
+/// The Hollyland Lark A1 receiver's status query, as pure data: the one frame MouthKeys sends
 /// and the parsing of its reply. No I/O here; `LapelMicBatteryMonitor` does the HID transfer.
 ///
 /// The receiver (USB-C, VID 0x3547, PID 0x0407) publishes no battery to macOS, but answers a

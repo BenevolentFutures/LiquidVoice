@@ -38,7 +38,7 @@ enum DeliveryDebugTriggers {
         guard UserDefaults.standard.bool(forKey: self.enabledDefaultsKey), self.observers.isEmpty else { return }
         let center = DistributedNotificationCenter.default()
         self.observers.append(center.addObserver(forName: self.deliverText, object: nil, queue: .main) { note in
-            let text = (note.object as? String) ?? "Liquid Voice debug delivery"
+            let text = (note.object as? String) ?? "MouthKeys debug delivery"
             MainActor.assumeIsolated {
                 DebugLogger.shared.info("DEBUG_DELIVERY deliverText chars=\(text.count)", source: "DeliveryDebugTriggers")
                 self.typingService.typeOutputPlanInstantly(.plain(text), preferredTargetPID: nil, textReadyAt: nil, completion: { result in

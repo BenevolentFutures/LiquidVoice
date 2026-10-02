@@ -1,4 +1,4 @@
-@testable import Liquid_Voice_Debug
+@testable import MouthKeys_Debug
 import Combine
 import Foundation
 import SwiftUI
@@ -1715,7 +1715,7 @@ final class DictationE2ETests: XCTestCase {
 
         XCTAssertEqual(components.scheme, "https")
         XCTAssertEqual(components.host, "github.com")
-        XCTAssertEqual(components.path, "/BenevolentFutures/LiquidVoice/issues/new")
+        XCTAssertEqual(components.path, "/BenevolentFutures/MouthKeys/issues/new")
         let items = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
         XCTAssertEqual(items["title"], "Dropped text")
         XCTAssertEqual(items["body"], body)
@@ -1724,7 +1724,7 @@ final class DictationE2ETests: XCTestCase {
 
     func testFeedbackIssueURLTruncatesFeedbackButKeepsVersionInfo() throws {
         let body = String(repeating: "long feedback ", count: 2000)
-        let footer = "---\nLiquid Voice 1.2.3 (45)\nmacOS 26.0"
+        let footer = "---\nMouthKeys 1.2.3 (45)\nmacOS 26.0"
         let url = LiquidVoiceLinks.prefilledIssueURL(title: "Long", body: body, footer: footer)
         XCTAssertLessThanOrEqual(url.absoluteString.count, LiquidVoiceLinks.maxIssueURLLength)
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
@@ -2981,7 +2981,7 @@ final class SignalOverlayRenderTests: XCTestCase {
             ("07-failed", SignalCardContent(headline: "Couldn\u{2019}t paste into c11", reason: "No text field focused", transcript: transcript, primary: .copy, meta: "118 words"), 210),
             ("17-failed-clipboardkept", SignalCardContent(headline: "Couldn\u{2019}t paste into c11", reason: DeliveryFailureOverlayController.reasonText(failure: .pasteNotLanded, clipboard: .newerClipboardCopy, inHistory: true), transcript: transcript, primary: .copy, meta: "118 words"), 226),
             ("18-timedout", SignalCardContent(headline: "Transcription timed out", reason: "Your audio is kept", primary: .reprocess), 156),
-            ("20-micoff", SignalCardContent(headline: "Microphone access is off", reason: "Allow Liquid Voice in Privacy & Security", primary: .openSystemSettings, isMicrophoneOff: true), 156),
+            ("20-micoff", SignalCardContent(headline: "Microphone access is off", reason: "Allow MouthKeys in Privacy & Security", primary: .openSystemSettings, isMicrophoneOff: true), 156),
         ]
         for appearance in [NSAppearance.Name.darkAqua, .aqua] {
             let theme = appearance == .darkAqua ? "dark" : "light"

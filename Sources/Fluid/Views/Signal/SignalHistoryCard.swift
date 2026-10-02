@@ -67,7 +67,7 @@ struct SignalHistoryCard: View {
             .padding(.horizontal, self.metrics.historyPaddingHorizontal)
             .frame(maxHeight: .infinity)
             Spacer(minLength: 0)
-            self.label("Liquid Voice", color: self.palette.text, weight: .semibold)
+            self.label("MouthKeys", color: self.palette.text, weight: .semibold)
                 .padding(.horizontal, self.metrics.historyPaddingHorizontal)
                 .frame(maxHeight: .infinity)
                 .overlay(alignment: .leading) { self.verticalRule }

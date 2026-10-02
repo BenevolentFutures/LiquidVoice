@@ -651,7 +651,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
 
     /// The menu (DESIGN.md §10): a plain NSMenu under a mono uppercase header. Start Dictation
     /// with its hotkey, the microphone, History…, then the items the app already had (Copy Last
-    /// Transcript, Custom Dictionary, Open Liquid Voice), Settings… and Quit.
+    /// Transcript, Custom Dictionary, Open MouthKeys), Settings… and Quit.
     private func buildMenuStructure() {
         guard let menu = menu else { return }
 
@@ -699,7 +699,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         customDictionaryItem.target = self
         menu.addItem(customDictionaryItem)
 
-        let openItem = NSMenuItem(title: "Open Liquid Voice", action: #selector(openMainWindow), keyEquivalent: "")
+        let openItem = NSMenuItem(title: "Open MouthKeys", action: #selector(openMainWindow), keyEquivalent: "")
         openItem.target = self
         menu.addItem(openItem)
 
@@ -711,7 +711,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
-            title: "Quit Liquid Voice",
+            title: "Quit MouthKeys",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )
@@ -966,7 +966,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         guard window.styleMask.contains(.titled) else { return false }
         guard window.canBecomeKey else { return false }
         guard window.isMiniaturized == false else { return false }
-        return window.title == "Liquid Voice" || window.title.contains("Liquid Voice")
+        return window.title == "MouthKeys" || window.title.contains("MouthKeys")
     }
 
     @objc private func openPreferences() {
@@ -1028,7 +1028,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Liquid Voice"
+        window.title = "MouthKeys"
         window.animationBehavior = .none
         window.minSize = self.mainWindowMinimumSize
         window.isReleasedWhenClosed = false

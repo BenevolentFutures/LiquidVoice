@@ -4,7 +4,7 @@ import Foundation
 // Ported from altic-dev/FluidVoice@5a67d658 (snapshot target and route at stop) and
 // @adf0216e (make starting-field restoration optional) by altic-dev.
 //
-// Liquid Voice already fixes the formatting context and AI route at recording start
+// MouthKeys already fixes the formatting context and AI route at recording start
 // (`recordingAppInfo`), so only the typing destination is frozen here. Upstream's route,
 // prompt and overlay-label freezing depend on its Fluid Intelligence routing and are not
 // ported.
@@ -25,7 +25,7 @@ nonisolated enum DictationTargetPolicy {
     ///
     /// - The field focused at stop wins by default: dictation follows the cursor.
     /// - "Return to Starting Field" (off by default) sends it back to where recording began.
-    /// - When Liquid Voice's overlay or one of its panels holds focus at stop, the text goes
+    /// - When MouthKeys' overlay or one of its panels holds focus at stop, the text goes
     ///   back to where recording began. Its main window is a real destination (its editor).
     static func selectStopTarget(
         current: DictationTarget?,

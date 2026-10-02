@@ -5,7 +5,7 @@ import Foundation
 // Where Spoken Send may press its key, and how the key is pressed.
 //
 // Upstream (altic-dev/FluidVoice@c679506d, @9778fe46) blocks Spoken Send in every terminal,
-// because Return in a shell runs a command. Liquid Voice keeps that block list and adds an
+// because Return in a shell runs a command. MouthKeys keeps that block list and adds an
 // allow list checked first: c11, where Atin dictates Claude Code prompts all day. c11 is
 // allowed by its bundle ID even when its name or identity would match a blocked term.
 
@@ -115,7 +115,7 @@ nonisolated enum SendKeyOutcome: String, Equatable, Sendable {
     case modifiersHeld = "modifiers_held"
     /// The user pressed a key or clicked after dictation stopped (Cmd+2 to another c11 tab, a
     /// click into another pane): the key could land where they moved to, so it is dropped.
-    /// Liquid Voice's own keystrokes posted to a process do not count; a paste or typing that
+    /// MouthKeys' own keystrokes posted to a process do not count; a paste or typing that
     /// fell back to the global event stream does, and drops the key too.
     case userActed = "user_acted"
     /// The element focused at stop no longer has focus (another c11 pane, another field).
@@ -179,7 +179,7 @@ nonisolated struct SendKeyStep {
     /// Waits briefly for the physical modifier keys to be released; false when still held.
     var modifiersReleased: () -> Bool = { TypingService.waitForPhysicalModifierRelease(timeout: SendKeyStep.modifierReleaseTimeout) }
     /// Whether the user pressed a key or clicked since the given system uptime. Modifier presses,
-    /// mouse moves, keystrokes posted to a process, and Liquid Voice's own hotkeys do not count.
+    /// mouse moves, keystrokes posted to a process, and MouthKeys' own hotkeys do not count.
     var userActedSince: (TimeInterval) -> Bool = { InputSinceStop.userActed(since: $0) }
     /// Whether the element focused at stop is still focused. Unconfigured, it is never shown to
     /// be, so a step built without a target presses nothing.
@@ -200,7 +200,7 @@ nonisolated struct SendKeyStep {
     }
 }
 
-/// Key-downs Liquid Voice's own hotkeys consumed (recorded on the hotkey tap), so starting the
+/// Key-downs MouthKeys' own hotkeys consumed (recorded on the hotkey tap), so starting the
 /// next dictation right after a quiet-countdown stop does not read as the user moving elsewhere.
 nonisolated enum ConsumedHotkeyKeyDowns {
     private static let lock = NSLock()

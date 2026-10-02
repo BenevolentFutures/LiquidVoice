@@ -36,7 +36,7 @@ The app was called Liquid Voice until 2026-10-02. Only the name changed: the bun
 The app is now `com.stage11.liquidvoice`, no longer FluidVoice's `com.FluidApp.app`. macOS treats it as a new app: your data comes over on the first launch, but Microphone and Accessibility must be granted again.
 
 0. Before installing: nothing may exist yet under the new identity, or the one-time copy is skipped or merged into it. `defaults read com.stage11.liquidvoice` should say the domain does not exist, and `~/Library/Application Support/LiquidVoice` should not exist. `./build.sh install` checks both on a first install of the new identity; if either exists it explains, prints the commands to move them aside, and installs only after you type `install`. Move them aside unless Cairn says otherwise.
-1. Open `/Applications/MouthKeys.app`. The window opens on **Getting Started**. Under Quick Setup, **Grant Microphone Permission** and **Enable Accessibility Access** are pending. The voice model shows ready after a second or two (the model cache is shared, nothing downloads).
+1. Open `/Applications/MouthKeys.app`. The window opens on **Getting Started**. Under Quick Setup, **Grant Microphone Permission** and **Enable Accessibility Access** are pending. The voice model shows ready after a second or two (the model cache is shared, nothing downloads). Quick Setup has four steps and none of them is AI Enhancement; AI Enhancement sits alone under **Advanced** in the sidebar.
 2. The log (new folder: `~/Library/Logs/LiquidVoice/`) shows, within a second of launch, with your own counts:
    ```
    IDENTITY_MIGRATION start from=com.FluidApp.app folder=FluidVoice to=com.stage11.liquidvoice folder=LiquidVoice

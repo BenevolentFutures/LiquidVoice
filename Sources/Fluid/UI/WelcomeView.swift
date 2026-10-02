@@ -49,10 +49,6 @@ struct WelcomeView: View {
         self.theme.palette.accent
     }
 
-    private var isAIEnhancementReady: Bool {
-        DictationAIPostProcessingGate.isProviderConfigured()
-    }
-
     private var appDisplayName: String {
         Bundle.main.fluidAppDisplayName
     }
@@ -149,19 +145,6 @@ struct WelcomeView: View {
 
                                 SetupStepView(
                                     step: 4,
-                                    title: self.isAIEnhancementReady ? "AI Enhancement Configured" : "Set Up AI Enhancement (Optional)",
-                                    description: self.isAIEnhancementReady
-                                        ? "AI-powered text enhancement is ready to use"
-                                        : "Configure API keys for AI-powered text enhancement",
-                                    status: self.isAIEnhancementReady ? .completed : .pending,
-                                    action: {
-                                        self.selectedSidebarItem = .aiEnhancements
-                                    },
-                                    actionButtonTitle: "Configure AI"
-                                )
-
-                                SetupStepView(
-                                    step: 5,
                                     title: self.playgroundUsed ? "Setup Tested Successfully" : "Test Your Setup",
                                     description: self.playgroundUsed
                                         ? "You've successfully tested voice transcription"
@@ -633,9 +616,7 @@ struct OnboardingFlowView: View {
     let accessibilityEnabled: Bool
     let accessibilitySetupInProgress: Bool
     let markAISkipped: () -> Void
-    let finishOnboarding: () -> Void
     let finishOnboardingAtGettingStarted: () -> Void
-    let openAIEnhancementSettingsFromOnboarding: () -> Void
     let openAccessibilitySettings: () -> Void
     let restartApp: () -> Void
     let menuBarManager: MenuBarManager
@@ -701,7 +682,6 @@ struct OnboardingFlowView: View {
         case voiceModel = 2
         case permissions = 3
         case playground = 4
-        case aiEnhancement = 5
 
         var analyticsStep: AnalyticsOnboardingStep {
             switch self {
@@ -710,7 +690,6 @@ struct OnboardingFlowView: View {
             case .voiceModel: .voiceModel
             case .permissions: .permissions
             case .playground: .playground
-            case .aiEnhancement: .aiEnhancement
             }
         }
 
@@ -724,8 +703,6 @@ struct OnboardingFlowView: View {
                 return "Choose Voice Engine"
             case .permissions:
                 return "Enable Access"
-            case .aiEnhancement:
-                return "Set Up AI Enhancement"
             case .playground:
                 return "Try MouthKeys"
             }
@@ -741,8 +718,6 @@ struct OnboardingFlowView: View {
                 return "Choose the best local engine for your language."
             case .permissions:
                 return "Allow MouthKeys to listen and type into other apps."
-            case .aiEnhancement:
-                return "Optional: Configure AI post-processing or skip this step."
             case .playground:
                 return "Use your dictation shortcut once before finishing setup."
             }
@@ -750,7 +725,8 @@ struct OnboardingFlowView: View {
     }
 
     private var step: Step {
-        Step(rawValue: self.currentStep) ?? .voiceModel
+        // A stored step past the end comes from the retired AI step; land on the last step.
+        Step(rawValue: self.currentStep) ?? (self.currentStep >= Step.allCases.count ? .playground : .voiceModel)
     }
 
     private var progressValue: Double {
@@ -880,10 +856,6 @@ struct OnboardingFlowView: View {
         self.isMicrophoneReady && self.isAccessibilityReady
     }
 
-    private var isAIReady: Bool {
-        self.settings.onboardingAISkipped || DictationAIPostProcessingGate.isProviderConfigured()
-    }
-
     private var isPlaygroundReady: Bool {
         self.settings.onboardingPlaygroundValidated || self.settings.onboardingPlaygroundSkipped
     }
@@ -915,8 +887,6 @@ struct OnboardingFlowView: View {
             return self.isVoiceModelReady
         case .permissions:
             return self.isPermissionsReady
-        case .aiEnhancement:
-            return self.isAIReady
         case .playground:
             return self.isPlaygroundReady && !self.asr.isRunning && !self.isRecordingAnyShortcut
         }
@@ -928,7 +898,7 @@ struct OnboardingFlowView: View {
             return "Next"
         case .language:
             return "Continue"
-        case .aiEnhancement:
+        case .playground:
             return "Finish Setup"
         default:
             return "Continue"
@@ -1075,8 +1045,6 @@ struct OnboardingFlowView: View {
             self.voiceModelStep
         case .permissions:
             self.permissionsStep
-        case .aiEnhancement:
-            self.aiEnhancementStep
         case .playground:
             self.playgroundStep
         }
@@ -1854,37 +1822,6 @@ struct OnboardingFlowView: View {
         }
     }
 
-    private var aiEnhancementStep: some View {
-        OnboardingAIEnhancementStepView(
-            progressValue: self.compactProgressValue,
-            glowCenter: self.landingGlowCenter,
-            isRunning: self.asr.isRunning,
-            isRecordingShortcut: self.isRecordingPrimaryShortcut,
-            onGlowMove: self.updateLandingGlow(location:in:),
-            onGlowExit: self.resetLandingGlow,
-            onBack: self.goBack,
-            onSkip: {
-                let origin = self.settings.analyticsOnboardingOrigin
-                self.markAISkipped()
-                self.finishOnboardingAtGettingStarted()
-                self.completeCurrentStep(
-                    outcome: .skipped,
-                    origin: origin,
-                    completesFlow: self.settings.onboardingCompleted
-                )
-            },
-            onUseAIProvider: {
-                let origin = self.settings.analyticsOnboardingOrigin
-                self.openAIEnhancementSettingsFromOnboarding()
-                self.completeCurrentStep(
-                    outcome: .openedSettings,
-                    origin: origin,
-                    completesFlow: self.settings.onboardingCompleted
-                )
-            }
-        )
-    }
-
     private var playgroundStep: some View {
         GeometryReader { proxy in
             ZStack {
@@ -1933,7 +1870,7 @@ struct OnboardingFlowView: View {
                     }
 
                     self.cinematicFooter(
-                        continueTitle: "Continue",
+                        continueTitle: self.primaryButtonTitle,
                         canContinue: self.canContinue,
                         continueAction: {
                             self.handlePrimaryAction()
@@ -1942,7 +1879,7 @@ struct OnboardingFlowView: View {
                         canSkip: !self.asr.isRunning && !self.isRecordingAnyShortcut,
                         skipAction: {
                             self.settings.onboardingPlaygroundSkipped = true
-                            self.goNext(outcome: .skipped)
+                            self.finishSetup(outcome: .skipped)
                         }
                     )
                 }
@@ -2795,18 +2732,27 @@ struct OnboardingFlowView: View {
             self.selectOnboardingRoute(route)
         }
 
-        if self.step == .aiEnhancement {
-            guard self.isAIReady else { return }
-            let origin = self.settings.analyticsOnboardingOrigin
-            self.finishOnboarding()
-            self.completeCurrentStep(
-                outcome: .completed,
-                origin: origin,
-                completesFlow: self.settings.onboardingCompleted
-            )
+        if self.step == .playground {
+            guard self.canContinue else { return }
+            self.finishSetup(outcome: .completed)
             return
         }
         self.goNext()
+    }
+
+    /// The playground is the last step. MouthKeys is straight voice to text, so setup
+    /// never asks about AI; it records the choice as skipped unless a provider is already set.
+    private func finishSetup(outcome: AnalyticsOnboardingOutcome) {
+        if !DictationAIPostProcessingGate.isProviderConfigured() {
+            self.markAISkipped()
+        }
+        let origin = self.settings.analyticsOnboardingOrigin
+        self.finishOnboardingAtGettingStarted()
+        self.completeCurrentStep(
+            outcome: outcome,
+            origin: origin,
+            completesFlow: self.settings.onboardingCompleted
+        )
     }
 
     private func completeCurrentStep(

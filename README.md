@@ -44,7 +44,7 @@ Liquid Voice is narrower on purpose.
 no binaries yet. you build it. building needs Xcode 26, which needs macOS 15.6 or later; the app itself runs on macOS 15 or later. by engine: Parakeet, Nemotron and Cohere need Apple Silicon. Apple Speech needs macOS 26. Whisper up to Medium and Apple ASR Legacy, the older Apple engine, also run on Intel, which this fork has not tested.
 
 ```bash
-git clone -b liquid-voice https://github.com/BenevolentFutures/LiquidVoice.git
+git clone --depth 1 -b liquid-voice https://github.com/BenevolentFutures/LiquidVoice.git
 cd LiquidVoice
 ./build.sh install
 ```
@@ -53,7 +53,7 @@ cd LiquidVoice
 
 **coming from FluidVoice.** stock FluidVoice and older Liquid Voice builds share the bundle ID `com.FluidApp.app`. if you have used either on this Mac, Liquid Voice copies its settings, dictionary and history once, on first launch, and never changes the original. after that the two apps keep separate data and can run side by side. macOS does not carry permissions over, so you grant them again.
 
-**signing.** the install needs an Apple Development identity, so macOS keeps your permissions across rebuilds. a free Personal Team is enough: add an Apple Account in Xcode › Settings › Accounts, then create an Apple Development certificate. with several teams, set `FLUIDVOICE_DEVELOPMENT_TEAM` to the Team ID you want. without one, `./build.sh unsigned` makes an unsigned Debug build, `DerivedData/Build/Products/Debug/Liquid Voice Debug.app`. it is a separate app with its own settings and data, and macOS may ask for Accessibility again after each rebuild.
+**signing.** the install needs an Apple Development identity, so macOS keeps your permissions across rebuilds. a free Personal Team is enough: add an Apple Account in Xcode › Settings › Accounts, then create an Apple Development certificate. with several teams, set `LIQUIDVOICE_DEVELOPMENT_TEAM` to the Team ID you want. without one, `./build.sh unsigned` makes an unsigned Debug build, `DerivedData/Build/Products/Debug/Liquid Voice Debug.app`. it is a separate app with its own settings and data, and macOS may ask for Accessibility again after each rebuild.
 
 **permissions.** Microphone, to hear you. Accessibility, to type into other apps. Apple ASR Legacy also asks for Speech Recognition. then pick a speech model; the default on Apple Silicon, Parakeet TDT v3, is about a 460 MiB download.
 

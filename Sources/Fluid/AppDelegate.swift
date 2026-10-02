@@ -326,7 +326,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             DebugLogger.shared.info("Manual update check refused (Liquid Voice fork)", source: "AppDelegate")
             self.showUpdateAlert(
                 title: "Updates Are Managed Locally",
-                message: "Liquid Voice is a local fork of FluidVoice. Rebuild from ~/Projects/LiquidVoice to update."
+                message: "Liquid Voice is a local fork of FluidVoice. Pull the latest source and run ./build.sh install to update."
             )
             return
         }

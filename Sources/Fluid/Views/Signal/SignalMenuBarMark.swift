@@ -1,10 +1,11 @@
 import AppKit
 
-/// The menu bar mark (DESIGN.md §10): a 22 x 16 square-cornered template image. Three
-/// square-ended bars at rest; bars plus a solid square while listening (the bars follow the level
-/// at 8 Hz, still during Spoken Send's countdown); bars plus an outlined square while
-/// transcribing. The width never changes. On hover, and while the menu is open, a bracket draws
-/// inside the box (the menu bar has no room outside it).
+/// The menu bar mark (DESIGN.md §10): a 22 x 16 square-cornered template image. The grin at
+/// rest: four square-ended teeth a jaw, the bite smiling. While listening the lower jaw opens with
+/// the level at 8 Hz (still during Spoken Send's countdown) and a solid square stands beside it;
+/// while transcribing the jaw is closed and the square is outlined. The width never changes. On
+/// hover, and while the menu is open, a bracket draws inside the box (the menu bar has no room
+/// outside it).
 enum SignalMenuBarMark {
     enum Kind: Equatable {
         case idle
@@ -13,28 +14,32 @@ enum SignalMenuBarMark {
     }
 
     static let size = NSSize(width: 22, height: 16)
-    /// The bars' heights at rest.
-    static let restingBars: [CGFloat] = [6, 10, 7]
+    /// The furthest the lower jaw opens, in points.
+    static let maxJaw: CGFloat = 2
 
     private static var cache: [String: NSImage] = [:]
 
-    static func image(kind: Kind, bars: [CGFloat] = restingBars, bracket: Bool) -> NSImage {
-        let key = "\(kind)|\(bars.map { String(Int($0)) }.joined(separator: ","))|\(bracket)"
+    static func image(kind: Kind, jaw: CGFloat = 0, bracket: Bool) -> NSImage {
+        let jaw = min(max(jaw.rounded(), 0), self.maxJaw)
+        let key = "\(kind)|\(Int(jaw))|\(bracket)"
         if let cached = self.cache[key] { return cached }
         let image = NSImage(size: self.size, flipped: true) { _ in
             NSColor.black.set()
-            // Bars: 2 pt wide on a 3 pt pitch from x 4, centred on y 8, square-ended.
-            for (index, height) in bars.prefix(3).enumerated() {
-                let rect = NSRect(x: 4 + CGFloat(index) * 3, y: 8 - height / 2, width: 2, height: height)
-                NSBezierPath(rect: rect).fill()
+            // Teeth: 2 pt wide on a 3 pt pitch from x 2. Upper teeth hang from y 2 to the bite at 7
+            // (the outer two to 6); the lower teeth start a point below the bite (the outer two a
+            // point higher), dropped by the jaw.
+            for (index, x) in [2, 5, 8, 11].map({ CGFloat($0) }).enumerated() {
+                let outer = index == 0 || index == 3
+                NSBezierPath(rect: NSRect(x: x, y: 2, width: 2, height: outer ? 4 : 5)).fill()
+                NSBezierPath(rect: NSRect(x: x, y: (outer ? 7 : 8) + jaw, width: 2, height: outer ? 3 : 4)).fill()
             }
             switch kind {
             case .idle:
                 break
             case .listening:
-                NSBezierPath(rect: NSRect(x: 14, y: 5, width: 6, height: 6)).fill()
+                NSBezierPath(rect: NSRect(x: 15, y: 5, width: 6, height: 6)).fill()
             case .transcribing:
-                let outline = NSBezierPath(rect: NSRect(x: 14.75, y: 5.75, width: 4.5, height: 4.5))
+                let outline = NSBezierPath(rect: NSRect(x: 15.75, y: 5.75, width: 4.5, height: 4.5))
                 outline.lineWidth = 1.5
                 outline.stroke()
             }
@@ -60,31 +65,21 @@ enum SignalMenuBarMark {
         }
         image.isTemplate = true
         image.accessibilityDescription = "MouthKeys"
-        if self.cache.count > 256 { self.cache.removeAll() }
+        if self.cache.count > 64 { self.cache.removeAll() }
         self.cache[key] = image
         return image
     }
 
-    /// Three recent trace samples as the listening bars, in 2 pt steps. The floor keeps the
-    /// mark's own silhouette in silence (never three dots, which would read as an overflow "…").
-    /// The pill's trace holds its last words still in silence; the mark does not: once the voice
-    /// has been off past the 250 ms hangover it rests on the floor, so it never looks loud while
-    /// Atin is quiet.
-    static func listeningBars(
+    /// How far the lower jaw opens while listening, from the newest trace sample: ajar (1 pt)
+    /// while the voice is on, wide (2 pt) on the louder half of the range, closed once the voice
+    /// has been off past the 250 ms hangover, so the mark never talks while Atin is quiet.
+    static func listeningJaw(
         from trace: SignalTraceModel,
         at now: TimeInterval = Date().timeIntervalSinceReferenceDate
-    ) -> [CGFloat] {
-        let floor: [CGFloat] = [4, 6, 4]
-        let cap: [CGFloat] = [10, 12, 10]
-        let ages = [4, 1, 7]
-        guard trace.isVoiceActive(at: now) else { return floor }
-        let count = trace.current.count
-        return ages.enumerated().map { index, age in
-            guard count > age else { return floor[index] }
-            let sample = trace.current[count - 1 - age]
-            let level = (sample - SignalTraceModel.floor) / (SignalTraceModel.ceiling - SignalTraceModel.floor)
-            return min(cap[index], floor[index] + 2 * (level * 3).rounded())
-        }
+    ) -> CGFloat {
+        guard trace.isVoiceActive(at: now), let sample = trace.current.dropLast().last ?? trace.current.last else { return 0 }
+        let level = (sample - SignalTraceModel.floor) / (SignalTraceModel.ceiling - SignalTraceModel.floor)
+        return level >= 0.5 ? self.maxJaw : 1
     }
 }
 

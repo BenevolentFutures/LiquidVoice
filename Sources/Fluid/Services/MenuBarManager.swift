@@ -24,7 +24,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
 
     // The Signal menu bar mark (DESIGN.md §10).
     private var markKind: SignalMenuBarMark.Kind = .idle
-    private var markBars: [CGFloat] = SignalMenuBarMark.restingBars
+    private var markJaw: CGFloat = 0
     private var isMarkHovered = false
     private var isMenuOpen = false
     private var markTimer: Timer?
@@ -664,7 +664,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         if SpokenSendController.shared.indicator != .countingDown,
            NotchContentState.shared.isBottomOverlayPresented
         {
-            self.markBars = SignalMenuBarMark.listeningBars(from: SignalOverlayModel.shared.trace)
+            self.markJaw = SignalMenuBarMark.listeningJaw(from: SignalOverlayModel.shared.trace)
         }
         self.applyMark()
     }
@@ -676,7 +676,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
             self.markKind = .transcribing
         } else {
             self.markKind = .idle
-            self.markBars = SignalMenuBarMark.restingBars
+            self.markJaw = 0
         }
         self.applyMark()
     }
@@ -698,7 +698,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         }
         let image = SignalMenuBarMark.image(
             kind: self.markKind,
-            bars: self.markKind == .listening ? self.markBars : SignalMenuBarMark.restingBars,
+            jaw: self.markKind == .listening ? self.markJaw : 0,
             bracket: self.isMarkHovered || self.isMenuOpen
         )
         // The images are cached, so an unchanged state costs nothing.

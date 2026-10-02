@@ -3014,15 +3014,15 @@ final class SignalOverlayRenderTests: XCTestCase {
         for step in 0..<60 {
             trace.ingest(level: step % 3 == 0 ? 0.95 : 0.6, at: Double(step) / 12)
         }
-        let listeningBars = SignalMenuBarMark.listeningBars(from: trace, at: 59.0 / 12)
-        XCTAssertEqual(listeningBars.count, 3)
-        XCTAssertTrue(listeningBars.allSatisfy { $0 >= 4 && $0 <= 12 && $0.truncatingRemainder(dividingBy: 2) == 0 })
+        let listeningJaw = SignalMenuBarMark.listeningJaw(from: trace, at: 59.0 / 12)
+        XCTAssertTrue([1, 2].contains(listeningJaw), "the jaw is open while the voice is on")
 
         let marks: [(String, NSImage)] = [
             ("idle", SignalMenuBarMark.image(kind: .idle, bracket: false)),
             ("idle-hover", SignalMenuBarMark.image(kind: .idle, bracket: true)),
-            ("listening", SignalMenuBarMark.image(kind: .listening, bars: listeningBars, bracket: false)),
-            ("listening-open", SignalMenuBarMark.image(kind: .listening, bars: listeningBars, bracket: true)),
+            ("listening", SignalMenuBarMark.image(kind: .listening, jaw: listeningJaw, bracket: false)),
+            ("listening-wide", SignalMenuBarMark.image(kind: .listening, jaw: 2, bracket: false)),
+            ("listening-open", SignalMenuBarMark.image(kind: .listening, jaw: listeningJaw, bracket: true)),
             ("transcribing", SignalMenuBarMark.image(kind: .transcribing, bracket: false)),
         ]
         for (_, image) in marks {
@@ -3468,7 +3468,7 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         t = self.feed(trace, 0.6, from: t, seconds: 1)
         XCTAssertEqual(trace.pushes, 12, accuracy: 1)
         XCTAssertGreaterThan(trace.current.suffix(10).filter { $0 > 2 }.count, 5)
-        XCTAssertNotEqual(SignalMenuBarMark.listeningBars(from: trace, at: t), [4, 6, 4], "the menu bar mark moves with speech")
+        XCTAssertGreaterThan(SignalMenuBarMark.listeningJaw(from: trace, at: t), 0, "the menu bar mark talks with speech")
         trace.advance(to: t + 0.04)
         XCTAssertGreaterThan(trace.scrollFraction, 0, "mid-sample the bars sit part way through the pitch")
 
@@ -3477,7 +3477,7 @@ final class SignalOverlayBehaviorTests: XCTestCase {
         t = self.feed(trace, 0, from: t, seconds: 2)
         XCTAssertEqual(trace.pushes - spoken, 3, accuracy: 1, "the hangover, no more")
         let held = (trace.pushes, trace.scrollFraction, trace.current)
-        XCTAssertEqual(SignalMenuBarMark.listeningBars(from: trace, at: t), [4, 6, 4], "the menu bar mark rests in silence")
+        XCTAssertEqual(SignalMenuBarMark.listeningJaw(from: trace, at: t), 0, "the menu bar mark closes its mouth in silence")
         t = self.feed(trace, 0, from: t, seconds: 1)
         XCTAssertEqual(trace.pushes, held.0, "silence holds the trace still")
         XCTAssertEqual(trace.scrollFraction, held.1)
@@ -4146,26 +4146,26 @@ final class SignalTraceLifecycleTests: XCTestCase {
         snapshots.append(SignalOverlayModel.shared.trace.current)
     }
 
-    private func dictate(_ controller: BottomOverlayWindowController, subject: PassthroughSubject<CGFloat, Never>, trace id: Int) async throws -> (snapshots: [[CGFloat]], stats: SignalTraceModel.Stats, menuBars: [CGFloat]) {
+    private func dictate(_ controller: BottomOverlayWindowController, subject: PassthroughSubject<CGFloat, Never>, trace id: Int) async throws -> (snapshots: [[CGFloat]], stats: SignalTraceModel.Stats, menuJaw: CGFloat) {
         controller.show(audioPublisher: subject.eraseToAnyPublisher(), mode: .dictation)
         var snapshots: [[CGFloat]] = []
         try await self.speak(into: subject, seconds: 0.6, snapshots: &snapshots)
         let stats = SignalOverlayModel.shared.trace.stats
-        let menuBars = SignalMenuBarMark.listeningBars(from: SignalOverlayModel.shared.trace)
+        let menuJaw = SignalMenuBarMark.listeningJaw(from: SignalOverlayModel.shared.trace)
         controller.markRecordingStopped()
         controller.awaitDelivery(traceID: id, appName: "c11", words: 3, failureReported: false)
         controller.dictationDeliveryFinished(DictationDeliveryOutcome(traceID: id, result: .dispatched, method: .paste, sentReturn: false))
-        return (snapshots, stats, menuBars)
+        return (snapshots, stats, menuJaw)
     }
 
-    private func assertMoved(_ run: (snapshots: [[CGFloat]], stats: SignalTraceModel.Stats, menuBars: [CGFloat]), _ label: String) {
+    private func assertMoved(_ run: (snapshots: [[CGFloat]], stats: SignalTraceModel.Stats, menuJaw: CGFloat), _ label: String) {
         let raisedBars = run.snapshots.map { $0.filter { $0 > 2 }.count }
         XCTAssertGreaterThanOrEqual(raisedBars.max() ?? 0, 2, "\(label): the quiet speech draws above the floor")
         XCTAssertGreaterThan(Set(run.snapshots).count, 2, "\(label): the bars change from moment to moment")
         XCTAssertGreaterThanOrEqual(run.snapshots.flatMap { $0 }.max() ?? 0, 12, "\(label): syllables stretch tall")
         // A third of this speech is room tone: under the old fixed gate this is 0.
         XCTAssertGreaterThan(Double(run.stats.raised) / Double(max(run.stats.windows, 1)), 0.25, "\(label): \(run.stats)")
-        XCTAssertEqual(run.menuBars.count, 3)
+        XCTAssertTrue((0...SignalMenuBarMark.maxJaw).contains(run.menuJaw), "\(label): \(run.menuJaw)")
     }
 
     func testTheTraceMovesOnTheSecondDictationAfterAHoldAndFade() async throws {

@@ -74,7 +74,7 @@ cd MouthKeys
 
 `./build.sh install` builds a signed Release, quits a running MouthKeys, backs up the installed app to `~/Backups/`, and replaces `/Applications/MouthKeys.app`. an older `/Applications/Liquid Voice.app` is backed up and taken out in the same step. it prints the command to roll back. to update, pull and run it again.
 
-**signing.** the install needs an Apple Development identity, so macOS keeps your permissions across rebuilds. a free Personal Team is enough: add an Apple Account in Xcode › Settings › Accounts, then create an Apple Development certificate. with several teams, set `LIQUIDVOICE_DEVELOPMENT_TEAM` to the Team ID you want. without one, `./build.sh unsigned` makes an unsigned Debug build, `DerivedData/Build/Products/Debug/MouthKeys Debug.app`. it is a separate app with its own settings and data, and macOS may ask for Accessibility again after each rebuild.
+**signing.** the install needs an Apple Development identity, so macOS keeps your permissions across rebuilds. a free Personal Team is enough: add an Apple Account in Xcode › Settings › Accounts, then create an Apple Development certificate. with several teams, set `LIQUIDVOICE_DEVELOPMENT_TEAM` to the Team ID you want. if your installed MouthKeys came from the DMG, update it from the next DMG instead: `./build.sh install` replaces its Developer ID signature with your Apple Development one, and macOS stops honouring the Accessibility switch it had (the hotkeys go quiet). without an identity, `./build.sh unsigned` makes an unsigned Debug build, `DerivedData/Build/Products/Debug/MouthKeys Debug.app`. it is a separate app with its own settings and data, and macOS may ask for Accessibility again after each rebuild.
 
 ### first launch.
 

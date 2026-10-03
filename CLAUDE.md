@@ -17,12 +17,12 @@ Atin dictates into Claude Code in c11 all day with the installed app. Text deliv
 - Until the identity change the app ran as FluidVoice: `com.FluidApp.app`, `Application Support/FluidVoice`, `~/Library/Logs/Fluid/`. On its first launch the installed app copies that data once (`AppIdentityMigration`, run from `LiquidVoiceMain` before anything reads a default): every UserDefaults key, then the folder, then the login item. It never writes to the old domain or folder, so the old app still runs from a backup. Check it with `grep IDENTITY_MIGRATION ~/Library/Logs/LiquidVoice/Fluid.log`; the markers are `LiquidVoiceIdentityMigrationDefaults` and `LiquidVoiceIdentityMigrationFolder` in the new domain. The old data wins on conflict; what it replaces is saved to `~/Backups/liquid-voice-displaced-*` first. A retry that had to set data aside and still failed stops retrying (`LiquidVoiceIdentityMigrationDefaultsHalted`) and shows an alert before the app opens. Debug builds never migrate.
 - Identifiers live in `AppStorageLocation` (and `LegacyAppIdentity` for the old ones). Never hardcode one. The keychain service `com.fluidvoice.provider-api-keys` kept its name on purpose (`KeychainService.serviceName`).
 - Model caches in `~/Library/Application Support/FluidAudio` belong to the FluidAudio library, not to a bundle ID, and are shared by every build.
-- Install with Atin only: `./build.sh install` checks for data already under a new identity (first install only), quits the app (and stops if it will not quit), backs it up to `~/Backups/liquid-voice-<timestamp>/` and verifies the copy (an older `/Applications/Liquid Voice.app` is backed up the same way and taken out in the same swap, since two copies of one bundle ID confuse LaunchServices), prints the rollback command (`bash ~/Backups/liquid-voice-<timestamp>/rollback.sh`), then copies the new app alongside and swaps it in. Then run `docs/INSTALL-CHECKLIST.md`.
+- Install with Atin only, and pick the path by the installed app's signer (`codesign -dvv /Applications/MouthKeys.app 2>&1 | grep -m1 Authority=`). **Developer ID** (Atin's Mac since the 0.1.0 DMG): never `./build.sh install`; follow "Install over a Developer ID app" in `docs/INSTALL-CHECKLIST.md` (pitfall below). **Apple Development**: `./build.sh install` checks for data already under a new identity (first install only), quits the app (and stops if it will not quit), backs it up to `~/Backups/liquid-voice-<timestamp>/` and verifies the copy (an older `/Applications/Liquid Voice.app` is backed up the same way and taken out in the same swap, since two copies of one bundle ID confuse LaunchServices), prints the rollback command (`bash ~/Backups/liquid-voice-<timestamp>/rollback.sh`), then copies the new app alongside and swaps it in. Then run `docs/INSTALL-CHECKLIST.md`.
 - Never launch a Release product (`./build.sh release`, `DerivedData/.../Release/MouthKeys.app`): it is `com.stage11.liquidvoice`, the installed app's identity, and would write into the installed app's defaults and folder. The migration only runs for the app in `/Applications`.
 
 ## Never touch the installed app
 
-- Never touch `/Applications/MouthKeys.app` or `/Applications/Liquid Voice.app` (its name before the rename, still installed until the next `./build.sh install`), quit or relaunch the running app, write `defaults` for `com.stage11.liquidvoice` or `com.FluidApp.app`, or touch `~/Library/Application Support/LiquidVoice` or `.../FluidVoice`. Never run `./build.sh install` without Atin.
+- Never touch `/Applications/MouthKeys.app` or `/Applications/Liquid Voice.app` (its name before the rename), quit or relaunch the running app, write `defaults` for `com.stage11.liquidvoice` or `com.FluidApp.app`, or touch `~/Library/Application Support/LiquidVoice` or `.../FluidVoice`. Never run `./build.sh install` without Atin.
 - Debug builds are isolated by their own bundle ID (own UserDefaults) and folders (table above). Any code that picks an Application Support folder must use `AppStorageLocation.folderName`, and the log folder `AppStorageLocation.logFolderName`.
 - Read either log freely.
 
@@ -61,6 +61,12 @@ Scripted delivery checks (Debug builds only): `defaults write com.stage11.liquid
 - Upstream fixes are ported by hand, never merged. Policy, watermark and ledger: `UPSTREAM.md`.
 
 ## Agent pitfalls
+
+### `./build.sh install` over the Developer ID app silently kills the hotkeys
+
+**The incident (2026-10-02):** with the Developer ID 0.1.0 build installed, an agent ran `./build.sh install`. It signs with the Apple Development identity: same bundle ID, a different designated requirement. Accessibility still showed switched on, `AXIsProcessTrusted()` was false, and the hotkey retried `Attempt 1 failed` until the install was rolled back.
+
+**The rule:** match the installed app's signer. Over a Developer ID app, sign the Release build with Developer ID (`scripts/release.sh package`, notarizing optional for a local install), confirm `codesign -d -r-` matches the installed app's line exactly, then swap it in by hand: "Install over a Developer ID app" in `docs/INSTALL-CHECKLIST.md`. After the swap, `grep HOTKEY_TAP ~/Library/Logs/LiquidVoice/Fluid.log | tail -1` must say `state=installed`; `waiting_for_accessibility` means the signature does not match, so roll back.
 
 ### A new signature leaves a stale Accessibility grant, and other copies of the bundle ID poison it
 

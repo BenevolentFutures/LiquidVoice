@@ -4,7 +4,29 @@ This is the maintainer's own post-install checklist; contributors do not need it
 
 Run once after installing a new build. It takes about ten minutes, fifteen the first time after the identity change.
 
-Install with `./build.sh install` (with Atin, never unattended). It quits the app and waits for it to go, backs up the installed one to `~/Backups/liquid-voice-<timestamp>/MouthKeys.app` (and an older `/Applications/MouthKeys.app`, if one is there, to `MouthKeys.app` beside it) and verifies each copy (bundle ID and `codesign --verify --deep --strict`), prints the rollback command, and only then copies the new build next to the old one and swaps it in. Keep that output.
+Install with Atin, never unattended, by the path that matches the installed app's signer: `codesign -dvv /Applications/MouthKeys.app 2>&1 | grep -m1 Authority=`.
+
+### Install over a Developer ID app
+
+The installed app came from a DMG (`Authority=Developer ID Application: …`). Never `./build.sh install` here: it signs with Apple Development, a different designated requirement, and Accessibility silently stops matching (hotkeys dead, `Attempt 1 failed` in the log). Instead:
+
+1. **Build** Release from a clean checkout of `origin/liquid-voice` (a fresh clone or worktree, never a checkout with local changes): `scripts/release.sh build`. It needs no certificate, so a separate build Mac can run it; copy the product back with `ditto -c -k --keepParent MouthKeys.app - | ditto -x -k - <dir>` (ditto keeps the framework symlinks).
+2. **Sign** with Developer ID into a scratch folder, without notarizing (a locally built app carries no quarantine, so Gatekeeper does not check it):
+   ```sh
+   LIQUIDVOICE_SKIP_NOTARIZE=1 LIQUIDVOICE_DIST_DIR=<scratch> scripts/release.sh package <dir>/MouthKeys.app
+   ```
+3. **Match** the signature: the `designated =>` lines of `codesign -d -r- /Applications/MouthKeys.app` and `codesign -d -r- <scratch>/MouthKeys.app` must be identical. If they differ, stop.
+4. **Back up** and verify:
+   ```sh
+   B=~/Backups/liquid-voice-$(date +%Y%m%d-%H%M%S); mkdir -p "$B"
+   ditto /Applications/MouthKeys.app "$B/MouthKeys.app" && codesign --verify --deep --strict "$B/MouthKeys.app"
+   ```
+5. **Swap:** `osascript -e 'quit app "MouthKeys"'`, wait until `pgrep -x MouthKeys` prints nothing, then `ditto <scratch>/MouthKeys.app /Applications/MouthKeys.app.new`, move the old app aside, move `.new` into place, remove the old one, `open /Applications/MouthKeys.app`.
+6. **Check:** `grep HOTKEY_TAP ~/Library/Logs/LiquidVoice/Fluid.log | tail -1` says `state=installed`. `state=waiting_for_accessibility` means the signature did not match: roll back by quitting the app and putting `$B/MouthKeys.app` back the same way.
+
+### Install over an Apple Development app
+
+`./build.sh install`. It quits the app and waits for it to go, backs up the installed one to `~/Backups/liquid-voice-<timestamp>/MouthKeys.app` (and an older `/Applications/MouthKeys.app`, if one is there, to `MouthKeys.app` beside it) and verifies each copy (bundle ID and `codesign --verify --deep --strict`), prints the rollback command, and only then copies the new build next to the old one and swaps it in. Keep that output.
 
 Tail the log in a c11 pane first:
 
@@ -12,7 +34,7 @@ Tail the log in a c11 pane first:
 tail -F ~/Library/Logs/LiquidVoice/Fluid.log | grep -E 'IDENTITY_MIGRATION|STOP_SUMMARY|frontmost_check|send_key|SPOKEN_SEND|stop_target_capture|DELIVERY|OVERLAY_OUTCOME'
 ```
 
-Rollback: run the command `./build.sh install` printed:
+Rollback after `./build.sh install`: run the command it printed:
 
 ```sh
 bash ~/Backups/liquid-voice-<timestamp>/rollback.sh

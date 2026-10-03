@@ -2545,17 +2545,17 @@ private extension NSView {
 struct FillerWordsEditor: View {
     @State private var fillerWords: [String] = SettingsStore.shared.fillerWords
     @State private var newWord: String = ""
-    @State private var canadianEhOfferAnswered: Bool = SettingsStore.shared.canadianEhOfferAnswered
+    @State private var regionalOfferAnswered: Bool = SettingsStore.shared.regionalFillerOfferAnswered
     @Environment(\.theme) private var theme
 
-    private var showsCanadianEhOffer: Bool {
-        CanadianEh.shouldOffer(fillerWords: self.fillerWords, answered: self.canadianEhOfferAnswered)
+    private var regionalOffer: RegionalFillerOffer? {
+        RegionalFillerOffer.offer(fillerWords: self.fillerWords, answered: self.regionalOfferAnswered)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if self.showsCanadianEhOffer {
-                self.canadianEhOffer
+            if let offer = self.regionalOffer {
+                self.regionalOfferBanner(offer)
             }
 
             Text("Filler words to remove:")
@@ -2622,16 +2622,16 @@ struct FillerWordsEditor: View {
         SettingsStore.shared.fillerWords = self.fillerWords
     }
 
-    private var canadianEhOffer: some View {
+    private func regionalOfferBanner(_ offer: RegionalFillerOffer) -> some View {
         HStack(spacing: 8) {
-            Text("🍁")
-            Text("Looks like you're in Canada. Keep \"eh\" in your transcripts, eh?")
+            Text(offer.emoji)
+            Text(offer.message)
                 .font(self.theme.typography.bodySmall)
             Spacer()
-            Button("Keep \"eh\"") { self.answerCanadianEhOffer(keep: true) }
+            Button(offer.keepTitle) { self.answerRegionalOffer(offer, keep: true) }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
-            Button("No thanks") { self.answerCanadianEhOffer(keep: false) }
+            Button("No thanks") { self.answerRegionalOffer(offer, keep: false) }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
         }
@@ -2642,9 +2642,9 @@ struct FillerWordsEditor: View {
         )
     }
 
-    private func answerCanadianEhOffer(keep: Bool) {
-        self.fillerWords = CanadianEh.answer(keep: keep, surface: "settings")
-        self.canadianEhOfferAnswered = true
+    private func answerRegionalOffer(_ offer: RegionalFillerOffer, keep: Bool) {
+        self.fillerWords = offer.answer(keep: keep, surface: "settings")
+        self.regionalOfferAnswered = true
     }
 }
 

@@ -19,7 +19,7 @@ struct OnboardingTryoutStepView: View {
     @State private var isShortcutKeyPressed = false
     @State private var isShortcutGlowActive = false
     @State private var shortcutAnimationRevision = 0
-    @State private var canadianEhOfferPending = CanadianEh.shouldOffer()
+    @State private var regionalOfferAnswered = false
 
     init(
         finalText: Binding<String>,
@@ -144,11 +144,11 @@ struct OnboardingTryoutStepView: View {
         VStack(spacing: 12) {
             self.keyboardCard
 
-            // One slot, fixed height: the Canadian "eh" offer takes the hint's place after the
+            // One slot, fixed height: a regional filler offer takes the hint's place after the
             // first dictation lands, so nothing below it moves.
             ZStack {
-                if self.showsCanadianEhOffer {
-                    self.canadianEhOffer
+                if let offer = self.regionalOffer {
+                    self.regionalOfferRow(offer)
                 } else {
                     Text(self.footerHint ?? "Feels slow or inaccurate? Go back and try another model for \(self.language.displayName).")
                         .font(self.theme.typography.captionStrong)
@@ -168,22 +168,25 @@ struct OnboardingTryoutStepView: View {
         }
     }
 
-    private var showsCanadianEhOffer: Bool {
-        self.canadianEhOfferPending && self.hasText && !self.isRunning
+    /// Shown after the first dictation lands, and read from what was just said, so a dictated
+    /// "ope" can turn the Minnesota question into a statement.
+    private var regionalOffer: RegionalFillerOffer? {
+        guard !self.regionalOfferAnswered, self.hasText, !self.isRunning else { return nil }
+        return RegionalFillerOffer.offer(dictation: self.finalText)
     }
 
-    private var canadianEhOffer: some View {
+    private func regionalOfferRow(_ offer: RegionalFillerOffer) -> some View {
         HStack(spacing: 10) {
-            Text("🍁")
+            Text(offer.emoji)
                 .font(self.theme.typography.bodyStrong)
-            Text("Looks like you're in Canada. Keep \"eh\" in your transcripts, eh?")
+            Text(offer.message)
                 .font(self.theme.typography.captionStrong)
                 .foregroundStyle(Color.white.opacity(0.78))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
             Spacer(minLength: 4)
-            self.canadianEhButton("Keep \"eh\"", prominent: true) { self.answerCanadianEhOffer(keep: true) }
-            self.canadianEhButton("No thanks", prominent: false) { self.answerCanadianEhOffer(keep: false) }
+            self.regionalOfferButton(offer.keepTitle, prominent: true) { self.answerRegionalOffer(offer, keep: true) }
+            self.regionalOfferButton("No thanks", prominent: false) { self.answerRegionalOffer(offer, keep: false) }
         }
         .padding(.horizontal, 12)
         .frame(height: 40)
@@ -194,7 +197,7 @@ struct OnboardingTryoutStepView: View {
         )
     }
 
-    private func canadianEhButton(_ title: String, prominent: Bool, action: @escaping () -> Void) -> some View {
+    private func regionalOfferButton(_ title: String, prominent: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(self.theme.typography.captionStrong)
@@ -212,9 +215,9 @@ struct OnboardingTryoutStepView: View {
         .focusable(false)
     }
 
-    private func answerCanadianEhOffer(keep: Bool) {
-        CanadianEh.answer(keep: keep, surface: "onboarding")
-        self.canadianEhOfferPending = false
+    private func answerRegionalOffer(_ offer: RegionalFillerOffer, keep: Bool) {
+        offer.answer(keep: keep, surface: "onboarding")
+        self.regionalOfferAnswered = true
     }
 
     private var keyboardCard: some View {

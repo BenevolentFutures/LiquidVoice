@@ -115,49 +115,88 @@ final class CustomDictionaryManualEntryTests: XCTestCase {
     }
 }
 
-final class CanadianEhTests: XCTestCase {
+final class RegionalFillerOfferTests: XCTestCase {
+    private let us = Locale(identifier: "en_US")
+    private let defaults = SettingsStore.defaultFillerWords
+
+    private func zone(_ identifier: String) -> TimeZone {
+        TimeZone(identifier: identifier)!
+    }
+
+    private func offer(
+        locale: Locale? = nil,
+        zone identifier: String,
+        fillerWords: [String]? = nil,
+        answered: Bool = false,
+        removalEnabled: Bool = true,
+        dictation: String? = nil
+    ) -> RegionalFillerOffer? {
+        RegionalFillerOffer.offer(
+            fillerWords: fillerWords ?? self.defaults,
+            answered: answered,
+            removalEnabled: removalEnabled,
+            dictation: dictation,
+            locale: locale ?? self.us,
+            timeZone: self.zone(identifier)
+        )
+    }
+
     func testCanadianRegionCounts() {
-        XCTAssertTrue(CanadianEh.isLikelyCanadian(
-            locale: Locale(identifier: "en_CA"),
-            timeZone: TimeZone(identifier: "America/Los_Angeles")!
-        ))
+        XCTAssertEqual(self.offer(locale: Locale(identifier: "en_CA"), zone: "America/Los_Angeles")?.region, .canada)
     }
 
     func testCanadianTimeZoneCountsEvenWithUSRegion() {
-        XCTAssertTrue(CanadianEh.isLikelyCanadian(
-            locale: Locale(identifier: "en_US"),
-            timeZone: TimeZone(identifier: "America/Toronto")!
-        ))
+        XCTAssertEqual(self.offer(zone: "America/Toronto")?.region, .canada)
+        XCTAssertEqual(self.offer(zone: "America/Winnipeg")?.region, .canada)
     }
 
-    func testUSRegionAndSameOffsetUSZoneDoesNotCount() {
-        XCTAssertFalse(CanadianEh.isLikelyCanadian(
-            locale: Locale(identifier: "en_US"),
-            timeZone: TimeZone(identifier: "America/New_York")!
-        ))
+    func testSameOffsetUSEasternZoneGetsNothing() {
+        XCTAssertNil(self.offer(zone: "America/New_York"))
+        XCTAssertNil(self.offer(zone: "America/Los_Angeles"))
+    }
+
+    func testCentralTimeAsksAboutMinnesota() {
+        let offer = self.offer(zone: "America/Chicago")
+        XCTAssertEqual(offer?.region, .minnesota)
+        XCTAssertEqual(offer?.word, "eh")
+        XCTAssertTrue(offer?.message.hasPrefix("Minnesota, by any chance?") ?? false)
+    }
+
+    func testDictatedOpeMakesMinnesotaSure() {
+        for dictation in ["Ope, let me just sneak past ya.", "oop sorry", "Uff da that's cold.", "You betcha."] {
+            let offer = self.offer(zone: "America/Chicago", dictation: dictation)
+            XCTAssertTrue(offer?.message.hasPrefix("Ope, sounds like Minnesota.") ?? false, dictation)
+        }
+        XCTAssertFalse(RegionalFillerOffer.soundsMinnesotan("I hope the scope is open."))
+    }
+
+    func testOpeOutsideCentralTimeGetsNothing() {
+        XCTAssertNil(self.offer(zone: "America/New_York", dictation: "Ope, sorry."))
+    }
+
+    func testCanadaWinsOverMinnesota() {
+        XCTAssertEqual(
+            self.offer(locale: Locale(identifier: "en_CA"), zone: "America/Chicago", dictation: "Ope")?.region,
+            .canada
+        )
     }
 
     func testEveryListedZoneResolves() {
-        for identifier in CanadianEh.canadianTimeZoneIdentifiers {
+        let zones = RegionalFillerOffer.canadianTimeZoneIdentifiers
+            .union(RegionalFillerOffer.usCentralTimeZoneIdentifiers)
+        for identifier in zones {
             XCTAssertNotNil(TimeZone(identifier: identifier), identifier)
         }
     }
 
-    func testOffersOnlyWhileEhIsRemovedAndUnanswered() {
-        let defaults = ["um", "eh"]
-        XCTAssertTrue(CanadianEh.shouldOffer(fillerWords: defaults, answered: false, isLikelyCanadian: true))
-        XCTAssertFalse(CanadianEh.shouldOffer(fillerWords: defaults, answered: true, isLikelyCanadian: true))
-        XCTAssertFalse(CanadianEh.shouldOffer(fillerWords: ["um"], answered: false, isLikelyCanadian: true))
-        XCTAssertFalse(CanadianEh.shouldOffer(fillerWords: defaults, answered: false, isLikelyCanadian: false))
-        XCTAssertFalse(CanadianEh.shouldOffer(
-            fillerWords: defaults,
-            answered: false,
-            removalEnabled: false,
-            isLikelyCanadian: true
-        ))
+    func testOffersOnlyWhileWordIsRemovedAndUnanswered() {
+        XCTAssertNotNil(self.offer(zone: "America/Toronto"))
+        XCTAssertNil(self.offer(zone: "America/Toronto", answered: true))
+        XCTAssertNil(self.offer(zone: "America/Toronto", fillerWords: ["um"]))
+        XCTAssertNil(self.offer(zone: "America/Toronto", removalEnabled: false))
     }
 
     func testDefaultFillerListStillRemovesEh() {
-        XCTAssertTrue(SettingsStore.defaultFillerWords.contains(CanadianEh.word))
+        XCTAssertTrue(SettingsStore.defaultFillerWords.contains("eh"))
     }
 }

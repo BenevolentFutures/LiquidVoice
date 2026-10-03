@@ -1710,7 +1710,7 @@ final class DictationE2ETests: XCTestCase {
 
     func testFeedbackIssueURLIsAPrefilledIssueOnTheFork() throws {
         let body = "Dictation dropped text in c11 & Ghostty.\n\nSteps: 1+1=2 #tag"
-        let url = LiquidVoiceLinks.prefilledIssueURL(title: "Dropped text", body: body)
+        let url = MouthKeysLinks.prefilledIssueURL(title: "Dropped text", body: body)
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
 
         XCTAssertEqual(components.scheme, "https")
@@ -1725,8 +1725,8 @@ final class DictationE2ETests: XCTestCase {
     func testFeedbackIssueURLTruncatesFeedbackButKeepsVersionInfo() throws {
         let body = String(repeating: "long feedback ", count: 2000)
         let footer = "---\nMouthKeys 1.2.3 (45)\nmacOS 26.0"
-        let url = LiquidVoiceLinks.prefilledIssueURL(title: "Long", body: body, footer: footer)
-        XCTAssertLessThanOrEqual(url.absoluteString.count, LiquidVoiceLinks.maxIssueURLLength)
+        let url = MouthKeysLinks.prefilledIssueURL(title: "Long", body: body, footer: footer)
+        XCTAssertLessThanOrEqual(url.absoluteString.count, MouthKeysLinks.maxIssueURLLength)
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
         let sentBody = try XCTUnwrap(components.queryItems?.first { $0.name == "body" }?.value)
         XCTAssertTrue(sentBody.hasPrefix("long feedback "))
@@ -1734,15 +1734,15 @@ final class DictationE2ETests: XCTestCase {
     }
 
     func testFeedbackIssueTitleUsesFirstLineOfFeedback() {
-        XCTAssertEqual(LiquidVoiceLinks.issueTitle(forFeedback: "Mic switch fails\nmore detail"), "Mic switch fails")
-        XCTAssertEqual(LiquidVoiceLinks.issueTitle(forFeedback: "   "), "Feedback")
-        XCTAssertEqual(LiquidVoiceLinks.issueTitle(forFeedback: String(repeating: "a", count: 200)).count, 80)
+        XCTAssertEqual(MouthKeysLinks.issueTitle(forFeedback: "Mic switch fails\nmore detail"), "Mic switch fails")
+        XCTAssertEqual(MouthKeysLinks.issueTitle(forFeedback: "   "), "Feedback")
+        XCTAssertEqual(MouthKeysLinks.issueTitle(forFeedback: String(repeating: "a", count: 200)).count, 80)
     }
 
     func testDebugBuildLogsToItsOwnFolder() {
-        XCTAssertEqual(AppStorageLocation.logFolderName, "LiquidVoice-Dev")
+        XCTAssertEqual(AppStorageLocation.logFolderName, "MouthKeys-Dev")
         let logURL = FileLogger.shared.currentLogFileURL()
-        XCTAssertEqual(logURL.deletingLastPathComponent().lastPathComponent, "LiquidVoice-Dev")
+        XCTAssertEqual(logURL.deletingLastPathComponent().lastPathComponent, "MouthKeys-Dev")
         XCTAssertEqual(logURL.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent, "Logs")
     }
 
@@ -2482,8 +2482,8 @@ final class TestHostQuietModeTests: XCTestCase {
     func testQuietModeIsDetectedUnderXCTest() {
         XCTAssertTrue(TestHostQuietMode.isActive, "XCTest hosts the app, so quiet mode must be on")
         XCTAssertTrue(TestHostQuietMode.detect(environment: ["XCTestConfigurationFilePath": "/tmp/x"], arguments: []))
-        XCTAssertTrue(TestHostQuietMode.detect(environment: [:], arguments: ["app", "-LiquidVoiceQuietMode", "YES"]))
-        XCTAssertFalse(TestHostQuietMode.detect(environment: [:], arguments: ["app", "-LiquidVoiceQuietMode", "NO"]))
+        XCTAssertTrue(TestHostQuietMode.detect(environment: [:], arguments: ["app", "-MouthKeysQuietMode", "YES"]))
+        XCTAssertFalse(TestHostQuietMode.detect(environment: [:], arguments: ["app", "-MouthKeysQuietMode", "NO"]))
         XCTAssertFalse(TestHostQuietMode.detect(environment: [:], arguments: ["app"]))
     }
 
@@ -2607,23 +2607,23 @@ final class StopPathTraceTests: XCTestCase {
 /// no sound, no focus change. Explicitly invoked, since it loads the Parakeet model:
 ///
 ///     xcodebuild ... test -only-testing:FluidDictationIntegrationTests/StopPathLatencyBenchmarkTests \
-///       TEST_RUNNER_LIQUID_VOICE_STOP_BENCH=30
+///       TEST_RUNNER_MOUTHKEYS_STOP_BENCH=30
 ///
-/// Optional: TEST_RUNNER_LIQUID_VOICE_STOP_BENCH_AUDIO_SECONDS (fixture tiled to this length,
-/// default 8), TEST_RUNNER_LIQUID_VOICE_STOP_BENCH_JITTER (seconds of seeded random extra recording
+/// Optional: TEST_RUNNER_MOUTHKEYS_STOP_BENCH_AUDIO_SECONDS (fixture tiled to this length,
+/// default 8), TEST_RUNNER_MOUTHKEYS_STOP_BENCH_JITTER (seconds of seeded random extra recording
 /// per run, so stops land at different points of the streaming preview cycle; default 0),
-/// TEST_RUNNER_LIQUID_VOICE_STOP_BENCH_HISTORY (history size, default 13600, the operator's
-/// real history) and TEST_RUNNER_LIQUID_VOICE_STOP_BENCH_OUT (JSON results path). Each run stops at
+/// TEST_RUNNER_MOUTHKEYS_STOP_BENCH_HISTORY (history size, default 13600, the operator's
+/// real history) and TEST_RUNNER_MOUTHKEYS_STOP_BENCH_OUT (JSON results path). Each run stops at
 /// the handoff to the typing service: it never types, pastes or touches the clipboard, and the
 /// Debug build's history is put back afterwards.
 @MainActor
 final class StopPathLatencyBenchmarkTests: XCTestCase {
     func testStopPathLatencyOnFixture() async throws {
         let environment = ProcessInfo.processInfo.environment
-        guard let runsValue = environment["LIQUID_VOICE_STOP_BENCH"], let runs = Int(runsValue), runs > 0 else {
-            throw XCTSkip("Set TEST_RUNNER_LIQUID_VOICE_STOP_BENCH=<runs> to run the stop-path benchmark.")
+        guard let runsValue = environment["MOUTHKEYS_STOP_BENCH"], let runs = Int(runsValue), runs > 0 else {
+            throw XCTSkip("Set TEST_RUNNER_MOUTHKEYS_STOP_BENCH=<runs> to run the stop-path benchmark.")
         }
-        let audioSeconds = environment["LIQUID_VOICE_STOP_BENCH_AUDIO_SECONDS"].flatMap(Double.init) ?? 8
+        let audioSeconds = environment["MOUTHKEYS_STOP_BENCH_AUDIO_SECONDS"].flatMap(Double.init) ?? 8
 
         var runner = StopPathBenchmark.runDictation
         for _ in 0..<200 where runner == nil {
@@ -2646,7 +2646,7 @@ final class StopPathLatencyBenchmarkTests: XCTestCase {
         // dictation). Seed the Debug build's history to that size, and put it back afterwards.
         // Every benchmark entry (seeded or dictated) is recorded under StopPathBenchmark.appName,
         // so a run that was killed midway is cleaned up by the next one.
-        let historySize = environment["LIQUID_VOICE_STOP_BENCH_HISTORY"].flatMap(Int.init) ?? 13_600
+        let historySize = environment["MOUTHKEYS_STOP_BENCH_HISTORY"].flatMap(Int.init) ?? 13_600
         let history = TranscriptionHistoryStore.shared
         let originalHistory = history.makeBackupPayload().filter { $0.appName != StopPathBenchmark.appName }
         history.restore(from: originalHistory + Self.syntheticHistory(count: historySize))
@@ -2683,7 +2683,7 @@ final class StopPathLatencyBenchmarkTests: XCTestCase {
         ]
         // Optional stop-time jitter (seconds, uniform, same seeded sequence every run): without it
         // every stop lands at the same point of the streaming preview cycle.
-        let jitter = environment["LIQUID_VOICE_STOP_BENCH_JITTER"].flatMap(Double.init) ?? 0
+        let jitter = environment["MOUTHKEYS_STOP_BENCH_JITTER"].flatMap(Double.init) ?? 0
         var generator = SeededGenerator(seed: 0x5EED)
         var samplesByStage: [String: [Double]] = [:]
         for _ in 0..<runs {
@@ -2719,7 +2719,7 @@ final class StopPathLatencyBenchmarkTests: XCTestCase {
         }
         lines.forEach { print($0) }
         DebugLogger.shared.info(lines.joined(separator: "\n"), source: "StopPathBenchmark")
-        if let outPath = environment["LIQUID_VOICE_STOP_BENCH_OUT"] {
+        if let outPath = environment["MOUTHKEYS_STOP_BENCH_OUT"] {
             let data = try JSONSerialization.data(withJSONObject: ["audioMs": Int(recordingSeconds * 1000), "runs": runs, "stages": report], options: [.prettyPrinted])
             try data.write(to: URL(fileURLWithPath: outPath))
         }
@@ -2766,7 +2766,7 @@ final class TranscriptionHistoryPersistenceTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        self.suiteName = "LiquidVoiceHistoryTests.\(UUID().uuidString)"
+        self.suiteName = "MouthKeysHistoryTests.\(UUID().uuidString)"
         self.defaults = UserDefaults(suiteName: self.suiteName)
     }
 
@@ -2949,12 +2949,12 @@ final class KeptDictationStorageTests: XCTestCase {
 
 /// Offscreen renders of the Signal overlay's states, for comparison with the binding prototype
 /// (design/visual-language/native-renders). Nothing reaches the screen: the views are hosted in
-/// no window and drawn into bitmaps. Set TEST_RUNNER_LIQUID_VOICE_RENDER_DIR=<folder> to write
+/// no window and drawn into bitmaps. Set TEST_RUNNER_MOUTHKEYS_RENDER_DIR=<folder> to write
 /// the PNGs; without it the test only checks that every state renders at the designed size.
 @MainActor
 final class SignalOverlayRenderTests: XCTestCase {
     private var outputFolder: URL? {
-        ProcessInfo.processInfo.environment["LIQUID_VOICE_RENDER_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+        ProcessInfo.processInfo.environment["MOUTHKEYS_RENDER_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
     }
 
     private var savedHistory: [TranscriptionHistoryEntry] = []
@@ -4049,15 +4049,15 @@ final class SignalOverlayBehaviorTests: XCTestCase {
 }
 
 /// Opt-in: where the offscreen park lands relative to a start about 1.5 s after a paste, and how
-/// long the start and the main thread take around it. TEST_RUNNER_LIQUID_VOICE_PARK_BENCH=<delay>
+/// long the start and the main thread take around it. TEST_RUNNER_MOUTHKEYS_PARK_BENCH=<delay>
 /// sets the idle parking delay in seconds (0 reproduces the old park right after the handoff).
 /// The test host's panel is never on screen (quiet mode), so the WindowServer fence itself cannot
 /// occur here; the probe measures the timing and the main-thread cost that can be measured.
 @MainActor
 final class OverlayParkTimingBenchmarkTests: XCTestCase {
     func testWhereTheParkLandsAroundTheNextStart() async throws {
-        guard let value = ProcessInfo.processInfo.environment["LIQUID_VOICE_PARK_BENCH"], let delay = Double(value) else {
-            throw XCTSkip("Set TEST_RUNNER_LIQUID_VOICE_PARK_BENCH=<idle parking delay> to run.")
+        guard let value = ProcessInfo.processInfo.environment["MOUTHKEYS_PARK_BENCH"], let delay = Double(value) else {
+            throw XCTSkip("Set TEST_RUNNER_MOUTHKEYS_PARK_BENCH=<idle parking delay> to run.")
         }
         let controller = BottomOverlayWindowController.shared
         let publisher = Just(CGFloat.zero).eraseToAnyPublisher()
@@ -4244,7 +4244,7 @@ final class SignalTraceLifecycleTests: XCTestCase {
 @MainActor
 final class SignalFloatShadowTests: XCTestCase {
     private var outputFolder: URL? {
-        ProcessInfo.processInfo.environment["LIQUID_VOICE_RENDER_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+        ProcessInfo.processInfo.environment["MOUTHKEYS_RENDER_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
     }
 
     override func tearDown() {
@@ -4765,14 +4765,14 @@ final class LapelMicBatteryTests: XCTestCase {
 
     /// Renders only, for design review (the geometry is asserted above): the listening overlay with
     /// the lapel mic selected, no reading, 33% and low (design/visual-language/
-    /// native-renders when LIQUID_VOICE_RENDER_DIR is set).
+    /// native-renders when MOUTHKEYS_RENDER_DIR is set).
     func testRendersTheLapelLabelForReview() throws {
         let states: [(String, SignalMicBattery)] = [
             ("lapel-none", SignalMicBattery(percent: nil)),
             ("lapel-33", SignalMicBattery(percent: 33)),
             ("lapel-9", SignalMicBattery(percent: 9)),
         ]
-        let folder = ProcessInfo.processInfo.environment["LIQUID_VOICE_RENDER_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+        let folder = ProcessInfo.processInfo.environment["MOUTHKEYS_RENDER_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
         for appearance in [NSAppearance.Name.darkAqua, .aqua] {
             let theme = appearance == .darkAqua ? "dark" : "light"
             for (name, battery) in states {

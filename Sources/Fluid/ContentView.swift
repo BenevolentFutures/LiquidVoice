@@ -1249,7 +1249,7 @@ struct ContentView: View {
     }
 
     private func openIssueReportingPage() {
-        NSWorkspace.shared.open(LiquidVoiceLinks.newIssue)
+        NSWorkspace.shared.open(MouthKeysLinks.newIssue)
     }
 
     private var sidebarView: some View {

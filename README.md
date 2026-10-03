@@ -55,15 +55,15 @@ cd MouthKeys
 ./build.sh install
 ```
 
-`./build.sh install` builds a signed Release, quits a running MouthKeys, backs up the installed app to `~/Backups/`, and replaces `/Applications/MouthKeys.app`. an older `/Applications/Liquid Voice.app` is backed up and taken out in the same step. it prints the command to roll back. to update, pull and run it again.
+`./build.sh install` builds a signed Release, quits a running MouthKeys, backs up the installed app to `~/Backups/`, and replaces `/Applications/MouthKeys.app`. it prints the command to roll back. to update, pull and run it again.
 
-**signing.** the install needs an Apple Development identity, so macOS keeps your permissions across rebuilds. a free Personal Team is enough: add an Apple Account in Xcode › Settings › Accounts, then create an Apple Development certificate. with several teams, set `LIQUIDVOICE_DEVELOPMENT_TEAM` to the Team ID you want. if your installed MouthKeys came from the DMG, update it from the next DMG instead: `./build.sh install` replaces its Developer ID signature with your Apple Development one, and macOS stops honouring the Accessibility switch it had (the hotkeys go quiet). without an identity, `./build.sh unsigned` makes an unsigned Debug build, `DerivedData/Build/Products/Debug/MouthKeys Debug.app`. it is a separate app with its own settings and data, and macOS may ask for Accessibility again after each rebuild.
+**signing.** the install needs an Apple Development identity, so macOS keeps your permissions across rebuilds. a free Personal Team is enough: add an Apple Account in Xcode › Settings › Accounts, then create an Apple Development certificate. with several teams, set `MOUTHKEYS_DEVELOPMENT_TEAM` to the Team ID you want. if your installed MouthKeys came from the DMG, update it from the next DMG instead: `./build.sh install` replaces its Developer ID signature with your Apple Development one, and macOS stops honouring the Accessibility switch it had (the hotkeys go quiet). without an identity, `./build.sh unsigned` makes an unsigned Debug build, `DerivedData/Build/Products/Debug/MouthKeys Debug.app`. it is a separate app with its own settings and data, and macOS may ask for Accessibility again after each rebuild.
 
 ### first launch.
 
 **permissions.** Microphone, to hear you. Accessibility, to type into other apps. Apple ASR Legacy also asks for Speech Recognition. then pick a speech model; the default on Apple Silicon, Parakeet TDT v3, is about a 460 MiB download. a download and your own build share settings and data, but not a signature, so moving from one to the other means granting Microphone and Accessibility again, once.
 
-**coming from Liquid Voice.** if you have a Liquid Voice build, drag the old app to the Trash after installing MouthKeys from the DMG. your settings, dictionary and history carry over, since the bundle ID is unchanged. macOS may ask for permissions again.
+**coming from 0.1.0.** from 0.1.1 MouthKeys has its own bundle ID. on its first launch it copies your settings, dictionary and history from 0.1.0 once and leaves the old copy untouched. macOS sees a new app, so it asks for Microphone and Accessibility again.
 
 **coming from FluidVoice.** stock FluidVoice and the earliest builds of this fork share the bundle ID `com.FluidApp.app`. if you have used either on this Mac, MouthKeys copies its settings, dictionary and history once, on first launch, and never changes the original. after that the two apps keep separate data and can run side by side. macOS does not carry permissions over, so you grant them again.
 
@@ -80,8 +80,6 @@ Feedback opens a draft GitHub issue in your browser. the app posts nothing; you 
 ## built on FluidVoice.
 
 MouthKeys is a fork of [FluidVoice](https://github.com/altic-dev/FluidVoice) by altic-dev, taken on 2026-08-15 at upstream [`d62adc9`][base]. FluidVoice did the hard part: the speech pipeline, the model integrations, hotkeys, typing into other apps, settings and model downloads.
-
-MouthKeys was briefly called Liquid Voice. same app, same settings, new name.
 
 **why we forked.** we dictate into coding agents all day, and we needed one thing done perfectly: every word lands where we were typing. FluidVoice was growing in many directions at once: an AI assistant of its own, analytics, its own updater, connections back to its servers. we wanted the engine without the rest. so we cut MouthKeys down to the job and spent the time on what matters to us: delivery that never drops a word, a faster stop, and an interface that stays quiet until you reach for it. if you want FluidVoice's AI features, FluidVoice is the app for that.
 

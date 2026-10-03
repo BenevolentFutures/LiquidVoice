@@ -15,8 +15,8 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROFILE="${1:-${BUILD_PROFILE:-public}}"
 DERIVED_DATA_PATH="${FLUIDVOICE_DERIVED_DATA_PATH:-${PROJECT_DIR}/DerivedData}"
-# LIQUIDVOICE_DEVELOPMENT_TEAM picks the signing team; the older FLUIDVOICE_DEVELOPMENT_TEAM still works.
-DEVELOPMENT_TEAM_OVERRIDE="${LIQUIDVOICE_DEVELOPMENT_TEAM:-${FLUIDVOICE_DEVELOPMENT_TEAM:-}}"
+# MOUTHKEYS_DEVELOPMENT_TEAM picks the signing team; the older FLUIDVOICE_DEVELOPMENT_TEAM still works.
+DEVELOPMENT_TEAM_OVERRIDE="${MOUTHKEYS_DEVELOPMENT_TEAM:-${FLUIDVOICE_DEVELOPMENT_TEAM:-}}"
 
 resolve_development_team() {
     local identity
@@ -59,7 +59,7 @@ run_public_build() {
     development_team="$(resolve_development_team)"
     if [ -z "${development_team}" ]; then
         if [ -n "${DEVELOPMENT_TEAM_OVERRIDE}" ]; then
-            printf >&2 'LIQUIDVOICE_DEVELOPMENT_TEAM is set to %s, but no Apple Development signing identity was found.\n\n' \
+            printf >&2 'MOUTHKEYS_DEVELOPMENT_TEAM is set to %s, but no Apple Development signing identity was found.\n\n' \
                 "${DEVELOPMENT_TEAM_OVERRIDE}"
             printf >&2 '%s\n\n' \
                 "The team override selects an installed signing identity; it does not replace a certificate."
@@ -74,7 +74,7 @@ For stable Accessibility permission across rebuilds, add any Apple Account in:
 Then open Manage Certificates and create an Apple Development certificate.
 
 A free Personal Team is sufficient for local development. If you have multiple
-teams, set LIQUIDVOICE_DEVELOPMENT_TEAM to the desired 10-character Team ID.
+teams, set MOUTHKEYS_DEVELOPMENT_TEAM to the desired 10-character Team ID.
 
 To build without signing instead, run:
   ./build.sh unsigned
@@ -101,7 +101,7 @@ has_audio_input_entitlement() {
 verify_audio_input_entitlement() {
     local app="$1"
     local entitlements
-    entitlements="$(mktemp -t liquidvoice-entitlements)"
+    entitlements="$(mktemp -t mouthkeys-entitlements)"
     if codesign -d --entitlements - --xml "${app}" > "${entitlements}" 2>/dev/null \
         && has_audio_input_entitlement "${entitlements}"; then
         rm -f "${entitlements}"
@@ -156,7 +156,7 @@ normalize_ctranscribe_framework() {
     # build time; without that one, macOS denies the microphone silently: no prompt,
     # and the app never appears in Privacy & Security > Microphone.
     local entitlements
-    entitlements="$(mktemp -t liquidvoice-entitlements)"
+    entitlements="$(mktemp -t mouthkeys-entitlements)"
     if ! codesign -d --entitlements - --xml "${app}" > "${entitlements}" 2>/dev/null; then
         printf >&2 'Could not read entitlements from the Xcode-signed app. Stopping.\n'
         rm -f "${entitlements}"
@@ -192,14 +192,10 @@ bundle_id() {
 }
 
 
-# The app was called Liquid Voice until 2026-10-02 and installed as "Liquid Voice.app". It keeps
-# its bundle ID, so two copies in /Applications would confuse LaunchServices and the login item:
-# install backs the old one up with everything else it replaces, then takes it out.
-LEGACY_APP_NAME="Liquid Voice.app"
-# Process names of the installed app, current and legacy.
-APP_PROCESS_NAMES=("MouthKeys" "Liquid Voice")
+# Process names of the installed app.
+APP_PROCESS_NAMES=("MouthKeys")
 
-# True while any copy of the app (MouthKeys or the older Liquid Voice) is running.
+# True while any copy of the app is running.
 app_is_running() {
     local name
     for name in "${APP_PROCESS_NAMES[@]}"; do
@@ -351,7 +347,7 @@ preflight_existing_identity_data() {
     local found=""
     if defaults read "${data_domain}" >/dev/null 2>&1; then
         found="${found}  - preferences: ${data_domain}"
-        if defaults read "${data_domain}" LiquidVoiceIdentityMigrationDefaults >/dev/null 2>&1; then
+        if defaults read "${data_domain}" MouthKeysIdentityMigrationDefaults >/dev/null 2>&1; then
             found="${found} (migration already marked done: it will NOT copy your data again)"
         fi
         found="${found}"$'\n'
@@ -371,15 +367,15 @@ On its first launch the new app copies your FluidVoice-era settings, history, di
 folder once. With data already there, that copy is skipped or merged into it. To start clean,
 move it aside first:
   defaults export ${data_domain} ~/Backups/${data_domain}-${stamp}.plist && defaults delete ${data_domain}
-  mv "${data_folder}" ~/Backups/LiquidVoice-folder-${stamp}
+  mv "${data_folder}" ~/Backups/MouthKeys-folder-${stamp}
 
 WARN
-    if [ "${LIQUIDVOICE_ALLOW_EXISTING_DATA:-}" = "1" ]; then
-        echo "Continuing anyway (LIQUIDVOICE_ALLOW_EXISTING_DATA=1)." >&2
+    if [ "${MOUTHKEYS_ALLOW_EXISTING_DATA:-}" = "1" ]; then
+        echo "Continuing anyway (MOUTHKEYS_ALLOW_EXISTING_DATA=1)." >&2
         return 0
     fi
     if [ ! -t 0 ]; then
-        echo "Not interactive, so stopping. Nothing was installed. Set LIQUIDVOICE_ALLOW_EXISTING_DATA=1 to continue anyway." >&2
+        echo "Not interactive, so stopping. Nothing was installed. Set MOUTHKEYS_ALLOW_EXISTING_DATA=1 to continue anyway." >&2
         exit 1
     fi
     local answer=""
@@ -411,7 +407,7 @@ recover_previous() {
         mv "${previous}" "${target}"
     else
         local leftover
-        leftover="${backup_root}/liquid-voice-leftover-$(date +%Y%m%d-%H%M%S)-$$"
+        leftover="${backup_root}/mouthkeys-leftover-$(date +%Y%m%d-%H%M%S)-$$"
         mkdir -p "${leftover}"
         mv "${previous}" "${leftover}/$(basename "${target}")"
         echo "Kept a leftover ${previous} as ${leftover}/$(basename "${target}")."
@@ -449,17 +445,19 @@ backup_app() {
 
 # Installs the built app, keeping what it replaces so one command brings it back. Nothing
 # destructive happens before the backups are verified and the rollback command is printed, and
-# the new app is copied next to the old one first, then swapped in with mv. An older
-# "Liquid Voice.app" beside it is backed up the same way and taken out in the same swap.
-# LIQUIDVOICE_INSTALL_PATH, LIQUIDVOICE_LEGACY_INSTALL_PATH, LIQUIDVOICE_BACKUP_ROOT,
-# LIQUIDVOICE_DATA_DOMAIN and LIQUIDVOICE_DATA_FOLDER only exist to try this step on scratch folders.
+# the new app is copied next to the old one first, then swapped in with mv. A second copy
+# named by MOUTHKEYS_LEGACY_INSTALL_PATH is backed up the same way and taken out in the same swap.
+# MOUTHKEYS_INSTALL_PATH, MOUTHKEYS_LEGACY_INSTALL_PATH, MOUTHKEYS_BACKUP_ROOT,
+# MOUTHKEYS_DATA_DOMAIN and MOUTHKEYS_DATA_FOLDER only exist to try this step on scratch folders.
 install_app() {
     local product="$1"
-    local installed="${LIQUIDVOICE_INSTALL_PATH:-/Applications/MouthKeys.app}"
-    local legacy="${LIQUIDVOICE_LEGACY_INSTALL_PATH:-$(dirname "${installed}")/${LEGACY_APP_NAME}}"
-    local backup_root="${LIQUIDVOICE_BACKUP_ROOT:-${HOME}/Backups}"
-    local data_domain="${LIQUIDVOICE_DATA_DOMAIN:-com.stage11.liquidvoice}"
-    local data_folder="${LIQUIDVOICE_DATA_FOLDER:-${HOME}/Library/Application Support/LiquidVoice}"
+    local installed="${MOUTHKEYS_INSTALL_PATH:-/Applications/MouthKeys.app}"
+    # A second copy of the app under another name (MOUTHKEYS_LEGACY_INSTALL_PATH), backed up and
+    # taken out in the same swap so two copies never confuse LaunchServices. None by default.
+    local legacy="${MOUTHKEYS_LEGACY_INSTALL_PATH:-}"
+    local backup_root="${MOUTHKEYS_BACKUP_ROOT:-${HOME}/Backups}"
+    local data_domain="${MOUTHKEYS_DATA_DOMAIN:-com.stage11.mouthkeys}"
+    local data_folder="${MOUTHKEYS_DATA_FOLDER:-${HOME}/Library/Application Support/MouthKeys}"
     local staged="${installed}.new"
     local previous="${installed}.previous"
     local legacy_previous=""
@@ -496,7 +494,7 @@ install_app() {
     [ ! -d "${installed}" ] || had_installed=1
     [ -z "${legacy}" ] || [ ! -d "${legacy}" ] || had_legacy=1
     if [ -n "${had_installed}" ] || [ -n "${had_legacy}" ]; then
-        backup_dir="${backup_root}/liquid-voice-$(date +%Y%m%d-%H%M%S)"
+        backup_dir="${backup_root}/mouthkeys-$(date +%Y%m%d-%H%M%S)"
         # Two installs within one second must not share (and merge into) one backup.
         [ ! -e "${backup_dir}" ] || backup_dir="${backup_dir}-$$"
         mkdir -p "${backup_dir}"
@@ -559,14 +557,14 @@ install_app() {
     rm -rf "${previous}"
     if [ -n "${had_legacy}" ]; then
         rm -rf "${legacy_previous}"
-        echo "Took out the old ${legacy}; its backup is in ${backup_dir}. Settings carry over (same bundle ID)."
+        echo "Took out the old ${legacy}; its backup is in ${backup_dir}."
     fi
 
     echo "Installed: ${installed}"
     codesign -dv "${installed}" 2>&1 | grep -E 'Identifier|TeamIdentifier' || true
     warn_other_registered_copies "${installed}"
     echo "Next: open MouthKeys, grant Microphone and Accessibility when asked (System Settings > Privacy & Security), pick a speech model, then try a dictation."
-    echo "Log: ~/Library/Logs/LiquidVoice/Fluid.log. (docs/INSTALL-CHECKLIST.md is the maintainer's own post-install checklist; you do not need it.)"
+    echo "Log: ~/Library/Logs/MouthKeys/Fluid.log. (docs/INSTALL-CHECKLIST.md is the maintainer's own post-install checklist; you do not need it.)"
     if [ -n "${backup_dir}" ]; then
         echo "Rollback: bash \"${backup_dir}/rollback.sh\""
     fi
@@ -617,7 +615,7 @@ run_release_build() {
     development_team="$(resolve_development_team)"
     if [ -z "${development_team}" ]; then
         printf >&2 'No Apple Development signing identity was found.\n'
-        printf >&2 'Set LIQUIDVOICE_DEVELOPMENT_TEAM or add an account in Xcode > Settings > Accounts.\n'
+        printf >&2 'Set MOUTHKEYS_DEVELOPMENT_TEAM or add an account in Xcode > Settings > Accounts.\n'
         exit 1
     fi
 

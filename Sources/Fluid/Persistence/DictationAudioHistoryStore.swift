@@ -52,7 +52,7 @@ final nonisolated class DictationAudioHistoryStore: @unchecked Sendable {
 
     /// Posted on the main queue when the user's "Clear all history" or "Delete all saved audio"
     /// discards the kept recording too, so ASRService forgets its copy.
-    static let keptDictationDiscardedNotification = Notification.Name("LiquidVoice.keptDictationDiscarded")
+    static let keptDictationDiscardedNotification = Notification.Name("MouthKeys.keptDictationDiscarded")
 
     init(rootDirectoryOverride: URL? = nil) {
         self.rootDirectoryOverride = rootDirectoryOverride

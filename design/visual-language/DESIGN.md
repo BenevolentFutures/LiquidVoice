@@ -212,7 +212,7 @@ Not prototyped in this pass; Atin locked the overlay and menu bar. The tokens, t
 
 ## 15. Round 5: Spoken Send, recovery cards, wording, icon
 
-Added 2026-09-28 for the states the newer `liquid-voice` branch has. The pill stays 130 pt (149 until round 6); the rails, chips, trace row and foot row never move; only a recovery card raises the pill's top. Full tokens and native mapping: the "Round 5" section of `prototypes/signal/DIRECTION.md`.
+Added 2026-09-28 for the states the newer integration branch had. The pill stays 130 pt (149 until round 6); the rails, chips, trace row and foot row never move; only a recovery card raises the pill's top. Full tokens and native mapping: the "Round 5" section of `prototypes/signal/DIRECTION.md`.
 
 ### Spoken Send (the placard at the foot row's right end; no fifth chip)
 

@@ -4,7 +4,7 @@
 Inputs are the prototype screenshots (native-renders/prototype) and the offscreen native renders
 written by the render tests (native-renders/native and native-renders/shadow; run
 SignalOverlayRenderTests and SignalFloatShadowTests with
-TEST_RUNNER_LIQUID_VOICE_RENDER_DIR=<folder>, then copy the PNGs in).
+TEST_RUNNER_MOUTHKEYS_RENDER_DIR=<folder>, then copy the PNGs in).
 
     python3 scripts/compose_render_compare.py [--shadow-label "r18 y9"]
 

@@ -12,7 +12,7 @@ you will get a reply, and a fix or an explanation, as soon as the maintainers ca
 - no server. there is no MouthKeys backend; nothing is uploaded to one.
 - the upstream updater is off, so the app never checks for versions.
 - the only network use is what you choose: model downloads, an AI provider you set up, and Apple's own recognition if you pick Apple ASR Legacy. the README's privacy section lists each.
-- dictations and history stay in `~/Library/Application Support/LiquidVoice`.
+- dictations and history stay in `~/Library/Application Support/MouthKeys`.
 
 ## scope.
 

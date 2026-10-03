@@ -181,14 +181,14 @@ def table(rows):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("logs", nargs="*", help="log files (default: the installed app's log and its rotation)")
-    parser.add_argument("--dev", action="store_true", help="read the Debug build log (~/Library/Logs/LiquidVoice-Dev)")
+    parser.add_argument("--dev", action="store_true", help="read the Debug build log (~/Library/Logs/MouthKeys-Dev)")
     parser.add_argument("--legacy", action="store_true", help="rebuild stages from pre-trace APP_BENCH lines")
     parser.add_argument("--trigger", help="only this trigger (hold_release, toggle, automatic, ui, benchmark)")
     parser.add_argument("--last", type=int, help="only the last N dictations")
     parser.add_argument("--json", action="store_true", help="print JSON instead of a table")
     args = parser.parse_args()
 
-    folder = os.path.expanduser("~/Library/Logs/LiquidVoice-Dev" if args.dev else "~/Library/Logs/LiquidVoice")
+    folder = os.path.expanduser("~/Library/Logs/MouthKeys-Dev" if args.dev else "~/Library/Logs/MouthKeys")
     paths = args.logs or [os.path.join(folder, "Fluid.log.1"), os.path.join(folder, "Fluid.log")]
     lines = list(read_lines(paths))
     rows = parse_legacy(lines) if args.legacy else parse_summaries(lines, args.trigger)

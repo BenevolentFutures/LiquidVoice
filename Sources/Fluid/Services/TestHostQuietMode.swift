@@ -14,7 +14,7 @@ import ObjectiveC
 /// - creates no sound player, so nothing is ever audible.
 ///
 /// Active whenever XCTest hosts the app (`XCTestConfigurationFilePath`), or when launched with
-/// `-LiquidVoiceQuietMode YES`.
+/// `-MouthKeysQuietMode YES`.
 nonisolated enum TestHostQuietMode {
     static let isActive: Bool = Self.detect(
         environment: ProcessInfo.processInfo.environment,
@@ -23,7 +23,7 @@ nonisolated enum TestHostQuietMode {
 
     static func detect(environment: [String: String], arguments: [String]) -> Bool {
         if environment["XCTestConfigurationFilePath"] != nil { return true }
-        if let index = arguments.firstIndex(of: "-LiquidVoiceQuietMode"), index + 1 < arguments.count {
+        if let index = arguments.firstIndex(of: "-MouthKeysQuietMode"), index + 1 < arguments.count {
             return ["YES", "yes", "1", "true"].contains(arguments[index + 1])
         }
         return false

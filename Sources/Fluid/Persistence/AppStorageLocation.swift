@@ -2,26 +2,25 @@ import Foundation
 
 /// This app's identity and where each build keeps its files.
 ///
-/// MouthKeys is its own app (`com.stage11.liquidvoice`; the identifiers here keep the name it had
-/// as Liquid Voice on purpose, so a rename never moves anyone's data). Debug builds have their own bundle
-/// identifier too (`com.stage11.liquidvoice.dev`, which also separates UserDefaults) and their
+/// MouthKeys is its own app (`com.stage11.mouthkeys`). Debug builds have their own bundle
+/// identifier too (`com.stage11.mouthkeys.dev`, which also separates UserDefaults) and their
 /// own folders, so a development or test run can never read or overwrite the data of the
 /// installed app someone is dictating with.
 ///
-/// Until 2026-09 the app ran under FluidVoice's identifier and folders; `AppIdentityMigration`
-/// copies that data over once (see `LegacyAppIdentity`).
+/// Earlier versions ran under other identifiers and folders; `AppIdentityMigration` copies the
+/// newest of them over once (see `PreviousAppIdentity`).
 nonisolated enum AppStorageLocation {
     /// The installed (Release) app.
-    static let releaseBundleIdentifier = "com.stage11.liquidvoice"
+    static let releaseBundleIdentifier = "com.stage11.mouthkeys"
     /// The isolated Debug build, which is also the XCTest host.
-    static let debugBundleIdentifier = "com.stage11.liquidvoice.dev"
+    static let debugBundleIdentifier = "com.stage11.mouthkeys.dev"
 
     /// Folder under `~/Library/Application Support`.
     static let folderName: String = {
         #if DEBUG
-        return "LiquidVoice-Dev"
+        return "MouthKeys-Dev"
         #else
-        return "LiquidVoice"
+        return "MouthKeys"
         #endif
     }()
 
@@ -29,9 +28,9 @@ nonisolated enum AppStorageLocation {
     /// development run never mixes its lines into, or rotates away, the installed app's log.
     static let logFolderName: String = {
         #if DEBUG
-        return "LiquidVoice-Dev"
+        return "MouthKeys-Dev"
         #else
-        return "LiquidVoice"
+        return "MouthKeys"
         #endif
     }()
 
@@ -49,9 +48,24 @@ nonisolated enum AppStorageLocation {
     }
 }
 
-/// The identity the app had before it was its own: FluidVoice's bundle identifier and folder.
-/// Only `AppIdentityMigration` reads it, once, and nothing ever writes there.
-nonisolated enum LegacyAppIdentity {
-    static let bundleIdentifier = "com.FluidApp.app"
-    static let folderName = "FluidVoice"
+/// An identity the installed app had before: its bundle identifier (the UserDefaults domain)
+/// and its Application Support folder. Only `AppIdentityMigration` reads these, once, and
+/// nothing ever writes there.
+nonisolated struct PreviousAppIdentity: Equatable {
+    let bundleIdentifier: String
+    let folderName: String
+    /// UserDefaults keys starting with this belong to that identity itself (its own migration
+    /// markers, its Accessibility trust record) and are not copied. Nil copies every key.
+    let ownKeyPrefix: String?
+
+    /// MouthKeys 0.1.0 (the identifiers are from the app's earlier working name).
+    static let mouthKeys010 = PreviousAppIdentity(
+        bundleIdentifier: "com.stage11.liquidvoice", folderName: "LiquidVoice", ownKeyPrefix: "LiquidVoice"
+    )
+    /// The FluidVoice fork, before the app had its own identity.
+    static let fluidVoice = PreviousAppIdentity(bundleIdentifier: "com.FluidApp.app", folderName: "FluidVoice", ownKeyPrefix: nil)
+
+    /// Newest first. The migration copies from the first one that has data: each earlier
+    /// identity's data was already copied into the next on its own first launch.
+    static let newestFirst: [PreviousAppIdentity] = [.mouthKeys010, .fluidVoice]
 }

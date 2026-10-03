@@ -281,7 +281,7 @@ final class HotkeyShortcutTests: XCTestCase {
         monitor.refresh()
         XCTAssertEqual(monitor.hint, .staleGrant)
 
-        let copy = URL(fileURLWithPath: "/Users/someone/.Trash/Liquid Voice.app")
+        let copy = URL(fileURLWithPath: "/Users/someone/.Trash/MouthKeys copy.app")
         monitor.applyConflictScan([copy])
         XCTAssertEqual(monitor.hint, .conflictingCopies)
         XCTAssertEqual(monitor.conflictingCopies, [copy])
@@ -307,8 +307,8 @@ final class HotkeyShortcutTests: XCTestCase {
 
     func testConflictingCopyDetectorFlagsOnlyOtherCopiesWeDoNotSatisfy() {
         let own = URL(fileURLWithPath: "/Applications/MouthKeys.app")
-        let trash = URL(fileURLWithPath: "/Users/a/.Trash/Liquid Voice.app")
-        let drag = URL(fileURLWithPath: "/Users/a/Library/Caches/com.apple.SwiftUI.Drag-1/Liquid Voice.app")
+        let trash = URL(fileURLWithPath: "/Users/a/.Trash/MouthKeys copy.app")
+        let drag = URL(fileURLWithPath: "/Users/a/Library/Caches/com.apple.SwiftUI.Drag-1/MouthKeys copy.app")
         let sameSigner = URL(fileURLWithPath: "/Users/a/Backups/MouthKeys.app")
         let unsigned = URL(fileURLWithPath: "/tmp/Unsigned.app")
         let gone = URL(fileURLWithPath: "/Users/a/builds/DerivedData/Release/MouthKeys.app")
@@ -333,11 +333,11 @@ final class HotkeyShortcutTests: XCTestCase {
         XCTAssertEqual(checked.filter { $0 == trash }.count, 1, "duplicates are checked once")
         XCTAssertFalse(checked.contains(gone), "stale LaunchServices records are skipped")
 
-        XCTAssertEqual(ConflictingAppCopyDetector.displayPath(trash, home: "/Users/a"), "~/.Trash/Liquid Voice.app")
+        XCTAssertEqual(ConflictingAppCopyDetector.displayPath(trash, home: "/Users/a"), "~/.Trash/MouthKeys copy.app")
         XCTAssertEqual(ConflictingAppCopyDetector.displayPath(own, home: "/Users/a"), "/Applications/MouthKeys.app")
         XCTAssertEqual(
             ConflictingAppCopyDetector.logLine(conflicts: [trash, drag], home: "/Users/a"),
-            "PERMISSION_DIAG conflicting_copies=2 paths=~/.Trash/Liquid Voice.app | ~/Library/Caches/com.apple.SwiftUI.Drag-1/Liquid Voice.app"
+            "PERMISSION_DIAG conflicting_copies=2 paths=~/.Trash/MouthKeys copy.app | ~/Library/Caches/com.apple.SwiftUI.Drag-1/MouthKeys copy.app"
         )
         XCTAssertEqual(ConflictingAppCopyDetector.logLine(conflicts: [], home: "/Users/a"), "PERMISSION_DIAG conflicting_copies=0 paths=-")
     }
@@ -353,7 +353,7 @@ final class HotkeyShortcutTests: XCTestCase {
                 XCTAssertTrue(info.write(to: contents.appendingPathComponent("Info.plist"), atomically: true))
             }
         }
-        try makeApp("Liquid Voice.app", bundleID: "com.example.ours")
+        try makeApp("MouthKeys copy.app", bundleID: "com.example.ours")
         try makeApp("Other.app", bundleID: "com.example.other")
         try makeApp("Broken.app", bundleID: nil)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("NotAnApp"), withIntermediateDirectories: true)
@@ -362,7 +362,7 @@ final class HotkeyShortcutTests: XCTestCase {
             in: [root, root.appendingPathComponent("missing")],
             matching: "com.example.ours"
         )
-        XCTAssertEqual(found.map(\.lastPathComponent), ["Liquid Voice.app"])
+        XCTAssertEqual(found.map(\.lastPathComponent), ["MouthKeys copy.app"])
     }
 
     func testRunningCodeSatisfiesItsOwnDesignatedRequirement() {
@@ -649,8 +649,8 @@ final class HotkeyShortcutTests: XCTestCase {
     }
 
     func testMicrophoneChangeAlertsSupportProductionAndDebugAppsOnly() {
-        XCTAssertTrue(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.stage11.liquidvoice"))
-        XCTAssertTrue(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.stage11.liquidvoice.dev"))
+        XCTAssertTrue(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.stage11.mouthkeys"))
+        XCTAssertTrue(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.stage11.mouthkeys.dev"))
         // FluidVoice's identifier is another app now.
         XCTAssertFalse(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.FluidApp.app"))
         XCTAssertFalse(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.example.tests"))

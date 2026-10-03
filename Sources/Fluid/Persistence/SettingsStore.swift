@@ -2200,11 +2200,11 @@ final class SettingsStore: ObservableObject {
         var displayName: String {
             switch self {
             case .none: return "None"
-            case .fluidSfx0: return "Liquid SFX 0"
-            case .fluidSfx1: return "Liquid SFX 1"
-            case .fluidSfx2: return "Liquid SFX 2"
-            case .fluidSfx3: return "Liquid SFX 3"
-            case .fluidSfx4: return "Liquid SFX 4"
+            case .fluidSfx0: return "Sound 1"
+            case .fluidSfx1: return "Sound 2"
+            case .fluidSfx2: return "Sound 3"
+            case .fluidSfx3: return "Sound 4"
+            case .fluidSfx4: return "Sound 5"
             }
         }
 

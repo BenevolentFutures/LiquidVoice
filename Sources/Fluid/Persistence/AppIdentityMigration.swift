@@ -11,15 +11,15 @@ nonisolated protocol AppIdentityMigrationDefaults: AnyObject {
 
 nonisolated extension UserDefaults: AppIdentityMigrationDefaults {}
 
-/// One-time copy of FluidVoice-era data on the first launch of the app's own identity.
+/// One-time copy of an earlier identity's data on the first launch of `com.stage11.mouthkeys`.
 ///
-/// The app ran as `com.FluidApp.app`, with its files in `Application Support/FluidVoice`,
-/// until it became its own app (`com.stage11.liquidvoice`, folder `LiquidVoice`, both named while
-/// the app was called Liquid Voice and kept on purpose after the MouthKeys rename). macOS keys
-/// UserDefaults by bundle identifier, so without this the new app would start empty. On the
-/// first launch of the installed app it:
+/// MouthKeys 0.1.0 ran under an earlier bundle identifier and folder, and before that the app ran
+/// as FluidVoice (`PreviousAppIdentity.newestFirst`). macOS keys UserDefaults by bundle
+/// identifier, so without this the app would start empty. On the first launch of the installed
+/// app it takes the newest earlier identity that has data and:
 ///
-/// 1. copies every UserDefaults key of the old domain (transcription history, custom dictionary,
+/// 1. copies every UserDefaults key of the old domain (except the old identity's own
+///    bookkeeping, `PreviousAppIdentity.ownKeyPrefix`) (transcription history, custom dictionary,
 ///    hotkeys, settings) into this app's domain, checks each one, and only then sets a marker, so
 ///    it never runs twice. The old values win: anything this app's domain already held that the
 ///    copy changes is saved to a plist in `~/Backups` first. A failed copy is logged and retried
@@ -27,7 +27,7 @@ nonisolated extension UserDefaults: AppIdentityMigrationDefaults {}
 ///    says so in an alert before the app starts (see `haltAlert`).
 /// 2. copies (never moves) the old Application Support folder, kept dictation and saved audio
 ///    included. The old files win here too: a different file already in this app's folder is
-///    moved to `~/Backups/liquid-voice-displaced-folder-*` before the old one replaces it. Files
+///    moved to `~/Backups/mouthkeys-displaced-folder-*` before the old one replaces it. Files
 ///    only this app has stay. Symbolic links are not followed, and an unreadable old file is
 ///    skipped with a warning rather than retried forever.
 /// 3. registers this app as a login item when the old one launched at startup. The old app's
@@ -39,18 +39,18 @@ nonisolated extension UserDefaults: AppIdentityMigrationDefaults {}
 /// outcomes and key or file names, never content: grep for `IDENTITY_MIGRATION`.
 nonisolated struct AppIdentityMigration {
     /// Set once every UserDefaults key has been copied and checked.
-    static let defaultsMarkerKey = "LiquidVoiceIdentityMigrationDefaults"
+    static let defaultsMarkerKey = "MouthKeysIdentityMigrationDefaults"
     /// Set once the Application Support step is settled.
-    static let folderMarkerKey = "LiquidVoiceIdentityMigrationFolder"
+    static let folderMarkerKey = "MouthKeysIdentityMigrationFolder"
     /// How many times the defaults step has started.
-    static let defaultsAttemptsKey = "LiquidVoiceIdentityMigrationDefaultsAttempts"
+    static let defaultsAttemptsKey = "MouthKeysIdentityMigrationDefaultsAttempts"
     /// Set when the defaults step stopped retrying (a retry displaced data and still failed).
-    static let defaultsHaltedKey = "LiquidVoiceIdentityMigrationDefaultsHalted"
+    static let defaultsHaltedKey = "MouthKeysIdentityMigrationDefaultsHalted"
     /// Every file that values or files displaced by the migration were saved to.
-    static let displacedBackupsKey = "LiquidVoiceIdentityMigrationDisplacedBackups"
+    static let displacedBackupsKey = "MouthKeysIdentityMigrationDisplacedBackups"
     static let launchAtStartupKey = "LaunchAtStartup"
     static let logPrefix = "IDENTITY_MIGRATION"
-    static let logPath = "~/Library/Logs/LiquidVoice/Fluid.log"
+    static let logPath = "~/Library/Logs/MouthKeys/Fluid.log"
     private static let bookkeepingKeys: Set<String> = [
         defaultsMarkerKey, folderMarkerKey, defaultsAttemptsKey, defaultsHaltedKey, displacedBackupsKey,
     ]
@@ -155,6 +155,8 @@ nonisolated struct AppIdentityMigration {
         DebugLogger.shared.log(message, level: level, source: "AppIdentityMigration")
     }
     var now: () -> Date = { Date() }
+    /// Keys of the old domain starting with this are the old identity's own and are not copied.
+    var legacyOwnKeyPrefix: String?
 
     // MARK: - Launch
 
@@ -167,7 +169,7 @@ nonisolated struct AppIdentityMigration {
         Self.runModalHaltAlert(alert)
     }
 
-    /// Runs before SwiftUI, AppKit or `SettingsStore` read a single default (see `LiquidVoiceMain`).
+    /// Runs before SwiftUI, AppKit or `SettingsStore` read a single default (see `MouthKeysMain`).
     @MainActor
     static func runAtLaunch() {
         guard let migration = self.forInstalledApp() else { return }
@@ -249,16 +251,26 @@ nonisolated struct AppIdentityMigration {
             ?? home.appendingPathComponent("Library/Application Support", isDirectory: true)
         let library = fileManager.urls(for: .libraryDirectory, in: .userDomainMask).first
             ?? home.appendingPathComponent("Library", isDirectory: true)
-        let legacyDomain = LegacyAppIdentity.bundleIdentifier
+        let preferences = library.appendingPathComponent("Preferences", isDirectory: true)
+        let plist = { (identity: PreviousAppIdentity) in
+            preferences.appendingPathComponent("\(identity.bundleIdentifier).plist", isDirectory: false)
+        }
+        // The newest earlier identity with data: its preferences file or its folder.
+        let source = Self.newestWithData(
+            PreviousAppIdentity.newestFirst,
+            hasData: { identity in
+                fileManager.fileExists(atPath: plist(identity).path)
+                    || fileManager.fileExists(atPath: applicationSupport.appendingPathComponent(identity.folderName, isDirectory: true).path)
+            }
+        )
+        let legacyDomain = source.bundleIdentifier
         let destinationDomain = AppStorageLocation.releaseBundleIdentifier
-        let legacyPlist = library
-            .appendingPathComponent("Preferences", isDirectory: true)
-            .appendingPathComponent("\(legacyDomain).plist", isDirectory: false)
-        return AppIdentityMigration(
+        let legacyPlist = plist(source)
+        var migration = AppIdentityMigration(
             legacyDomain: legacyDomain,
             destinationDomain: destinationDomain,
             destination: UserDefaults.standard,
-            legacyFolder: applicationSupport.appendingPathComponent(LegacyAppIdentity.folderName, isDirectory: true),
+            legacyFolder: applicationSupport.appendingPathComponent(source.folderName, isDirectory: true),
             destinationFolder: applicationSupport.appendingPathComponent(AppStorageLocation.folderName, isDirectory: true),
             backupRoot: home.appendingPathComponent("Backups", isDirectory: true),
             readLegacyDefaults: { Self.readPreferencesDomain(legacyDomain) },
@@ -266,7 +278,15 @@ nonisolated struct AppIdentityMigration {
             legacyDefaultsFileExists: { fileManager.fileExists(atPath: legacyPlist.path) },
             registerLoginItem: Self.registerMainAppAsLoginItem
         )
+        migration.legacyOwnKeyPrefix = source.ownKeyPrefix
+        return migration
         #endif
+    }
+
+    /// The first identity in `identities` (newest first) that has data, or the newest when none
+    /// does (the migration then finds nothing to copy and marks itself done).
+    static func newestWithData(_ identities: [PreviousAppIdentity], hasData: (PreviousAppIdentity) -> Bool) -> PreviousAppIdentity {
+        identities.first(where: hasData) ?? identities[0]
     }
 
     /// Every key of a preferences domain (current user, any host), read through cfprefsd so
@@ -348,10 +368,10 @@ nonisolated struct AppIdentityMigration {
         self.destination.set(attempt, forKey: Self.defaultsAttemptsKey)
         _ = self.destination.synchronize()
 
-        guard let legacy = self.readLegacyDefaults() else {
+        guard let everyLegacyKey = self.readLegacyDefaults() else {
             return (self.defaultsFailed("could not read \(self.legacyDomain)", attempt: attempt, displacedBackup: nil), false)
         }
-        if legacy.isEmpty {
+        if everyLegacyKey.isEmpty {
             if self.legacyDefaultsFileExists() {
                 // The file is there but the read came back empty: never mark that as done.
                 return (
@@ -363,6 +383,20 @@ nonisolated struct AppIdentityMigration {
                     false
                 )
             }
+            self.markDefaultsDone(keys: 0)
+            self.log(.info, "\(Self.logPrefix) step=defaults outcome=nothing_to_copy from=\(self.legacyDomain)")
+            return (.nothingToCopy, false)
+        }
+        // The old identity's own bookkeeping (its migration markers, its Accessibility trust
+        // record) describes that identity, not this one, and is left behind.
+        let legacy = everyLegacyKey.filter { key, _ in
+            guard let prefix = self.legacyOwnKeyPrefix else { return true }
+            return !key.hasPrefix(prefix)
+        }
+        if legacy.count < everyLegacyKey.count {
+            self.log(.info, "\(Self.logPrefix) step=defaults left_behind=\(everyLegacyKey.count - legacy.count) (the old identity's own keys)")
+        }
+        if legacy.isEmpty {
             self.markDefaultsDone(keys: 0)
             self.log(.info, "\(Self.logPrefix) step=defaults outcome=nothing_to_copy from=\(self.legacyDomain)")
             return (.nothingToCopy, false)
@@ -459,7 +493,7 @@ nonisolated struct AppIdentityMigration {
     private func backUpDisplacedDefaults(_ values: [String: Any]) throws -> URL {
         try self.fileManager.createDirectory(at: self.backupRoot, withIntermediateDirectories: true)
         let url = self.backupRoot.appendingPathComponent(
-            "liquid-voice-displaced-defaults-\(self.timestamp()).plist",
+            "mouthkeys-displaced-defaults-\(self.timestamp()).plist",
             isDirectory: false
         )
         let data = try PropertyListSerialization.data(fromPropertyList: values, format: .binary, options: 0)
@@ -650,7 +684,7 @@ nonisolated struct AppIdentityMigration {
 
     private func displacedFolderBackup(_ result: inout TreeCopy) throws -> URL {
         if let existing = result.displacedBackup { return existing }
-        let url = self.backupRoot.appendingPathComponent("liquid-voice-displaced-folder-\(self.timestamp())", isDirectory: true)
+        let url = self.backupRoot.appendingPathComponent("mouthkeys-displaced-folder-\(self.timestamp())", isDirectory: true)
         try self.fileManager.createDirectory(at: url, withIntermediateDirectories: true)
         result.displacedBackup = url
         self.recordBackup(url)

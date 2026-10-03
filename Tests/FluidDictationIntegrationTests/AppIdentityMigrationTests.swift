@@ -329,14 +329,84 @@ final class AppIdentityMigrationTests: XCTestCase {
         XCTAssertNil(self.destination.object(forKey: "OldNameAccessibilityTrustedOnce"))
     }
 
-    /// 0.1.0's domain already holds what came over from FluidVoice, so it wins whenever it has data.
-    func testTheNewestEarlierIdentityWithDataIsTheSource() {
-        let all = PreviousAppIdentity.newestFirst
-        XCTAssertEqual(AppIdentityMigration.newestWithData(all) { _ in true }, .mouthKeys010)
-        XCTAssertEqual(AppIdentityMigration.newestWithData(all) { $0 == .fluidVoice }, .fluidVoice)
-        XCTAssertEqual(AppIdentityMigration.newestWithData(all) { _ in false }, .mouthKeys010, "nothing anywhere: the newest, which finds nothing")
+    /// 0.1.0's own migration markers, as its first launch left them.
+    private func finished010(_ extra: [String: Any] = [:]) -> [String: Any] {
+        let prefix = PreviousAppIdentity.mouthKeys010.ownKeyPrefix!
+        let markers: [String: Any] = [
+            "\(prefix)IdentityMigrationDefaults": ["from": "com.FluidApp.app", "keys": 119] as [String: Any],
+            "\(prefix)IdentityMigrationFolder": ["from": "FluidVoice", "outcome": "copied"],
+            "TranscriptionHistoryEntries": Data([1]),
+        ]
+        return markers.merging(extra) { _, new in new }
+    }
+
+    private func choose(
+        preferences: Set<String>,
+        folders: Set<String> = [],
+        domains: [String: [String: Any]?]
+    ) -> AppIdentityMigration.SourceChoice {
+        AppIdentityMigration.chooseSource(
+            PreviousAppIdentity.newestFirst,
+            preferencesExist: { preferences.contains($0.bundleIdentifier) },
+            folderExists: { folders.contains($0.folderName) },
+            readDomain: { domain in domains[domain] ?? nil }
+        )
+    }
+
+    /// 0.1.0 finished its own copy from FluidVoice, so its domain is whole and it is the source.
+    func testA010ThatFinishedItsOwnMigrationIsTheSource() {
+        let new = PreviousAppIdentity.mouthKeys010, old = PreviousAppIdentity.fluidVoice
+        XCTAssertEqual(
+            self.choose(preferences: [new.bundleIdentifier, old.bundleIdentifier], domains: [new.bundleIdentifier: self.finished010()]),
+            .identity(new)
+        )
+    }
+
+    /// Its preferences file exists from the first attempt on, so the file alone proves nothing.
+    func testA010ThatNeverFinishedItsOwnMigrationStopsInsteadOfCopyingAPartialSet() {
+        let new = PreviousAppIdentity.mouthKeys010, old = PreviousAppIdentity.fluidVoice
+        let prefix = new.ownKeyPrefix!
+        let noFolderMarker = self.finished010().filter { $0.key != "\(prefix)IdentityMigrationFolder" }
+        guard case let .unfinished(identity, reason) = self.choose(
+            preferences: [new.bundleIdentifier, old.bundleIdentifier],
+            domains: [new.bundleIdentifier: noFolderMarker]
+        ) else { return XCTFail("expected unfinished") }
+        XCTAssertEqual(identity, new)
+        XCTAssertTrue(reason.contains("no folder marker"), reason)
+
+        let halted = self.finished010(["\(prefix)IdentityMigrationDefaultsHalted": ["reason": "x"]])
+        guard case .unfinished = self.choose(preferences: [new.bundleIdentifier], domains: [new.bundleIdentifier: halted]) else {
+            return XCTFail("a halted 0.1.0 is unfinished")
+        }
+    }
+
+    /// No 0.1.0 preferences (never installed, or cleared): FluidVoice is the source, even if a 0.1.0 folder is there.
+    func testWithout010PreferencesFluidVoiceIsTheSource() {
+        let new = PreviousAppIdentity.mouthKeys010, old = PreviousAppIdentity.fluidVoice
+        XCTAssertEqual(self.choose(preferences: [old.bundleIdentifier], folders: [new.folderName], domains: [:]), .identity(old))
+        XCTAssertEqual(self.choose(preferences: [], folders: [old.folderName], domains: [:]), .identity(old))
+        XCTAssertEqual(self.choose(preferences: [], domains: [:]), .identity(new), "nothing anywhere: the newest, which finds nothing")
+        // Unreadable 0.1.0 preferences: chosen, and the defaults step fails and retries as before.
+        XCTAssertEqual(self.choose(preferences: [new.bundleIdentifier], domains: [new.bundleIdentifier: nil]), .identity(new))
         XCTAssertEqual(PreviousAppIdentity.mouthKeys010.ownKeyPrefix, "LiquidVoice")
         XCTAssertNil(PreviousAppIdentity.fluidVoice.ownKeyPrefix, "FluidVoice's keys all come over, as before")
+    }
+
+    func testAnUnfinishedSourceCopiesNothingMarksNothingAndSaysWhy() throws {
+        try self.seedSource(self.sampleSource)
+        var migration = self.makeMigration()
+        migration.sourceUnfinishedReason = "never finished its own migration (no folder marker)"
+
+        let report = migration.runIfNeeded()
+
+        XCTAssertEqual(report.defaults, .sourceUnfinished("never finished its own migration (no folder marker)"))
+        XCTAssertNil(self.destination.object(forKey: AppIdentityMigration.defaultsMarkerKey))
+        XCTAssertNil(self.destination.object(forKey: AppIdentityMigration.folderMarkerKey))
+        XCTAssertNil(self.destination.object(forKey: "TranscriptionHistoryEntries"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: self.destinationFolder.path))
+        let alert = try XCTUnwrap(report.haltAlert)
+        XCTAssertTrue(alert.message.contains("never finished bringing over"), alert.message)
+        XCTAssertTrue(self.logLines.contains { $0.1.contains("result=incomplete defaults=source_unfinished") })
     }
 
     func testTheLogCarriesCountsNeverContent() throws {

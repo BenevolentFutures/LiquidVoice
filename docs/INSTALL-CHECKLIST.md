@@ -15,18 +15,18 @@ The installed app came from a DMG (`Authority=Developer ID Application: …`). N
    ```sh
    MOUTHKEYS_SKIP_NOTARIZE=1 MOUTHKEYS_DIST_DIR=<scratch> scripts/release.sh package <dir>/MouthKeys.app
    ```
-3. **Match** the signature: the `designated =>` lines of `codesign -d -r- /Applications/MouthKeys.app` and `codesign -d -r- <scratch>/MouthKeys.app` must be identical. If they differ, stop.
+3. **Match** the signature: the `designated =>` lines of `codesign -d -r- /Applications/MouthKeys.app` and `codesign -d -r- <scratch>/MouthKeys.app` must be identical. If they differ, stop. **Exception, the install that changes the bundle ID** (the installed app is not `com.stage11.mouthkeys`, i.e. 0.1.0 to 0.1.1): the `identifier` clause differs by design, so compare the signer instead: `codesign -dvv <app> 2>&1 | grep -E '^(Authority|TeamIdentifier)='` must print the same lines for both. Then follow section 0, not step 6.
 4. **Back up** and verify:
    ```sh
    B=~/Backups/mouthkeys-$(date +%Y%m%d-%H%M%S); mkdir -p "$B"
    ditto /Applications/MouthKeys.app "$B/MouthKeys.app" && codesign --verify --deep --strict "$B/MouthKeys.app"
    ```
 5. **Swap:** `osascript -e 'quit app "MouthKeys"'`, wait until `pgrep -x MouthKeys` prints nothing, then `ditto <scratch>/MouthKeys.app /Applications/MouthKeys.app.new`, move the old app aside, move `.new` into place, remove the old one, `open /Applications/MouthKeys.app`.
-6. **Check:** `grep HOTKEY_TAP ~/Library/Logs/MouthKeys/Fluid.log | tail -1` says `state=installed`. `state=waiting_for_accessibility` means the signature did not match: roll back by quitting the app and putting `$B/MouthKeys.app` back the same way.
+6. **Check** (same bundle ID only): `grep HOTKEY_TAP ~/Library/Logs/MouthKeys/Fluid.log | tail -1` says `state=installed`. `state=waiting_for_accessibility` means the signature did not match: roll back by quitting the app and putting `$B/MouthKeys.app` back the same way.
 
 ### Install over an Apple Development app
 
-`./build.sh install`. It quits the app and waits for it to go, backs up the installed one to `~/Backups/mouthkeys-<timestamp>/MouthKeys.app` (and an older `/Applications/MouthKeys.app`, if one is there, to `MouthKeys.app` beside it) and verifies each copy (bundle ID and `codesign --verify --deep --strict`), prints the rollback command, and only then copies the new build next to the old one and swaps it in. Keep that output.
+`./build.sh install`. It quits the app and waits for it to go, backs up the installed one to `~/Backups/mouthkeys-<timestamp>/MouthKeys.app` (and a second copy named by `MOUTHKEYS_LEGACY_INSTALL_PATH`, if given, beside it) and verifies each copy (bundle ID and `codesign --verify --deep --strict`), prints the rollback command, and only then copies the new build next to the old one and swaps it in. Keep that output.
 
 Tail the log in a c11 pane first:
 
@@ -40,7 +40,7 @@ Rollback after `./build.sh install`: run the command it printed:
 bash ~/Backups/mouthkeys-<timestamp>/rollback.sh
 ```
 
-It quits the app, waits for it to go, puts every backed-up app back where it was (an old `MouthKeys.app` under its old name), takes out a `MouthKeys.app` that was not there before, and opens what it restored. The previous app still finds all of its own data, because the identity migration copies and never moves. Dictations made with the new app are not in the old one.
+It quits the app, waits for it to go, puts every backed-up app back where it was (a second copy under its own name), takes out a `MouthKeys.app` that was not there before, and opens what it restored. The previous app still finds all of its own data, because the identity migration copies and never moves. Dictations made with the new app are not in the old one.
 
 ## 0. First launch after the identity change (once)
 
@@ -68,7 +68,7 @@ From 0.1.1 the app is `com.stage11.mouthkeys`. 0.1.0 ran under the app's earlier
    - Custom Dictionary lists your entries and replacements.
    - Settings: the same dictation, Paste Last and Reprocess Last hotkeys; the same microphone, overlay position and size, sounds and text insertion mode.
    - `defaults read com.stage11.mouthkeys MouthKeysIdentityMigrationDefaults` prints the date and the key count.
-6. Launch at startup, only if you had it on: Settings shows it on, and System Settings > General > Login Items lists MouthKeys. If the log says `requires_approval`, approve it there; if it says `outcome=failed`, turn Launch at startup on again in Settings. The old app's login item cannot be removed by the new app. It is registered under the earlier identifier and could start the backup copy, or an old Release build in `~/Projects/MouthKeys/DerivedData/Build/Products/Release/`: remove the older entry there (it may still be named "MouthKeys" or "FluidVoice") with the minus button.
+6. Login items, every time: an earlier identity's login item can start the backup copy in `~/Backups` (still trusted for Accessibility, under the same process name), and then two apps capture the hotkey. Open System Settings > General > Login Items and remove any MouthKeys or FluidVoice entry that is not the new app. Launch at startup, only if you had it on: Settings shows it on, and System Settings > General > Login Items lists MouthKeys. If the log says `requires_approval`, approve it there; if it says `outcome=failed`, turn Launch at startup on again in Settings. The old app's login item cannot be removed by the new app. It is registered under the earlier identifier and could start the backup copy, or an old Release build in `~/Projects/MouthKeys/DerivedData/Build/Products/Release/`: remove the older entry there (it may still be named "MouthKeys" or "FluidVoice") with the minus button.
 7. Dictate once into c11. The text lands. Then go on with section 1.
 
 ## 1. Delivery into c11 (must pass)
@@ -127,5 +127,5 @@ From 0.1.1 the app is `com.stage11.mouthkeys`. 0.1.0 ran under the app's earlier
 ## 8. Cleanup, once rollback is no longer needed (optional)
 - Remove the old identity's permission rows: `tccutil reset Accessibility com.FluidApp.app` and `tccutil reset Microphone com.FluidApp.app`.
 - Archive, then remove, the old data: `defaults export com.FluidApp.app ~/Backups/com.FluidApp.app.plist && defaults delete com.FluidApp.app`, then `~/Library/Application Support/FluidVoice` and `~/Library/Logs/Fluid/`.
-- Every install keeps a full app copy in `~/Backups/mouthkeys-*`. Delete all but the last one or two now and then.
+- Every install keeps a full app copy in `~/Backups/mouthkeys-<timestamp>/` (`ls -d ~/Backups/mouthkeys-20*`). Delete all but the last one or two now and then. Never delete `~/Backups/mouthkeys-displaced-*`: that is data the identity migration set aside, and the only copy of it.
 - The migration runs once. To redo it (say, after a rollback during which you kept dictating in the old app): quit MouthKeys, `defaults delete com.stage11.mouthkeys`, move `~/Library/Application Support/MouthKeys` aside, and open the app. That replaces the new app's data with the old app's.

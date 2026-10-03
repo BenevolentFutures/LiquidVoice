@@ -66,6 +66,10 @@ nonisolated struct AppIdentityMigration {
         /// Failed after a retry displaced data: no more automatic retries. `backups` holds every
         /// displaced-values file so far.
         case halted(reason: String, backups: [URL])
+        /// The newest earlier identity holds data but never finished its own migration from the
+        /// identity before it, so copying it would bring over a partial set. Nothing is copied or
+        /// marked; the alert shows on every launch until it is sorted out by hand.
+        case sourceUnfinished(String)
     }
 
     enum FolderOutcome: Equatable {
@@ -103,14 +107,18 @@ nonisolated struct AppIdentityMigration {
 
         /// What to tell the user before the app starts, when the migration stopped retrying.
         var haltAlert: HaltAlert? {
-            guard case let .halted(reason, backups) = self.defaults else { return nil }
-            return HaltAlert(reason: reason, backups: backups)
+            switch self.defaults {
+            case let .halted(reason, backups): HaltAlert(reason: reason, backups: backups)
+            case let .sourceUnfinished(reason): HaltAlert(reason: reason, backups: [], sourceUnfinished: true)
+            default: nil
+            }
         }
     }
 
     struct HaltAlert: Equatable {
         let reason: String
         let backups: [URL]
+        var sourceUnfinished = false
 
         var title: String {
             "MouthKeys couldn't finish bringing over your settings"
@@ -118,7 +126,9 @@ nonisolated struct AppIdentityMigration {
 
         var message: String {
             var lines = [
-                "Copying your settings, history and dictionary from the previous version failed twice, so MouthKeys has stopped retrying. Nothing was deleted: the previous version's data is untouched.",
+                self.sourceUnfinished
+                    ? "The previous version never finished bringing over your settings, history and dictionary from the version before it, so MouthKeys has not copied anything. Nothing was deleted: both earlier versions' data is untouched."
+                    : "Copying your settings, history and dictionary from the previous version failed twice, so MouthKeys has stopped retrying. Nothing was deleted: the previous version's data is untouched.",
             ]
             if self.backups.isEmpty {
                 lines.append("Nothing had to be set aside.")
@@ -157,6 +167,9 @@ nonisolated struct AppIdentityMigration {
     var now: () -> Date = { Date() }
     /// Keys of the old domain starting with this are the old identity's own and are not copied.
     var legacyOwnKeyPrefix: String?
+    /// Set when the source never finished its own migration (`SourceChoice.unfinished`): nothing
+    /// is copied or marked, and the halt alert says why.
+    var sourceUnfinishedReason: String?
 
     // MARK: - Launch
 
@@ -255,14 +268,29 @@ nonisolated struct AppIdentityMigration {
         let plist = { (identity: PreviousAppIdentity) in
             preferences.appendingPathComponent("\(identity.bundleIdentifier).plist", isDirectory: false)
         }
-        // The newest earlier identity with data: its preferences file or its folder.
-        let source = Self.newestWithData(
+        let folderExists = { (identity: PreviousAppIdentity) in
+            fileManager.fileExists(atPath: applicationSupport.appendingPathComponent(identity.folderName, isDirectory: true).path)
+        }
+        let choice = Self.chooseSource(
             PreviousAppIdentity.newestFirst,
-            hasData: { identity in
-                fileManager.fileExists(atPath: plist(identity).path)
-                    || fileManager.fileExists(atPath: applicationSupport.appendingPathComponent(identity.folderName, isDirectory: true).path)
-            }
+            preferencesExist: { fileManager.fileExists(atPath: plist($0).path) },
+            folderExists: folderExists,
+            readDomain: Self.readPreferencesDomain
         )
+        let source: PreviousAppIdentity
+        var unfinishedReason: String?
+        switch choice {
+        case let .identity(identity): source = identity
+        case let .unfinished(identity, reason): source = identity; unfinishedReason = reason
+        }
+        // A newer identity's folder without its preferences is not a source (its data lives in
+        // its preferences); say so rather than leave it unmentioned.
+        for skipped in PreviousAppIdentity.newestFirst.prefix(while: { $0 != source }) where folderExists(skipped) {
+            DebugLogger.shared.warning(
+                "\(self.logPrefix) folder_without_preferences=\(skipped.folderName) (not copied; from=\(source.bundleIdentifier))",
+                source: "AppIdentityMigration"
+            )
+        }
         let legacyDomain = source.bundleIdentifier
         let destinationDomain = AppStorageLocation.releaseBundleIdentifier
         let legacyPlist = plist(source)
@@ -279,14 +307,52 @@ nonisolated struct AppIdentityMigration {
             registerLoginItem: Self.registerMainAppAsLoginItem
         )
         migration.legacyOwnKeyPrefix = source.ownKeyPrefix
+        migration.sourceUnfinishedReason = unfinishedReason
         return migration
         #endif
     }
 
-    /// The first identity in `identities` (newest first) that has data, or the newest when none
-    /// does (the migration then finds nothing to copy and marks itself done).
-    static func newestWithData(_ identities: [PreviousAppIdentity], hasData: (PreviousAppIdentity) -> Bool) -> PreviousAppIdentity {
-        identities.first(where: hasData) ?? identities[0]
+    enum SourceChoice: Equatable {
+        case identity(PreviousAppIdentity)
+        /// It holds data but never finished (or halted) its own migration from its predecessor.
+        case unfinished(PreviousAppIdentity, reason: String)
+    }
+
+    /// Where the first launch copies from: the newest earlier identity with data.
+    ///
+    /// An identity that migrated from its own predecessor (one with `ownKeyPrefix`) counts only
+    /// through its preferences, and only when its own migration finished: both of its markers
+    /// set and not halted. Its preferences file appears the moment its migration starts, so the
+    /// file alone does not say the data is whole. One that never finished is not skipped for an
+    /// older source either: the data is then split between them and needs a person.
+    /// The oldest identity counts with either its preferences or its folder.
+    static func chooseSource(
+        _ identities: [PreviousAppIdentity],
+        preferencesExist: (PreviousAppIdentity) -> Bool,
+        folderExists: (PreviousAppIdentity) -> Bool,
+        readDomain: (String) -> [String: Any]?
+    ) -> SourceChoice {
+        for identity in identities {
+            guard let prefix = identity.ownKeyPrefix else {
+                if preferencesExist(identity) || folderExists(identity) { return .identity(identity) }
+                continue
+            }
+            guard preferencesExist(identity) else { continue }
+            // Unreadable: pick it anyway and let the defaults step fail and retry as it always has.
+            guard let values = readDomain(identity.bundleIdentifier) else { return .identity(identity) }
+            if values["\(prefix)IdentityMigrationDefaultsHalted"] != nil {
+                return .unfinished(identity, reason: "\(identity.bundleIdentifier) stopped its own migration (halted)")
+            }
+            let missing = ["Defaults", "Folder"].filter { values["\(prefix)IdentityMigration\($0)"] == nil }
+            if !missing.isEmpty {
+                return .unfinished(
+                    identity,
+                    reason: "\(identity.bundleIdentifier) never finished its own migration (no \(missing.joined(separator: "/").lowercased()) marker)"
+                )
+            }
+            return .identity(identity)
+        }
+        return .identity(identities[0])
     }
 
     /// Every key of a preferences domain (current user, any host), read through cfprefsd so
@@ -319,6 +385,11 @@ nonisolated struct AppIdentityMigration {
         if defaultsDone, folderDone {
             self.log(.debug, "\(Self.logPrefix) skipped reason=already_done")
             return Report(defaults: .alreadyDone, folder: .alreadyDone, loginItem: .notNeeded)
+        }
+
+        if let reason = self.sourceUnfinishedReason {
+            self.log(.error, "\(Self.logPrefix) finished result=incomplete defaults=source_unfinished reason=\(reason) (nothing copied, nothing marked)")
+            return Report(defaults: .sourceUnfinished(reason), folder: .failed(reason), loginItem: .notNeeded)
         }
 
         let startedAt = Date()
@@ -757,7 +828,7 @@ nonisolated struct AppIdentityMigration {
 private nonisolated extension AppIdentityMigration.DefaultsOutcome {
     var isFailure: Bool {
         switch self {
-        case .failed, .halted: true
+        case .failed, .halted, .sourceUnfinished: true
         default: false
         }
     }
@@ -769,6 +840,7 @@ private nonisolated extension AppIdentityMigration.DefaultsOutcome {
         case .nothingToCopy: "nothing_to_copy"
         case .failed: "failed"
         case .halted: "halted"
+        case .sourceUnfinished: "source_unfinished"
         }
     }
 }

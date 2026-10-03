@@ -195,6 +195,11 @@ bundle_id() {
 # Process names of the installed app.
 APP_PROCESS_NAMES=("MouthKeys")
 
+# A second copy under another name (MOUTHKEYS_LEGACY_INSTALL_PATH) runs under that name too.
+if [ -n "${MOUTHKEYS_LEGACY_INSTALL_PATH:-}" ]; then
+    APP_PROCESS_NAMES+=("$(basename "${MOUTHKEYS_LEGACY_INSTALL_PATH}" .app)")
+fi
+
 # True while any copy of the app is running.
 app_is_running() {
     local name
@@ -334,7 +339,7 @@ ROLLBACK
     chmod +x "${script}"
 }
 
-# Before the first install of a new bundle identifier: the new app copies FluidVoice-era data
+# Before the first install of a new bundle identifier: the new app copies an earlier identity's data
 # once, on its first launch. Preferences or a folder already under the new identity (a stray
 # Release run, an earlier install) mean that copy would be skipped or merged into them.
 preflight_existing_identity_data() {
@@ -363,7 +368,7 @@ preflight_existing_identity_data() {
 
 First install of ${product_id} (the installed app is ${installed_id:-none}), but data for it already exists:
 ${found}
-On its first launch the new app copies your FluidVoice-era settings, history, dictionary and
+On its first launch the new app copies the previous version's settings, history, dictionary and
 folder once. With data already there, that copy is skipped or merged into it. To start clean,
 move it aside first:
   defaults export ${data_domain} ~/Backups/${data_domain}-${stamp}.plist && defaults delete ${data_domain}

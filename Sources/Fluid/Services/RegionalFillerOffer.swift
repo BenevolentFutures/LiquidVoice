@@ -6,14 +6,15 @@ import Foundation
 /// Detection is passive and local: the system region, the system time zone, and the words in
 /// a dictation the user just made. No network lookup, so nothing about the user leaves the machine.
 struct RegionalFillerOffer: Equatable {
+    /// In priority order: `rules` lists them the same way.
     enum Region: String, CaseIterable {
         case canada
+        case michigan
+        case minnesota
         case newZealand
         case singapore
         case malaysia
         case queensland
-        case michigan
-        case minnesota
     }
 
     let region: Region
@@ -107,7 +108,8 @@ struct RegionalFillerOffer: Equatable {
         return self.minnesotanPhrase.firstMatch(in: text, range: range) != nil
     }
 
-    /// First match wins, so countries matched by region come before the US states matched by zone.
+    /// First match wins. Zones never overlap, so order only decides between a region code and a
+    /// time zone that point to different places (a Mac set to Singapore on Chicago time).
     static let rules: [Rule] = [
         Rule(
             region: .canada,
@@ -117,6 +119,28 @@ struct RegionalFillerOffer: Equatable {
             timeZones: RegionalFillerOffer.canadianTimeZoneIdentifiers,
             keepTitle: "Keep \"eh\"",
             message: { _ in "Looks like you're in Canada. Keep \"eh\" in your transcripts, eh?" }
+        ),
+        Rule(
+            region: .michigan,
+            word: "eh",
+            emoji: "🧤",
+            regionCodes: [],
+            timeZones: ["America/Detroit", "America/Menominee", "US/Michigan"],
+            keepTitle: "Oh yah",
+            message: { _ in "Michigan, eh? Keep \"eh\" in your transcripts?" }
+        ),
+        Rule(
+            region: .minnesota,
+            word: "eh",
+            emoji: "🌲",
+            regionCodes: [],
+            timeZones: RegionalFillerOffer.usCentralTimeZoneIdentifiers,
+            keepTitle: "You betcha",
+            message: { dictation in
+                dictation.map(RegionalFillerOffer.soundsMinnesotan) == true
+                    ? "Ope, sounds like Minnesota. Keep \"eh\" in your transcripts?"
+                    : "Minnesota, by any chance? Keep \"eh\" in your transcripts, ya?"
+            }
         ),
         Rule(
             region: .newZealand,
@@ -153,28 +177,6 @@ struct RegionalFillerOffer: Equatable {
             timeZones: ["Australia/Brisbane", "Australia/Lindeman", "Australia/Queensland"],
             keepTitle: "Too right",
             message: { _ in "G'day, Queensland. Keep \"eh\" in your transcripts, eh?" }
-        ),
-        Rule(
-            region: .michigan,
-            word: "eh",
-            emoji: "🧤",
-            regionCodes: [],
-            timeZones: ["America/Detroit", "America/Menominee", "US/Michigan"],
-            keepTitle: "Oh yah",
-            message: { _ in "Michigan, eh? Keep \"eh\" in your transcripts?" }
-        ),
-        Rule(
-            region: .minnesota,
-            word: "eh",
-            emoji: "🌲",
-            regionCodes: [],
-            timeZones: RegionalFillerOffer.usCentralTimeZoneIdentifiers,
-            keepTitle: "You betcha",
-            message: { dictation in
-                dictation.map(RegionalFillerOffer.soundsMinnesotan) == true
-                    ? "Ope, sounds like Minnesota. Keep \"eh\" in your transcripts?"
-                    : "Minnesota, by any chance? Keep \"eh\" in your transcripts, ya?"
-            }
         ),
     ]
 

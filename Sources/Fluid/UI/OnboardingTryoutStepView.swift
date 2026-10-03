@@ -19,6 +19,7 @@ struct OnboardingTryoutStepView: View {
     @State private var isShortcutKeyPressed = false
     @State private var isShortcutGlowActive = false
     @State private var shortcutAnimationRevision = 0
+    @State private var regionalOfferAnswered = false
 
     init(
         finalText: Binding<String>,
@@ -143,11 +144,20 @@ struct OnboardingTryoutStepView: View {
         VStack(spacing: 12) {
             self.keyboardCard
 
-            Text(self.footerHint ?? "Feels slow or inaccurate? Go back and try another model for \(self.language.displayName).")
-                .font(self.theme.typography.captionStrong)
-                .foregroundStyle(Color.white.opacity(0.44))
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
+            // One slot, fixed height: a regional filler offer takes the hint's place after the
+            // first dictation lands, so nothing below it moves.
+            ZStack {
+                if let offer = self.regionalOffer {
+                    self.regionalOfferRow(offer)
+                } else {
+                    Text(self.footerHint ?? "Feels slow or inaccurate? Go back and try another model for \(self.language.displayName).")
+                        .font(self.theme.typography.captionStrong)
+                        .foregroundStyle(Color.white.opacity(0.44))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                }
+            }
+            .frame(height: 40)
         }
         .frame(width: 560)
         .onAppear {
@@ -156,6 +166,58 @@ struct OnboardingTryoutStepView: View {
         .onChange(of: self.isRunning) { _, newValue in
             self.animateShortcutKeyToggle(to: newValue)
         }
+    }
+
+    /// Shown after the first dictation lands, and read from what was just said, so a dictated
+    /// "ope" can turn the Minnesota question into a statement.
+    private var regionalOffer: RegionalFillerOffer? {
+        guard !self.regionalOfferAnswered, self.hasText, !self.isRunning else { return nil }
+        return RegionalFillerOffer.offer(dictation: self.finalText)
+    }
+
+    private func regionalOfferRow(_ offer: RegionalFillerOffer) -> some View {
+        HStack(spacing: 10) {
+            Text(offer.emoji)
+                .font(self.theme.typography.bodyStrong)
+            Text(offer.message)
+                .font(self.theme.typography.captionStrong)
+                .foregroundStyle(Color.white.opacity(0.78))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Spacer(minLength: 4)
+            self.regionalOfferButton(offer.keepTitle, prominent: true) { self.answerRegionalOffer(offer, keep: true) }
+            self.regionalOfferButton("No thanks", prominent: false) { self.answerRegionalOffer(offer, keep: false) }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 40)
+        .background(
+            Capsule()
+                .fill(Color.white.opacity(0.050))
+                .overlay(Capsule().strokeBorder(Color.red.opacity(0.35), lineWidth: 1))
+        )
+    }
+
+    private func regionalOfferButton(_ title: String, prominent: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(self.theme.typography.captionStrong)
+                .foregroundStyle(.white.opacity(prominent ? 0.96 : 0.70))
+                .lineLimit(1)
+                .frame(width: 84, height: 26)
+                .background(
+                    Capsule()
+                        .fill(prominent ? Color.red.opacity(0.55) : Color.white.opacity(0.07))
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
+                )
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+    }
+
+    private func answerRegionalOffer(_ offer: RegionalFillerOffer, keep: Bool) {
+        offer.answer(keep: keep, surface: "onboarding")
+        self.regionalOfferAnswered = true
     }
 
     private var keyboardCard: some View {

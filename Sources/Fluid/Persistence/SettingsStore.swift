@@ -4106,6 +4106,15 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    /// Set once the user answers a regional "keep this filler word" offer, either way.
+    var regionalFillerOfferAnswered: Bool {
+        get { self.defaults.bool(forKey: Keys.regionalFillerOfferAnswered) }
+        set {
+            objectWillChange.send()
+            self.defaults.set(newValue, forKey: Keys.regionalFillerOfferAnswered)
+        }
+    }
+
     var autoConvertPunctuationEnabled: Bool {
         get { self.defaults.object(forKey: Keys.autoConvertPunctuationEnabled) as? Bool ?? true }
         set {
@@ -5412,6 +5421,7 @@ private extension SettingsStore {
         // Filler Words
         static let fillerWords = "FillerWords"
         static let removeFillerWordsEnabled = "RemoveFillerWordsEnabled"
+        static let regionalFillerOfferAnswered = "RegionalFillerOfferAnswered"
         static let autoConvertPunctuationEnabled = "AutoConvertPunctuationEnabled"
         static let literalDictationFormattingEnabled = "LiteralDictationFormattingEnabled"
         static let punctuationDictionaryPrefix = "PunctuationDictionaryPrefix"

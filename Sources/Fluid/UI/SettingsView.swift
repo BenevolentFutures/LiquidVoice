@@ -2545,10 +2545,19 @@ private extension NSView {
 struct FillerWordsEditor: View {
     @State private var fillerWords: [String] = SettingsStore.shared.fillerWords
     @State private var newWord: String = ""
+    @State private var regionalOfferAnswered: Bool = SettingsStore.shared.regionalFillerOfferAnswered
     @Environment(\.theme) private var theme
+
+    private var regionalOffer: RegionalFillerOffer? {
+        RegionalFillerOffer.offer(fillerWords: self.fillerWords, answered: self.regionalOfferAnswered)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if let offer = self.regionalOffer {
+                self.regionalOfferBanner(offer)
+            }
+
             Text("Filler words to remove:")
                 .font(self.theme.typography.bodySmall)
                 .foregroundStyle(.secondary)
@@ -2611,6 +2620,31 @@ struct FillerWordsEditor: View {
     private func removeWord(_ word: String) {
         self.fillerWords.removeAll { $0 == word }
         SettingsStore.shared.fillerWords = self.fillerWords
+    }
+
+    private func regionalOfferBanner(_ offer: RegionalFillerOffer) -> some View {
+        HStack(spacing: 8) {
+            Text(offer.emoji)
+            Text(offer.message)
+                .font(self.theme.typography.bodySmall)
+            Spacer()
+            Button(offer.keepTitle) { self.answerRegionalOffer(offer, keep: true) }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            Button("No thanks") { self.answerRegionalOffer(offer, keep: false) }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(.quaternary)
+        )
+    }
+
+    private func answerRegionalOffer(_ offer: RegionalFillerOffer, keep: Bool) {
+        self.fillerWords = offer.answer(keep: keep, surface: "settings")
+        self.regionalOfferAnswered = true
     }
 }
 

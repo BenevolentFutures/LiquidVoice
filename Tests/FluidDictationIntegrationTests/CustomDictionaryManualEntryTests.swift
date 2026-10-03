@@ -199,8 +199,12 @@ final class RegionalFillerOfferTests: XCTestCase {
         }
     }
 
-    func testEveryRegionHasARule() {
-        XCTAssertEqual(Set(RegionalFillerOffer.rules.map(\.region)), Set(RegionalFillerOffer.Region.allCases))
+    func testRulesCoverEveryRegionInPriorityOrder() {
+        XCTAssertEqual(RegionalFillerOffer.rules.map(\.region), RegionalFillerOffer.Region.allCases)
+        XCTAssertEqual(
+            RegionalFillerOffer.Region.allCases,
+            [.canada, .michigan, .minnesota, .newZealand, .singapore, .malaysia, .queensland]
+        )
     }
 
     func testNewZealandByRegionOrZone() {

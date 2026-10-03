@@ -67,7 +67,7 @@ the app does not update itself. to update, download the new release and replace 
 building needs Xcode 26, which needs macOS 15.6 or later.
 
 ```bash
-git clone --depth 1 -b liquid-voice https://github.com/BenevolentFutures/MouthKeys.git
+git clone --depth 1 https://github.com/BenevolentFutures/MouthKeys.git
 cd MouthKeys
 ./build.sh install
 ```
@@ -100,7 +100,7 @@ we follow FluidVoice's work and port the fixes that fit here by hand, crediting 
 
 ## contributing.
 
-bugs and ideas go in [issues](https://github.com/BenevolentFutures/MouthKeys/issues). pull requests target `liquid-voice`; start with [CONTRIBUTING.md](CONTRIBUTING.md).
+bugs and ideas go in [issues](https://github.com/BenevolentFutures/MouthKeys/issues). pull requests target `main`; start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 

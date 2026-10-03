@@ -149,6 +149,12 @@ final class CanadianEhTests: XCTestCase {
         XCTAssertFalse(CanadianEh.shouldOffer(fillerWords: defaults, answered: true, isLikelyCanadian: true))
         XCTAssertFalse(CanadianEh.shouldOffer(fillerWords: ["um"], answered: false, isLikelyCanadian: true))
         XCTAssertFalse(CanadianEh.shouldOffer(fillerWords: defaults, answered: false, isLikelyCanadian: false))
+        XCTAssertFalse(CanadianEh.shouldOffer(
+            fillerWords: defaults,
+            answered: false,
+            removalEnabled: false,
+            isLikelyCanadian: true
+        ))
     }
 
     func testDefaultFillerListStillRemovesEh() {

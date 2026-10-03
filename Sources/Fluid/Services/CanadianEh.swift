@@ -58,8 +58,30 @@ enum CanadianEh {
     static func shouldOffer(
         fillerWords: [String],
         answered: Bool,
+        removalEnabled: Bool = true,
         isLikelyCanadian: Bool = CanadianEh.isLikelyCanadian()
     ) -> Bool {
-        !answered && isLikelyCanadian && fillerWords.contains { $0.lowercased() == self.word }
+        !answered && removalEnabled && isLikelyCanadian && fillerWords.contains { $0.lowercased() == self.word }
+    }
+
+    static func shouldOffer(settings: SettingsStore = .shared) -> Bool {
+        self.shouldOffer(
+            fillerWords: settings.fillerWords,
+            answered: settings.canadianEhOfferAnswered,
+            removalEnabled: settings.removeFillerWordsEnabled
+        )
+    }
+
+    /// Records the answer. Keeping "eh" takes it off the filler list; either answer ends the offer.
+    @discardableResult
+    static func answer(keep: Bool, surface: String, settings: SettingsStore = .shared) -> [String] {
+        var fillerWords = settings.fillerWords
+        if keep {
+            fillerWords.removeAll { $0.lowercased() == self.word }
+            settings.fillerWords = fillerWords
+        }
+        settings.canadianEhOfferAnswered = true
+        DebugLogger.shared.info("CANADIAN_EH_OFFER answered keep=\(keep) surface=\(surface)", source: "CanadianEh")
+        return fillerWords
     }
 }

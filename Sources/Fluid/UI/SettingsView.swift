@@ -2643,13 +2643,8 @@ struct FillerWordsEditor: View {
     }
 
     private func answerCanadianEhOffer(keep: Bool) {
-        if keep {
-            self.fillerWords.removeAll { $0.lowercased() == CanadianEh.word }
-            SettingsStore.shared.fillerWords = self.fillerWords
-        }
+        self.fillerWords = CanadianEh.answer(keep: keep, surface: "settings")
         self.canadianEhOfferAnswered = true
-        SettingsStore.shared.canadianEhOfferAnswered = true
-        DebugLogger.shared.info("CANADIAN_EH_OFFER answered keep=\(keep)", source: "FillerWordsEditor")
     }
 }
 

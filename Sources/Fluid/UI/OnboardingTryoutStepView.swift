@@ -19,6 +19,7 @@ struct OnboardingTryoutStepView: View {
     @State private var isShortcutKeyPressed = false
     @State private var isShortcutGlowActive = false
     @State private var shortcutAnimationRevision = 0
+    @State private var canadianEhOfferPending = CanadianEh.shouldOffer()
 
     init(
         finalText: Binding<String>,
@@ -143,11 +144,20 @@ struct OnboardingTryoutStepView: View {
         VStack(spacing: 12) {
             self.keyboardCard
 
-            Text(self.footerHint ?? "Feels slow or inaccurate? Go back and try another model for \(self.language.displayName).")
-                .font(self.theme.typography.captionStrong)
-                .foregroundStyle(Color.white.opacity(0.44))
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
+            // One slot, fixed height: the Canadian "eh" offer takes the hint's place after the
+            // first dictation lands, so nothing below it moves.
+            ZStack {
+                if self.showsCanadianEhOffer {
+                    self.canadianEhOffer
+                } else {
+                    Text(self.footerHint ?? "Feels slow or inaccurate? Go back and try another model for \(self.language.displayName).")
+                        .font(self.theme.typography.captionStrong)
+                        .foregroundStyle(Color.white.opacity(0.44))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                }
+            }
+            .frame(height: 40)
         }
         .frame(width: 560)
         .onAppear {
@@ -156,6 +166,55 @@ struct OnboardingTryoutStepView: View {
         .onChange(of: self.isRunning) { _, newValue in
             self.animateShortcutKeyToggle(to: newValue)
         }
+    }
+
+    private var showsCanadianEhOffer: Bool {
+        self.canadianEhOfferPending && self.hasText && !self.isRunning
+    }
+
+    private var canadianEhOffer: some View {
+        HStack(spacing: 10) {
+            Text("🍁")
+                .font(self.theme.typography.bodyStrong)
+            Text("Looks like you're in Canada. Keep \"eh\" in your transcripts, eh?")
+                .font(self.theme.typography.captionStrong)
+                .foregroundStyle(Color.white.opacity(0.78))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Spacer(minLength: 4)
+            self.canadianEhButton("Keep \"eh\"", prominent: true) { self.answerCanadianEhOffer(keep: true) }
+            self.canadianEhButton("No thanks", prominent: false) { self.answerCanadianEhOffer(keep: false) }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 40)
+        .background(
+            Capsule()
+                .fill(Color.white.opacity(0.050))
+                .overlay(Capsule().strokeBorder(Color.red.opacity(0.35), lineWidth: 1))
+        )
+    }
+
+    private func canadianEhButton(_ title: String, prominent: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(self.theme.typography.captionStrong)
+                .foregroundStyle(.white.opacity(prominent ? 0.96 : 0.70))
+                .lineLimit(1)
+                .frame(width: 84, height: 26)
+                .background(
+                    Capsule()
+                        .fill(prominent ? Color.red.opacity(0.55) : Color.white.opacity(0.07))
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
+                )
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+    }
+
+    private func answerCanadianEhOffer(keep: Bool) {
+        CanadianEh.answer(keep: keep, surface: "onboarding")
+        self.canadianEhOfferPending = false
     }
 
     private var keyboardCard: some View {

@@ -60,8 +60,8 @@ mouthkeys.com is `site/` (one static page in light Signal; the grin in `site/gri
 
 ## Git and PRs
 
-- `gh repo set-default` is `BenevolentFutures/MouthKeys` (renamed from `BenevolentFutures/LiquidVoice`; GitHub redirects the old URL). The integration branch is `liquid-voice`.
-- Always `gh pr create --repo BenevolentFutures/MouthKeys --base liquid-voice`. Never open anything against `altic-dev/FluidVoice`.
+- `gh repo set-default` is `BenevolentFutures/MouthKeys` (renamed from `BenevolentFutures/LiquidVoice`; GitHub redirects the old URL). The integration branch is `main` (renamed from `liquid-voice` on 2026-10-02).
+- Always `gh pr create --repo BenevolentFutures/MouthKeys --base main`. Never open anything against `altic-dev/FluidVoice`.
 - Upstream fixes are ported by hand, never merged. Policy, watermark and ledger: `UPSTREAM.md`.
 
 ## Agent pitfalls

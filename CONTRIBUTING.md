@@ -20,7 +20,7 @@ if a build sits at `ClangStatCache` and never moves, add `SDK_STAT_CACHE_ENABLE=
 
 ## pull requests.
 
-- target `liquid-voice`.
+- target `main`.
 - one fix or feature per PR. say how you tested it, and on which Mac.
 - the house rules, including how tests must behave, are in [CLAUDE.md](CLAUDE.md).
 - for anything you can see (the overlay, settings, the menu bar), attach a screenshot or a short video.

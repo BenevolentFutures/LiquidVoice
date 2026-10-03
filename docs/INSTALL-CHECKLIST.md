@@ -10,7 +10,7 @@ Install with Atin, never unattended, by the path that matches the installed app'
 
 The installed app came from a DMG (`Authority=Developer ID Application: …`). Never `./build.sh install` here: it signs with Apple Development, a different designated requirement, and Accessibility silently stops matching (hotkeys dead, `Attempt 1 failed` in the log). Instead:
 
-1. **Build** Release from a clean checkout of `origin/liquid-voice` (a fresh clone or worktree, never a checkout with local changes): `scripts/release.sh build`. It needs no certificate, so a separate build Mac can run it; copy the product back with `ditto -c -k --keepParent MouthKeys.app - | ditto -x -k - <dir>` (ditto keeps the framework symlinks).
+1. **Build** Release from a clean checkout of `origin/main` (a fresh clone or worktree, never a checkout with local changes): `scripts/release.sh build`. It needs no certificate, so a separate build Mac can run it; copy the product back with `ditto -c -k --keepParent MouthKeys.app - | ditto -x -k - <dir>` (ditto keeps the framework symlinks).
 2. **Sign** with Developer ID into a scratch folder, without notarizing (a locally built app carries no quarantine, so Gatekeeper does not check it):
    ```sh
    LIQUIDVOICE_SKIP_NOTARIZE=1 LIQUIDVOICE_DIST_DIR=<scratch> scripts/release.sh package <dir>/MouthKeys.app

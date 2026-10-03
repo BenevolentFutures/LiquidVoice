@@ -182,11 +182,51 @@ final class RegionalFillerOfferTests: XCTestCase {
     }
 
     func testEveryListedZoneResolves() {
-        let zones = RegionalFillerOffer.canadianTimeZoneIdentifiers
-            .union(RegionalFillerOffer.usCentralTimeZoneIdentifiers)
-        for identifier in zones {
-            XCTAssertNotNil(TimeZone(identifier: identifier), identifier)
+        for rule in RegionalFillerOffer.rules {
+            for identifier in rule.timeZones {
+                XCTAssertNotNil(TimeZone(identifier: identifier), "\(rule.region): \(identifier)")
+            }
         }
+    }
+
+    func testNoZoneBelongsToTwoRegions() {
+        var owner: [String: RegionalFillerOffer.Region] = [:]
+        for rule in RegionalFillerOffer.rules {
+            for identifier in rule.timeZones {
+                XCTAssertNil(owner[identifier], "\(identifier) is in \(owner[identifier]!) and \(rule.region)")
+                owner[identifier] = rule.region
+            }
+        }
+    }
+
+    func testEveryRegionHasARule() {
+        XCTAssertEqual(Set(RegionalFillerOffer.rules.map(\.region)), Set(RegionalFillerOffer.Region.allCases))
+    }
+
+    func testNewZealandByRegionOrZone() {
+        XCTAssertEqual(self.offer(locale: Locale(identifier: "en_NZ"), zone: "America/Los_Angeles")?.region, .newZealand)
+        XCTAssertEqual(self.offer(zone: "Pacific/Auckland")?.region, .newZealand)
+        XCTAssertEqual(self.offer(zone: "Pacific/Auckland")?.keepTitle, "Sweet as")
+    }
+
+    func testQueenslandByZoneButNotTheRestOfAustralia() {
+        XCTAssertEqual(self.offer(locale: Locale(identifier: "en_AU"), zone: "Australia/Brisbane")?.region, .queensland)
+        XCTAssertNil(self.offer(locale: Locale(identifier: "en_AU"), zone: "Australia/Sydney"))
+    }
+
+    func testSingaporeAndMalaysiaKeepAh() {
+        let singapore = self.offer(locale: Locale(identifier: "en_SG"), zone: "Asia/Singapore")
+        XCTAssertEqual(singapore?.region, .singapore)
+        XCTAssertEqual(singapore?.word, "ah")
+        let malaysia = self.offer(zone: "Asia/Kuala_Lumpur")
+        XCTAssertEqual(malaysia?.region, .malaysia)
+        XCTAssertEqual(malaysia?.word, "ah")
+        XCTAssertNil(self.offer(zone: "Asia/Singapore", fillerWords: ["um", "eh"]))
+    }
+
+    func testAllOfMichiganIncludingTheUP() {
+        XCTAssertEqual(self.offer(zone: "America/Detroit")?.region, .michigan)
+        XCTAssertEqual(self.offer(zone: "America/Menominee")?.region, .michigan)
     }
 
     func testOffersOnlyWhileWordIsRemovedAndUnanswered() {

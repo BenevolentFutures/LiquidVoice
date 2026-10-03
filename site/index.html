@@ -108,6 +108,9 @@ section { padding: 56px 64px; box-shadow: inset 0 -1px 0 var(--rule); }
 
 /* Hero: the pitch and the two links, with the overlay beside them. */
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: center; padding-top: 64px; padding-bottom: 64px; }
+.brand { display: flex; align-items: center; gap: 16px; margin-bottom: 36px; }
+.brand .grin { display: block; width: 96px; height: auto; }
+.brand b { font: 700 22px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
 .hero h1 { font: 700 52px/56px var(--font); letter-spacing: -.02em; }
 .hero .lede { margin-top: 18px; font: 400 19px/28px var(--font); }
 .cta { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 32px; }
@@ -191,6 +194,9 @@ a.tb-cell:hover { background: var(--inv-bg); color: var(--inv-fg); }
   .hero { padding-top: 36px; padding-bottom: 40px; }
   .hero h1 { font-size: 36px; line-height: 40px; }
   .hero .lede { font-size: 17px; line-height: 25px; }
+  .brand { margin-bottom: 28px; gap: 14px; }
+  .brand .grin { width: 76px; }
+  .brand b { font-size: 18px; }
   .cta .btn, .cta .btn2 { width: 100%; min-width: 0; }
   .listen .big { font-size: 22px; line-height: 28px; }
   .get, .spec { grid-template-columns: minmax(0, 1fr); }
@@ -216,6 +222,7 @@ a.tb-cell:hover { background: var(--inv-bg); color: var(--inv-fg); }
 
   <section class="hero">
     <div>
+      <div class="brand"><span id="brand-mark"></span><b>MouthKeys</b></div>
       <h1>Straight voice to text for macOS.</h1>
       <p class="lede">Hold a hotkey, speak, and the text lands where you were typing. On your Mac, free and open source, built to land every word.</p>
       <div class="cta">
@@ -275,8 +282,9 @@ a.tb-cell:hover { background: var(--inv-bg); color: var(--inv-fg); }
   <section>
     <div class="sec-h"><h2>04 / Built on FluidVoice</h2><span class="rule"></span></div>
     <div class="credit">
-      <p>MouthKeys is a fork of <a href="https://github.com/altic-dev/FluidVoice">FluidVoice</a> by altic-dev, who did the hard part: the speech pipeline, the model integrations, hotkeys and typing into other apps.</p>
-      <p>We simplified it down to one job, removed all telemetry and the updater, and tuned it for speed on Apple Silicon Macs. MouthKeys is not affiliated with or endorsed by altic-dev.</p>
+      <p>MouthKeys is a downstream fork of <a href="https://github.com/altic-dev/FluidVoice">FluidVoice</a> by altic-dev, who did the hard part: the speech pipeline, the model integrations, hotkeys and typing into other apps.</p>
+      <p>We simplified it, removed all the telemetry, removed the exotic AI features we never used, fixed the updater so it can never swap MouthKeys back to FluidVoice, and tuned it for ultra-fast speed on Apple Silicon Macs. MouthKeys is not affiliated with or endorsed by altic-dev.</p>
+      <p><b>Mac only.</b> No Windows, no Linux, no phones, because that's not where we work. MouthKeys was built to solve Stage 11's own problem, and it's sick at it.</p>
     </div>
   </section>
 
@@ -301,6 +309,7 @@ a.tb-cell:hover { background: var(--inv-bg); color: var(--inv-fg); }
   var fig = document.getElementById("fig1");
   fig.insertAdjacentHTML("afterbegin", grinDrawing({ w: 900, h: 300, cx: 330, rl: 228 }));
   document.getElementById("logo-sm").innerHTML = grinSVG({ px: 168 });
+  document.getElementById("brand-mark").innerHTML = grinSVG({ px: 96 });
 
   // Hover to talk: the drawing's jaw moves with a made-up voice at 8 Hz, as every live grin does
   // in the app, and tooth 12 reads LIVE. Pointer devices only; nothing moves otherwise.

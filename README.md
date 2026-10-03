@@ -6,6 +6,8 @@
 
 <p align="center"><sub>mid-dictation: the live transcript, your voice as a trace, and the word count and words per minute as you speak.</sub></p>
 
+<p align="center"><b><a href="https://github.com/BenevolentFutures/MouthKeys/releases/latest">download for macOS</a></b> · <a href="https://mouthkeys.com">mouthkeys.com</a> · free and open source · macOS 15 or later</p>
+
 ---
 
 listen.
@@ -14,43 +16,24 @@ you talk to your computer all day now. prompts for agents, replies, notes. dicta
 
 the problem is not hearing you. the problem is. delivery.
 
-**MouthKeys is on-device dictation for macOS.** hold or tap a hotkey, speak, and the text lands where you were typing when you stopped. the speech model runs on your Mac: Parakeet, Nemotron, Cohere Transcribe, Whisper or Apple Speech. when it sees a paste fail, it tells you and puts the words on your clipboard. AI cleanup through a provider you choose is still in the code, off until you turn it on. we don't test or support it.
+**MouthKeys is on-device dictation for macOS.** hold or tap a hotkey, speak, and the text lands where you were typing when you stopped. the speech model runs on your Mac: Parakeet, Nemotron, Cohere Transcribe, Whisper or Apple Speech. no account, no telemetry, no subscription. when it sees a paste fail, it tells you and puts the words on your clipboard.
 
-## built on FluidVoice.
+## what you get.
 
-MouthKeys is a fork of [FluidVoice](https://github.com/altic-dev/FluidVoice) by altic-dev, taken on 2026-08-15 at upstream [`d62adc9`][base]. FluidVoice did the hard part: the speech pipeline, the model integrations, hotkeys, typing into other apps, settings and model downloads.
-
-MouthKeys was briefly called Liquid Voice. same app, same settings, new name.
-
-**why we forked.** we dictate into coding agents all day, and we needed one thing done perfectly: every word lands where we were typing. FluidVoice was growing in many directions at once: an AI assistant of its own, analytics, its own updater, connections back to its servers. we wanted the engine without the rest. so we cut MouthKeys down to the job and spent the time on what matters to us: delivery that never drops a word, a faster stop, and an interface that stays quiet until you reach for it. if you want FluidVoice's AI features, FluidVoice is the app for that.
-
-some of what follows is upstream's later work, ported by hand; [UPSTREAM.md](UPSTREAM.md) credits each commit.
-
-### what's new.
-
-- **a new interface.** the overlay, history, cards, menu bar and icon share one visual language, Signal: square, flat, monochrome, with orange marking only what is live. the controls are cleaner. copy, reprocess, cancel and history sit one click away on a slim rail beside the pill, and nothing on screen moves unless it means something. [#17], [design notes](design/visual-language/DESIGN.md)
+- **paste you can trust.** when a paste fails in a way the app can detect, a card shows, and the text goes on your clipboard unless you copied something since. your own clipboard comes back, images and files included. back-to-back dictations queue instead of dropping. [#4], [`8ab26a8`][8ab26a8]
+- **a faster stop.** in a headless benchmark with a 13,600-entry history, stop-path work outside the model fell from a 145 ms median to 4 ms; model time is unchanged. a stalled model no longer loses the recording: it is kept for Reprocess, even across a restart. [#9], [#10]
+- **built for terminals.** Ghostty and [c11](https://github.com/Stage-11-Agentics/c11), Stage 11's terminal multiplexer, always get Reliable Paste. upstream forces Ghostty; we added c11. [`8ed75b9`][8ed75b9]
+- **Spoken Send.** end with "send it" and Return follows the text. upstream blocks terminals; we allow c11, only in the pane you stopped in, and other terminals never get it. off by default. [#7], [#8]
 - **a live voice trace.** a scrolling trace of your voice, calibrated to the recording, so you can see it hearing you. [#22], [#24]
 - **live counters.** a timer, a word count and words per minute while you speak. [#27]
 - **your mic at a glance.** the active mic shows in the overlay, with the battery level of a Hollyland lapel mic. [#29], [#30]
 - **a history browser.** recent dictations, each one click from copy or reprocess. drag the overlay anywhere. [#25]
-- **paste you can trust.** when a paste fails in a way the app can detect, a card shows, and the text goes on your clipboard unless you copied something since. your own clipboard comes back, images and files included. back-to-back dictations queue instead of dropping. [#4], [`8ab26a8`][8ab26a8]
-- **Reliable Paste for c11.** upstream forces Ghostty onto Reliable Paste; we added [c11](https://github.com/Stage-11-Agentics/c11), Stage 11's terminal multiplexer. [`8ed75b9`][8ed75b9]
-- **Spoken Send, allowed in c11.** end with "send it" and Return follows the text. upstream blocks terminals; we allow c11, only in the pane you stopped in. off by default. [#7], [#8]
-- **a faster stop.** in a headless benchmark with a 13,600-entry history, stop-path work outside the model fell from a 145 ms median to 4 ms; model time is unchanged. a stalled model no longer loses the recording: it is kept for Reprocess, even across a restart. [#9], [#10]
+- **an interface that stays quiet.** the overlay, history, cards, menu bar and icon share one visual language, Signal: square, flat, monochrome, with orange marking only what is live. copy, reprocess, cancel and history sit one click away on a slim rail beside the pill, and nothing on screen moves unless it means something. [#17], [design notes](design/visual-language/DESIGN.md)
 - **hotkey, mic and media fixes.** holds that always end, removed mics that stay removed, media resumed only if we paused it, a hung mic routed around, and a hotkey to reprocess the last dictation. [#2], [`8295536`][8295536], [`68afebc`][68afebc], [`0e2948a`][0e2948a]
 
 <p align="center"><img src="docs/images/history.png" width="520" alt="The MouthKeys history browser open directly above the recording overlay: recent dictations newest first, each with its time, word count and destination app. Below it, the overlay is mid-dictation with its live transcript, voice trace, timer and counters."></p>
 
 <p align="center"><sub>the history browser opens right where you are, above the overlay. click a dictation to insert it again.</sub></p>
-
-### what's left out.
-
-MouthKeys is narrower on purpose.
-
-- **Fluid Intelligence.** FluidVoice's AI layer and its settings are not included. [#3]
-- **support for AI cleanup.** the provider-based cleanup FluidVoice shipped is still in the app, under Advanced in the sidebar. we don't use it, test it or support it, and setup never asks about it. if you want it, it's yours: point your coding agent at the code and fix or change it to your heart's content.
-- **telemetry.** analytics are hard-wired off and the keys are blank. [`0e2948a`][0e2948a], [#3]
-- **the built-in updater.** it updates to FluidVoice, which would replace this build, so it is off. you update by downloading the new release or rebuilding. [`19202c1`][19202c1], [#3]
 
 ## install.
 
@@ -94,7 +77,26 @@ no telemetry, no account. your audio and your text stay on your Mac unless you c
 
 Feedback opens a draft GitHub issue in your browser. the app posts nothing; you read it and submit it yourself.
 
-## upstream.
+## built on FluidVoice.
+
+MouthKeys is a fork of [FluidVoice](https://github.com/altic-dev/FluidVoice) by altic-dev, taken on 2026-08-15 at upstream [`d62adc9`][base]. FluidVoice did the hard part: the speech pipeline, the model integrations, hotkeys, typing into other apps, settings and model downloads.
+
+MouthKeys was briefly called Liquid Voice. same app, same settings, new name.
+
+**why we forked.** we dictate into coding agents all day, and we needed one thing done perfectly: every word lands where we were typing. FluidVoice was growing in many directions at once: an AI assistant of its own, analytics, its own updater, connections back to its servers. we wanted the engine without the rest. so we cut MouthKeys down to the job and spent the time on what matters to us: delivery that never drops a word, a faster stop, and an interface that stays quiet until you reach for it. if you want FluidVoice's AI features, FluidVoice is the app for that.
+
+much of *what you get* is ours; some is upstream's later work, ported by hand. [UPSTREAM.md](UPSTREAM.md) credits each commit.
+
+### what's left out.
+
+MouthKeys is narrower on purpose.
+
+- **Fluid Intelligence.** FluidVoice's AI layer and its settings are not included. [#3]
+- **support for AI cleanup.** the provider-based cleanup FluidVoice shipped is still in the app, under Advanced in the sidebar. we don't use it, test it or support it, and setup never asks about it. if you want it, it's yours: point your coding agent at the code and fix or change it to your heart's content.
+- **telemetry.** analytics are hard-wired off and the keys are blank. [`0e2948a`][0e2948a], [#3]
+- **the built-in updater.** it updates to FluidVoice, which would replace this build, so it is off. you update by downloading the new release or rebuilding. [`19202c1`][19202c1], [#3]
+
+### upstream.
 
 we follow FluidVoice's work and port the fixes that fit here by hand, crediting each in the commit. what we took, what we skipped, and why: [UPSTREAM.md](UPSTREAM.md).
 
@@ -112,7 +114,7 @@ bugs and ideas go in [issues](https://github.com/BenevolentFutures/MouthKeys/iss
 
 GPL-3.0, unchanged from FluidVoice. See [LICENSE](LICENSE). FluidVoice versions published before 2026-02-23 were licensed under Apache License 2.0 ([upstream's note][relicense]); MouthKeys was forked after that date.
 
-**Modification notice.** MouthKeys is a modified version of [FluidVoice](https://github.com/altic-dev/FluidVoice) by altic-dev. Atin Woodard has modified it since 2026-08-15. The changes are summarized under *built on FluidVoice* above; [UPSTREAM.md](UPSTREAM.md) and the git history record each one.
+**Modification notice.** MouthKeys is a modified version of [FluidVoice](https://github.com/altic-dev/FluidVoice) by altic-dev. Atin Woodard has modified it since 2026-08-15. The changes are summarized under *what you get* and *built on FluidVoice* above; [UPSTREAM.md](UPSTREAM.md) and the git history record each one.
 
 FluidVoice by altic-dev and its contributors built nearly all of this: the speech pipeline, hotkeys, typing, settings and model downloads. The models themselves come from NVIDIA, Cohere, OpenAI and Apple. If MouthKeys is useful to you, please [sponsor altic-dev](https://github.com/sponsors/altic-dev).
 

@@ -54,6 +54,10 @@ Green tests are not a working product. Mic capture, Accessibility and real paste
 
 Scripted delivery checks (Debug builds only): `defaults write com.stage11.liquidvoice.dev LiquidVoiceDebugDeliveryTriggers -bool YES`, then post a `com.stage11.liquidvoice.debug.*` distributed notification (see `DeliveryDebugTriggers.swift`).
 
+## Website
+
+mouthkeys.com is `site/` (one static page in light Signal; the grin in `site/grin.js` is ported from `scripts/make_app_icon.swift`). `.github/workflows/pages.yml` deploys it to GitHub Pages on every push to `main` that touches `site/` or `docs/images/`. Preview: `site/assemble.sh <dir>` then serve `<dir>` on localhost. The page reads the latest release from the GitHub API for the version and the DMG link, so a new release needs no site change. DNS lives in the Stage11 Projects Cloudflare account (apex A/AAAA and `www` CNAME to GitHub Pages, DNS only); see `~/Projects/Stage11/code/platform/cloudflare.md`.
+
 ## Git and PRs
 
 - `gh repo set-default` is `BenevolentFutures/MouthKeys` (renamed from `BenevolentFutures/LiquidVoice`; GitHub redirects the old URL). The integration branch is `liquid-voice`.

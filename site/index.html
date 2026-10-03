@@ -108,7 +108,7 @@ section { padding: 56px 64px; box-shadow: inset 0 -1px 0 var(--rule); }
 
 /* Hero: the pitch and the two links, with the overlay beside them. */
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: center; padding-top: 64px; padding-bottom: 64px; }
-.brand { display: flex; align-items: center; gap: 16px; margin-bottom: 36px; }
+.brand { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 8px; }
 .brand .grin { display: block; width: 96px; height: auto; }
 .brand b { font: 700 22px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
 .hero h1 { font: 700 52px/56px var(--font); letter-spacing: -.02em; }
@@ -194,7 +194,7 @@ a.tb-cell:hover { background: var(--inv-bg); color: var(--inv-fg); }
   .hero { padding-top: 36px; padding-bottom: 40px; }
   .hero h1 { font-size: 36px; line-height: 40px; }
   .hero .lede { font-size: 17px; line-height: 25px; }
-  .brand { margin-bottom: 28px; gap: 14px; }
+  .brand { margin-bottom: 0; gap: 14px; }
   .brand .grin { width: 76px; }
   .brand b { font-size: 18px; }
   .cta .btn, .cta .btn2 { width: 100%; min-width: 0; }
@@ -221,8 +221,8 @@ a.tb-cell:hover { background: var(--inv-bg); color: var(--inv-fg); }
   </header>
 
   <section class="hero">
+    <div class="brand"><span id="brand-mark"></span><b>MouthKeys</b></div>
     <div>
-      <div class="brand"><span id="brand-mark"></span><b>MouthKeys</b></div>
       <h1>Straight voice to text for macOS.</h1>
       <p class="lede">Hold a hotkey, speak, and the text lands where you were typing. On your Mac, free and open source, built to land every word.</p>
       <div class="cta">

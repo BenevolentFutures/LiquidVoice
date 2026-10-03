@@ -4106,6 +4106,15 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    /// Set once the user answers the Canadian "keep eh" offer, either way.
+    var canadianEhOfferAnswered: Bool {
+        get { self.defaults.bool(forKey: Keys.canadianEhOfferAnswered) }
+        set {
+            objectWillChange.send()
+            self.defaults.set(newValue, forKey: Keys.canadianEhOfferAnswered)
+        }
+    }
+
     var autoConvertPunctuationEnabled: Bool {
         get { self.defaults.object(forKey: Keys.autoConvertPunctuationEnabled) as? Bool ?? true }
         set {
@@ -5412,6 +5421,7 @@ private extension SettingsStore {
         // Filler Words
         static let fillerWords = "FillerWords"
         static let removeFillerWordsEnabled = "RemoveFillerWordsEnabled"
+        static let canadianEhOfferAnswered = "CanadianEhOfferAnswered"
         static let autoConvertPunctuationEnabled = "AutoConvertPunctuationEnabled"
         static let literalDictationFormattingEnabled = "LiteralDictationFormattingEnabled"
         static let punctuationDictionaryPrefix = "PunctuationDictionaryPrefix"

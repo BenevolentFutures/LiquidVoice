@@ -2545,10 +2545,19 @@ private extension NSView {
 struct FillerWordsEditor: View {
     @State private var fillerWords: [String] = SettingsStore.shared.fillerWords
     @State private var newWord: String = ""
+    @State private var canadianEhOfferAnswered: Bool = SettingsStore.shared.canadianEhOfferAnswered
     @Environment(\.theme) private var theme
+
+    private var showsCanadianEhOffer: Bool {
+        CanadianEh.shouldOffer(fillerWords: self.fillerWords, answered: self.canadianEhOfferAnswered)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if self.showsCanadianEhOffer {
+                self.canadianEhOffer
+            }
+
             Text("Filler words to remove:")
                 .font(self.theme.typography.bodySmall)
                 .foregroundStyle(.secondary)
@@ -2611,6 +2620,36 @@ struct FillerWordsEditor: View {
     private func removeWord(_ word: String) {
         self.fillerWords.removeAll { $0 == word }
         SettingsStore.shared.fillerWords = self.fillerWords
+    }
+
+    private var canadianEhOffer: some View {
+        HStack(spacing: 8) {
+            Text("🍁")
+            Text("Looks like you're in Canada. Keep \"eh\" in your transcripts, eh?")
+                .font(self.theme.typography.bodySmall)
+            Spacer()
+            Button("Keep \"eh\"") { self.answerCanadianEhOffer(keep: true) }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            Button("No thanks") { self.answerCanadianEhOffer(keep: false) }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(.quaternary)
+        )
+    }
+
+    private func answerCanadianEhOffer(keep: Bool) {
+        if keep {
+            self.fillerWords.removeAll { $0.lowercased() == CanadianEh.word }
+            SettingsStore.shared.fillerWords = self.fillerWords
+        }
+        self.canadianEhOfferAnswered = true
+        SettingsStore.shared.canadianEhOfferAnswered = true
+        DebugLogger.shared.info("CANADIAN_EH_OFFER answered keep=\(keep)", source: "FillerWordsEditor")
     }
 }
 

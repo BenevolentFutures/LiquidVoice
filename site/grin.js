@@ -1,6 +1,5 @@
-// The MouthKeys grin for mouthkeys.com. Copied verbatim from the app's Signal prototype
-// (design/app-signal/index.html on design/app-signal), which ports scripts/make_app_icon.swift.
-// Change the geometry there first, then copy it here.
+// The MouthKeys grin for mouthkeys.com. The geometry is ported number for number from
+// scripts/make_app_icon.swift (the app icon) and DESIGN.md §17; change it there first.
 // ===================================================================================
 // THE GRIN. Geometry ported number for number from scripts/make_app_icon.swift and
 // SignalMenuBarMark.swift (DESIGN.md §17). Nothing here is drawn by eye.
@@ -47,7 +46,7 @@ function keycapPath(r, inset, near, far) {
 }
 // The mark as an <svg>, cropped to the teeth (plus jaw travel). o.px = rendered width in px.
 //   o.style: "solid" (the logo) | "line" (quiet outline for empty states)
-//   o.live: the lower jaw is a <g class="jaw"> that app.js moves with the voice
+//   o.live: leaves room under the lower jaw (<g class="jaw">) for it to drop
 function grinSVG(o = {}) {
   const px = o.px || 64;
   const big = GRIN.large, bb = grinBounds(big);

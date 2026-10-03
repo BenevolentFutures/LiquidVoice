@@ -56,7 +56,7 @@ Scripted delivery checks (Debug builds only): `defaults write com.stage11.liquid
 
 ## Website
 
-mouthkeys.com is `site/` (one static page, light Signal, grin geometry in `site/grin.js` copied from the app prototype). `.github/workflows/pages.yml` deploys it to GitHub Pages on every push to `liquid-voice` that touches `site/` or `docs/images/`. Preview: `site/assemble.sh <dir>` then serve `<dir>` on localhost. The page reads the latest release from the GitHub API for the version and the DMG link, so a new release needs no site change. DNS lives in the Stage11 Projects Cloudflare account (apex A/AAAA and `www` CNAME to GitHub Pages, DNS only); see `~/Projects/Stage11/code/platform/cloudflare.md`.
+mouthkeys.com is `site/` (one static page in light Signal; the grin in `site/grin.js` is ported from `scripts/make_app_icon.swift`). `.github/workflows/pages.yml` deploys it to GitHub Pages on every push to `liquid-voice` that touches `site/` or `docs/images/`. Preview: `site/assemble.sh <dir>` then serve `<dir>` on localhost. The page reads the latest release from the GitHub API for the version and the DMG link, so a new release needs no site change. DNS lives in the Stage11 Projects Cloudflare account (apex A/AAAA and `www` CNAME to GitHub Pages, DNS only); see `~/Projects/Stage11/code/platform/cloudflare.md`.
 
 ## Git and PRs
 

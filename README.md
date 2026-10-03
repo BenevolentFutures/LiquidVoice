@@ -16,14 +16,14 @@ you talk to your computer all day now. prompts for agents, replies, notes. dicta
 
 the problem is not hearing you. the problem is. delivery.
 
-**MouthKeys is on-device dictation for macOS.** hold or tap a hotkey, speak, and the text lands where you were typing when you stopped. the speech model runs on your Mac: Parakeet, Nemotron, Cohere Transcribe, Whisper or Apple Speech. no account, no telemetry, no subscription. when a paste fails, it tells you and puts the words on your clipboard.
+**MouthKeys is on-device dictation for macOS.** hold or tap a hotkey, speak, and the text lands where you were typing when you stopped. the speech model runs on your Mac: Parakeet, Nemotron, Cohere Transcribe, Whisper or Apple Speech. no account, no telemetry, no subscription. when it sees a paste fail, it tells you and puts the words on your clipboard.
 
 ## what you get.
 
 - **paste you can trust.** when a paste fails in a way the app can detect, a card shows, and the text goes on your clipboard unless you copied something since. your own clipboard comes back, images and files included. back-to-back dictations queue instead of dropping. [#4], [`8ab26a8`][8ab26a8]
 - **a faster stop.** in a headless benchmark with a 13,600-entry history, stop-path work outside the model fell from a 145 ms median to 4 ms; model time is unchanged. a stalled model no longer loses the recording: it is kept for Reprocess, even across a restart. [#9], [#10]
-- **built for terminals.** Ghostty and [c11](https://github.com/Stage-11-Agentics/c11), Stage 11's terminal multiplexer, always get Reliable Paste. [`8ed75b9`][8ed75b9]
-- **Spoken Send.** end with "send it" and Return follows the text. it works in c11, only in the pane you stopped in. off by default. [#7], [#8]
+- **built for terminals.** Ghostty and [c11](https://github.com/Stage-11-Agentics/c11), Stage 11's terminal multiplexer, always get Reliable Paste. upstream forces Ghostty; we added c11. [`8ed75b9`][8ed75b9]
+- **Spoken Send.** end with "send it" and Return follows the text. upstream blocks terminals; we allow c11, only in the pane you stopped in, and other terminals never get it. off by default. [#7], [#8]
 - **a live voice trace.** a scrolling trace of your voice, calibrated to the recording, so you can see it hearing you. [#22], [#24]
 - **live counters.** a timer, a word count and words per minute while you speak. [#27]
 - **your mic at a glance.** the active mic shows in the overlay, with the battery level of a Hollyland lapel mic. [#29], [#30]
@@ -114,7 +114,7 @@ bugs and ideas go in [issues](https://github.com/BenevolentFutures/MouthKeys/iss
 
 GPL-3.0, unchanged from FluidVoice. See [LICENSE](LICENSE). FluidVoice versions published before 2026-02-23 were licensed under Apache License 2.0 ([upstream's note][relicense]); MouthKeys was forked after that date.
 
-**Modification notice.** MouthKeys is a modified version of [FluidVoice](https://github.com/altic-dev/FluidVoice) by altic-dev. Atin Woodard has modified it since 2026-08-15. The changes are summarized under *built on FluidVoice* above; [UPSTREAM.md](UPSTREAM.md) and the git history record each one.
+**Modification notice.** MouthKeys is a modified version of [FluidVoice](https://github.com/altic-dev/FluidVoice) by altic-dev. Atin Woodard has modified it since 2026-08-15. The changes are summarized under *what you get* and *built on FluidVoice* above; [UPSTREAM.md](UPSTREAM.md) and the git history record each one.
 
 FluidVoice by altic-dev and its contributors built nearly all of this: the speech pipeline, hotkeys, typing, settings and model downloads. The models themselves come from NVIDIA, Cohere, OpenAI and Apple. If MouthKeys is useful to you, please [sponsor altic-dev](https://github.com/sponsors/altic-dev).
 

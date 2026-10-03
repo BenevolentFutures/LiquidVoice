@@ -13,26 +13,26 @@
 # Developer ID identity and the notary profile in the login keychain.
 #
 # Environment:
-#   LIQUIDVOICE_NOTARY_PROFILE   notarytool keychain profile (default: liquidvoice-notary)
-#   LIQUIDVOICE_SIGN_IDENTITY    codesign identity (default: the one Developer ID Application
-#                                identity in the keychain, of LIQUIDVOICE_DEVELOPMENT_TEAM if set)
-#   LIQUIDVOICE_DEVELOPMENT_TEAM Team ID that picks among several Developer ID identities
-#   LIQUIDVOICE_SKIP_NOTARIZE=1  sign and package without notarizing (signing check only;
+#   MOUTHKEYS_NOTARY_PROFILE   notarytool keychain profile (default: mouthkeys-notary)
+#   MOUTHKEYS_SIGN_IDENTITY    codesign identity (default: the one Developer ID Application
+#                                identity in the keychain, of MOUTHKEYS_DEVELOPMENT_TEAM if set)
+#   MOUTHKEYS_DEVELOPMENT_TEAM Team ID that picks among several Developer ID identities
+#   MOUTHKEYS_SKIP_NOTARIZE=1  sign and package without notarizing (signing check only;
 #                                the result will not pass Gatekeeper on another Mac)
-#   LIQUIDVOICE_DIST_DIR         output folder (default: <repo>/dist)
+#   MOUTHKEYS_DIST_DIR         output folder (default: <repo>/dist)
 #   FLUIDVOICE_DERIVED_DATA_PATH DerivedData folder (default: <repo>/DerivedData)
 #
-# Never launch the built app. It is com.stage11.liquidvoice, the installed app's
+# Never launch the built app. It is com.stage11.mouthkeys, the installed app's
 # identity, and would write into the installed app's settings and data (CLAUDE.md).
 
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DERIVED_DATA_PATH="${FLUIDVOICE_DERIVED_DATA_PATH:-${PROJECT_DIR}/DerivedData}"
-DIST_DIR="${LIQUIDVOICE_DIST_DIR:-${PROJECT_DIR}/dist}"
-NOTARY_PROFILE="${LIQUIDVOICE_NOTARY_PROFILE:-liquidvoice-notary}"
-TEAM="${LIQUIDVOICE_DEVELOPMENT_TEAM:-${FLUIDVOICE_DEVELOPMENT_TEAM:-}}"
-SKIP_NOTARIZE="${LIQUIDVOICE_SKIP_NOTARIZE:-0}"
+DIST_DIR="${MOUTHKEYS_DIST_DIR:-${PROJECT_DIR}/dist}"
+NOTARY_PROFILE="${MOUTHKEYS_NOTARY_PROFILE:-mouthkeys-notary}"
+TEAM="${MOUTHKEYS_DEVELOPMENT_TEAM:-${FLUIDVOICE_DEVELOPMENT_TEAM:-}}"
+SKIP_NOTARIZE="${MOUTHKEYS_SKIP_NOTARIZE:-0}"
 BUILT_APP="${DERIVED_DATA_PATH}/Build/Products/Release/MouthKeys.app"
 APP_NAME="MouthKeys.app"
 VOLUME_NAME="MouthKeys"
@@ -52,8 +52,8 @@ step() { printf '\n==> %s\n' "$1"; }
 # ---------------------------------------------------------------- preflight
 
 resolve_identity() {
-    if [ -n "${LIQUIDVOICE_SIGN_IDENTITY:-}" ]; then
-        IDENTITY="${LIQUIDVOICE_SIGN_IDENTITY}"
+    if [ -n "${MOUTHKEYS_SIGN_IDENTITY:-}" ]; then
+        IDENTITY="${MOUTHKEYS_SIGN_IDENTITY}"
     else
         local -a found=()
         local line
@@ -68,10 +68,10 @@ resolve_identity() {
                 "A download needs a Developer ID Application certificate (paid Apple Developer Program)." \
                 "Create one in Xcode > Settings > Accounts > Manage Certificates, or at developer.apple.com," \
                 "then check: security find-identity -v -p codesigning" \
-                "To pick one by name, set LIQUIDVOICE_SIGN_IDENTITY."
+                "To pick one by name, set MOUTHKEYS_SIGN_IDENTITY."
         fi
         if [ "${#found[@]}" -gt 1 ]; then
-            die "several Developer ID Application identities found; set LIQUIDVOICE_DEVELOPMENT_TEAM or LIQUIDVOICE_SIGN_IDENTITY:" \
+            die "several Developer ID Application identities found; set MOUTHKEYS_DEVELOPMENT_TEAM or MOUTHKEYS_SIGN_IDENTITY:" \
                 "${found[@]}"
         fi
         IDENTITY="${found[0]}"
@@ -84,7 +84,7 @@ resolve_identity() {
 
 check_notary_profile() {
     if [ "${SKIP_NOTARIZE}" = "1" ]; then
-        echo "Notarization: skipped (LIQUIDVOICE_SKIP_NOTARIZE=1). The result will not pass Gatekeeper elsewhere."
+        echo "Notarization: skipped (MOUTHKEYS_SKIP_NOTARIZE=1). The result will not pass Gatekeeper elsewhere."
         return
     fi
     local out
@@ -96,7 +96,7 @@ check_notary_profile() {
             "  xcrun notarytool store-credentials ${NOTARY_PROFILE} --apple-id <apple-id> --team-id <team-id>" \
             "or with an App Store Connect API key:" \
             "  xcrun notarytool store-credentials ${NOTARY_PROFILE} --key <AuthKey_XXXX.p8> --key-id <key-id> --issuer <issuer-uuid>" \
-            "Use another profile with LIQUIDVOICE_NOTARY_PROFILE, or sign only with LIQUIDVOICE_SKIP_NOTARIZE=1."
+            "Use another profile with MOUTHKEYS_NOTARY_PROFILE, or sign only with MOUTHKEYS_SKIP_NOTARIZE=1."
     fi
     echo "Notary profile: ${NOTARY_PROFILE}"
 }
@@ -184,8 +184,8 @@ sign_app() {
     local app="$1"
     local main_exe ents list
     main_exe="${app}/Contents/MacOS/$(plist_value "${app}/Contents/Info.plist" CFBundleExecutable)"
-    ents="$(mktemp -t liquidvoice-ents)"
-    list="$(mktemp -t liquidvoice-code)"
+    ents="$(mktemp -t mouthkeys-ents)"
+    list="$(mktemp -t mouthkeys-code)"
 
     extract_entitlements "${app}" "${ents}"
     if [ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.device.audio-input' "${ents}" 2>/dev/null)" != "true" ]; then
@@ -242,7 +242,7 @@ sign_app() {
 notarize() {
     local file="$1"
     local result status id
-    result="$(mktemp -t liquidvoice-notary).json"
+    result="$(mktemp -t mouthkeys-notary).json"
     echo "Submitting $(basename "${file}") to the notary service (this waits)..."
     if ! xcrun notarytool submit "${file}" --keychain-profile "${NOTARY_PROFILE}" \
         --wait --output-format json > "${result}"; then
@@ -262,7 +262,7 @@ notarize() {
 make_dmg() {
     local app="$1" dmg="$2"
     local stage
-    stage="$(mktemp -d -t liquidvoice-dmg)"
+    stage="$(mktemp -d -t mouthkeys-dmg)"
     ditto "${app}" "${stage}/${APP_NAME}"
     ln -s /Applications "${stage}/Applications"
     rm -f "${dmg}"
@@ -291,7 +291,7 @@ run_verify() {
     printf '%s\n' "${out}" | grep -q '^Authority=Developer ID Application' \
         || { echo "FAIL: not signed with a Developer ID Application identity"; failed=1; }
 
-    ents="$(mktemp -t liquidvoice-ents)"
+    ents="$(mktemp -t mouthkeys-ents)"
     codesign -d --entitlements - --xml "${app}" > "${ents}" 2>/dev/null || true
     if [ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.device.audio-input' "${ents}" 2>/dev/null)" = "true" ]; then
         echo "Microphone entitlement present."
@@ -304,7 +304,7 @@ run_verify() {
     rm -f "${ents}"
 
     if [ "${SKIP_NOTARIZE}" = "1" ]; then
-        echo "-- Gatekeeper and stapler checks skipped: not notarized (LIQUIDVOICE_SKIP_NOTARIZE=1)."
+        echo "-- Gatekeeper and stapler checks skipped: not notarized (MOUTHKEYS_SKIP_NOTARIZE=1)."
         echo "   spctl, for reference (expected to say Unnotarized Developer ID):"
         spctl -a -vvv "${app}" 2>&1 | sed 's/^/   /' || true
     else
@@ -340,8 +340,8 @@ run_verify() {
 run_package() {
     local source_app="${1:-${BUILT_APP}}"
     [ -d "${source_app}" ] || die "no built app at ${source_app}. Run scripts/release.sh build first, or pass the app's path."
-    [ "$(plist_value "${source_app}/Contents/Info.plist" CFBundleIdentifier)" = "com.stage11.liquidvoice" ] \
-        || die "${source_app} is not the Release app (com.stage11.liquidvoice)."
+    [ "$(plist_value "${source_app}/Contents/Info.plist" CFBundleIdentifier)" = "com.stage11.mouthkeys" ] \
+        || die "${source_app} is not the Release app (com.stage11.mouthkeys)."
 
     resolve_identity
     check_notary_profile

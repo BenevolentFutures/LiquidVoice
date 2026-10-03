@@ -61,7 +61,7 @@ struct FeedbackView: View {
                         Spacer()
 
                         HStack(spacing: 10) {
-                            Link(destination: LiquidVoiceLinks.upstreamRepository) {
+                            Link(destination: MouthKeysLinks.upstreamRepository) {
                                 HStack(spacing: 8) {
                                     Image(systemName: "chevron.left.forwardslash.chevron.right")
                                     Text("FluidVoice")
@@ -75,7 +75,7 @@ struct FeedbackView: View {
                             .buttonHoverEffect()
                             .help("FluidVoice on GitHub")
 
-                            Link(destination: LiquidVoiceLinks.upstreamSponsor) {
+                            Link(destination: MouthKeysLinks.upstreamSponsor) {
                                 HStack(spacing: 8) {
                                     Image(systemName: "heart.fill")
                                     Text("Sponsor FluidVoice")
@@ -164,8 +164,8 @@ struct FeedbackView: View {
         let feedback = self.trimmedFeedback
         guard !feedback.isEmpty else { return }
 
-        let url = LiquidVoiceLinks.prefilledIssueURL(
-            title: LiquidVoiceLinks.issueTitle(forFeedback: feedback),
+        let url = MouthKeysLinks.prefilledIssueURL(
+            title: MouthKeysLinks.issueTitle(forFeedback: feedback),
             body: feedback,
             footer: self.includeSystemInfo ? "---\n" + Self.systemInfo() : ""
         )

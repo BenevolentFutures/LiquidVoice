@@ -9,7 +9,7 @@ import AppKit
 import ApplicationServices
 import SwiftUI
 
-/// Started by `LiquidVoiceMain`, after the identity migration.
+/// Started by `MouthKeysMain`, after the identity migration.
 struct FluidApp: App {
     @StateObject private var menuBarManager = MenuBarManager()
     @StateObject private var appServices: AppServices

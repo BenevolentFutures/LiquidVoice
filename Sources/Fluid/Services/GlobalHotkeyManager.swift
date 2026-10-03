@@ -1040,7 +1040,7 @@ final class GlobalHotkeyManager: NSObject {
             ready.signal()
             CFRunLoopRun()
         }
-        thread.name = "com.stage11.liquidvoice.hotkey-event-tap"
+        thread.name = "com.stage11.mouthkeys.hotkey-event-tap"
         thread.qualityOfService = .userInteractive
         thread.start()
         ready.wait()

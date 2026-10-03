@@ -360,7 +360,7 @@ nonisolated enum AppRelauncher {
 final class AccessibilityTrustMonitor: ObservableObject {
     static let shared = AccessibilityTrustMonitor()
 
-    static let trustedOnceKey = "LiquidVoiceAccessibilityTrustedOnce"
+    static let trustedOnceKey = "MouthKeysAccessibilityTrustedOnce"
     static let pollInterval: TimeInterval = 0.5
     static let accessibilitySettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
     private nonisolated static let systemSettingsBundleIDs: Set<String> = ["com.apple.systempreferences", "com.apple.SystemSettings"]

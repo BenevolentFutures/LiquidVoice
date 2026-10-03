@@ -318,7 +318,7 @@ struct SettingsView: View {
                                 Text("MouthKeys does not update itself. Download new releases from GitHub.")
                                     .font(self.theme.typography.bodySmall)
                                     .foregroundStyle(self.settingsSecondaryText)
-                                Link("Latest release", destination: LiquidVoiceLinks.latestRelease)
+                                Link("Latest release", destination: MouthKeysLinks.latestRelease)
                                     .font(self.theme.typography.bodySmall)
                             }
                         }

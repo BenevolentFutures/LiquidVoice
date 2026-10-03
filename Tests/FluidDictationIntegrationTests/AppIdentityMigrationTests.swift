@@ -3,7 +3,7 @@ import AVFoundation
 @testable import MouthKeys_Debug
 import XCTest
 
-/// The one-time copy of FluidVoice-era data into the app's own identity. Every test runs on
+/// The one-time copy of an earlier identity's data into `com.stage11.mouthkeys`. Every test runs on
 /// throwaway preferences suites and temporary folders; nothing here reads or writes the
 /// installed app's domain or folders.
 @MainActor
@@ -21,8 +21,8 @@ final class AppIdentityMigrationTests: XCTestCase {
         try super.setUpWithError()
         let id = UUID().uuidString
         // Two fixed suites, emptied around every test, so no run leaves preference files behind.
-        self.sourceSuite = "LiquidVoiceIdentityMigrationTests.Source"
-        self.destinationSuite = "LiquidVoiceIdentityMigrationTests.Destination"
+        self.sourceSuite = "MouthKeysIdentityMigrationTests.Source"
+        self.destinationSuite = "MouthKeysIdentityMigrationTests.Destination"
         Self.erase(suite: self.sourceSuite)
         Self.erase(suite: self.destinationSuite)
         self.destination = try XCTUnwrap(UserDefaults(suiteName: self.destinationSuite))
@@ -30,7 +30,7 @@ final class AppIdentityMigrationTests: XCTestCase {
             .appendingPathComponent("AppIdentityMigrationTests-\(id)", isDirectory: true)
         try FileManager.default.createDirectory(at: self.root, withIntermediateDirectories: true)
         self.legacyFolder = self.root.appendingPathComponent("FluidVoice", isDirectory: true)
-        self.destinationFolder = self.root.appendingPathComponent("LiquidVoice", isDirectory: true)
+        self.destinationFolder = self.root.appendingPathComponent("MouthKeys", isDirectory: true)
         self.logLines = []
         self.loginItemRegistrations = 0
     }
@@ -73,11 +73,12 @@ final class AppIdentityMigrationTests: XCTestCase {
         readLegacyDefaults: (() -> [String: Any]?)? = nil,
         legacyDefaultsFileExists: @escaping () -> Bool = { true },
         backupFolder: URL? = nil,
-        loginItemOutcome: AppIdentityMigration.LoginItemOutcome = .registered
+        loginItemOutcome: AppIdentityMigration.LoginItemOutcome = .registered,
+        legacyOwnKeyPrefix: String? = nil
     ) -> AppIdentityMigration {
         let sourceSuite = self.sourceSuite!
         let destinationSuite = self.destinationSuite!
-        return AppIdentityMigration(
+        var migration = AppIdentityMigration(
             legacyDomain: sourceSuite,
             destinationDomain: destinationSuite,
             destination: destination ?? self.destination,
@@ -94,6 +95,8 @@ final class AppIdentityMigrationTests: XCTestCase {
             },
             log: { [weak self] level, message in self?.logLines.append((level, message)) }
         )
+        migration.legacyOwnKeyPrefix = legacyOwnKeyPrefix
+        return migration
     }
 
     private func writeFile(_ relativePath: String, _ contents: String, under folder: URL) throws {
@@ -264,7 +267,7 @@ final class AppIdentityMigrationTests: XCTestCase {
         XCTAssertNil(self.destination.object(forKey: AppIdentityMigration.defaultsMarkerKey))
 
         let alert = try XCTUnwrap(second.haltAlert)
-        XCTAssertTrue(alert.message.contains("~/Library/Logs/LiquidVoice/Fluid.log"))
+        XCTAssertTrue(alert.message.contains("~/Library/Logs/MouthKeys/Fluid.log"))
         XCTAssertTrue(alert.message.contains(backups[0].path))
         XCTAssertTrue(self.logLines.contains { $0.0 == .error && $0.1.contains("step=defaults outcome=halted") })
 
@@ -294,6 +297,116 @@ final class AppIdentityMigrationTests: XCTestCase {
         XCTAssertFalse(report.copiedData)
         XCTAssertNotNil(self.destination.object(forKey: AppIdentityMigration.defaultsMarkerKey))
         XCTAssertNotNil(self.destination.object(forKey: AppIdentityMigration.folderMarkerKey))
+    }
+
+    /// 0.1.0's own bookkeeping (its migration markers, its Accessibility trust record) describes
+    /// that identity and stays behind; everything else comes over.
+    func testTheOldIdentitysOwnKeysAreLeftBehind() throws {
+        let source = self.sampleSource
+        try self.seedSource(source.merging([
+            "OldNameIdentityMigrationDefaults": ["from": "com.FluidApp.app", "keys": 40],
+            "OldNameAccessibilityTrustedOnce": true,
+        ]) { current, _ in current })
+
+        let report = self.makeMigration(legacyOwnKeyPrefix: "OldName").runIfNeeded()
+
+        XCTAssertEqual(report.defaults, .copied(keys: source.count, replaced: 0, displacedBackup: nil))
+        XCTAssertNil(self.destination.object(forKey: "OldNameIdentityMigrationDefaults"))
+        XCTAssertNil(self.destination.object(forKey: "OldNameAccessibilityTrustedOnce"))
+        for key in source.keys {
+            XCTAssertNotNil(self.destination.object(forKey: key), "missing \(key)")
+        }
+        XCTAssertTrue(self.logLines.contains { $0.1.contains("IDENTITY_MIGRATION step=defaults left_behind=2") })
+    }
+
+    func testAnOldDomainHoldingOnlyItsOwnKeysIsMarkedDone() throws {
+        try self.seedSource(["OldNameAccessibilityTrustedOnce": true])
+
+        let report = self.makeMigration(legacyOwnKeyPrefix: "OldName").runIfNeeded()
+
+        XCTAssertEqual(report.defaults, .nothingToCopy)
+        XCTAssertNotNil(self.destination.object(forKey: AppIdentityMigration.defaultsMarkerKey))
+        XCTAssertNil(self.destination.object(forKey: "OldNameAccessibilityTrustedOnce"))
+    }
+
+    /// 0.1.0's own migration markers, as its first launch left them.
+    private func finished010(_ extra: [String: Any] = [:]) -> [String: Any] {
+        let prefix = PreviousAppIdentity.mouthKeys010.ownKeyPrefix!
+        let markers: [String: Any] = [
+            "\(prefix)IdentityMigrationDefaults": ["from": "com.FluidApp.app", "keys": 119] as [String: Any],
+            "\(prefix)IdentityMigrationFolder": ["from": "FluidVoice", "outcome": "copied"],
+            "TranscriptionHistoryEntries": Data([1]),
+        ]
+        return markers.merging(extra) { _, new in new }
+    }
+
+    private func choose(
+        preferences: Set<String>,
+        folders: Set<String> = [],
+        domains: [String: [String: Any]?]
+    ) -> AppIdentityMigration.SourceChoice {
+        AppIdentityMigration.chooseSource(
+            PreviousAppIdentity.newestFirst,
+            preferencesExist: { preferences.contains($0.bundleIdentifier) },
+            folderExists: { folders.contains($0.folderName) },
+            readDomain: { domain in domains[domain] ?? nil }
+        )
+    }
+
+    /// 0.1.0 finished its own copy from FluidVoice, so its domain is whole and it is the source.
+    func testA010ThatFinishedItsOwnMigrationIsTheSource() {
+        let new = PreviousAppIdentity.mouthKeys010, old = PreviousAppIdentity.fluidVoice
+        XCTAssertEqual(
+            self.choose(preferences: [new.bundleIdentifier, old.bundleIdentifier], domains: [new.bundleIdentifier: self.finished010()]),
+            .identity(new)
+        )
+    }
+
+    /// Its preferences file exists from the first attempt on, so the file alone proves nothing.
+    func testA010ThatNeverFinishedItsOwnMigrationStopsInsteadOfCopyingAPartialSet() {
+        let new = PreviousAppIdentity.mouthKeys010, old = PreviousAppIdentity.fluidVoice
+        let prefix = new.ownKeyPrefix!
+        let noFolderMarker = self.finished010().filter { $0.key != "\(prefix)IdentityMigrationFolder" }
+        guard case let .unfinished(identity, reason) = self.choose(
+            preferences: [new.bundleIdentifier, old.bundleIdentifier],
+            domains: [new.bundleIdentifier: noFolderMarker]
+        ) else { return XCTFail("expected unfinished") }
+        XCTAssertEqual(identity, new)
+        XCTAssertTrue(reason.contains("no folder marker"), reason)
+
+        let halted = self.finished010(["\(prefix)IdentityMigrationDefaultsHalted": ["reason": "x"]])
+        guard case .unfinished = self.choose(preferences: [new.bundleIdentifier], domains: [new.bundleIdentifier: halted]) else {
+            return XCTFail("a halted 0.1.0 is unfinished")
+        }
+    }
+
+    /// No 0.1.0 preferences (never installed, or cleared): FluidVoice is the source, even if a 0.1.0 folder is there.
+    func testWithout010PreferencesFluidVoiceIsTheSource() {
+        let new = PreviousAppIdentity.mouthKeys010, old = PreviousAppIdentity.fluidVoice
+        XCTAssertEqual(self.choose(preferences: [old.bundleIdentifier], folders: [new.folderName], domains: [:]), .identity(old))
+        XCTAssertEqual(self.choose(preferences: [], folders: [old.folderName], domains: [:]), .identity(old))
+        XCTAssertEqual(self.choose(preferences: [], domains: [:]), .identity(new), "nothing anywhere: the newest, which finds nothing")
+        // Unreadable 0.1.0 preferences: chosen, and the defaults step fails and retries as before.
+        XCTAssertEqual(self.choose(preferences: [new.bundleIdentifier], domains: [new.bundleIdentifier: nil]), .identity(new))
+        XCTAssertEqual(PreviousAppIdentity.mouthKeys010.ownKeyPrefix, "LiquidVoice")
+        XCTAssertNil(PreviousAppIdentity.fluidVoice.ownKeyPrefix, "FluidVoice's keys all come over, as before")
+    }
+
+    func testAnUnfinishedSourceCopiesNothingMarksNothingAndSaysWhy() throws {
+        try self.seedSource(self.sampleSource)
+        var migration = self.makeMigration()
+        migration.sourceUnfinishedReason = "never finished its own migration (no folder marker)"
+
+        let report = migration.runIfNeeded()
+
+        XCTAssertEqual(report.defaults, .sourceUnfinished("never finished its own migration (no folder marker)"))
+        XCTAssertNil(self.destination.object(forKey: AppIdentityMigration.defaultsMarkerKey))
+        XCTAssertNil(self.destination.object(forKey: AppIdentityMigration.folderMarkerKey))
+        XCTAssertNil(self.destination.object(forKey: "TranscriptionHistoryEntries"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: self.destinationFolder.path))
+        let alert = try XCTUnwrap(report.haltAlert)
+        XCTAssertTrue(alert.message.contains("never finished bringing over"), alert.message)
+        XCTAssertTrue(self.logLines.contains { $0.1.contains("result=incomplete defaults=source_unfinished") })
     }
 
     func testTheLogCarriesCountsNeverContent() throws {
@@ -356,10 +469,10 @@ final class AppIdentityMigrationTests: XCTestCase {
             XCTAssertEqual(self.contents(of: path, under: self.legacyFolder), expected, path)
         }
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: self.root.path)
-        XCTAssertEqual(Set(leftovers), ["FluidVoice", "LiquidVoice"], "no staging folder may remain")
+        XCTAssertEqual(Set(leftovers), ["FluidVoice", "MouthKeys"], "no staging folder may remain")
         XCTAssertNotNil(self.destination.object(forKey: AppIdentityMigration.folderMarkerKey))
         XCTAssertTrue(self.logLines.contains {
-            $0.1 == "IDENTITY_MIGRATION step=folder outcome=copied files=3 bytes=34 skipped=0 from=FluidVoice to=LiquidVoice (FluidVoice left in place)"
+            $0.1 == "IDENTITY_MIGRATION step=folder outcome=copied files=3 bytes=34 skipped=0 from=FluidVoice to=MouthKeys (FluidVoice left in place)"
         })
         XCTAssertTrue(self.logLines.contains { $0.1.hasPrefix("IDENTITY_MIGRATION finished result=ok defaults=copied(1) folder=copied(3) loginItem=not_needed elapsedMs=") })
     }
@@ -390,7 +503,7 @@ final class AppIdentityMigrationTests: XCTestCase {
         XCTAssertEqual(self.contents(of: "OnlyNew/notes.txt", under: self.destinationFolder), "the new app's own")
         // The displaced default is kept, under the same relative path, in ~/Backups.
         XCTAssertEqual(backup.deletingLastPathComponent().standardizedFileURL, self.backupFolder.standardizedFileURL)
-        XCTAssertTrue(backup.lastPathComponent.hasPrefix("liquid-voice-displaced-folder-"))
+        XCTAssertTrue(backup.lastPathComponent.hasPrefix("mouthkeys-displaced-folder-"))
         XCTAssertEqual(self.contents(of: "parakeet_custom_vocabulary.json", under: backup), self.defaultVocabulary)
         XCTAssertNil(self.contents(of: "pronunciations.json", under: backup), "identical files are not displaced")
         // The old folder is untouched.
@@ -447,7 +560,7 @@ final class AppIdentityMigrationTests: XCTestCase {
     func testAStagingFolderLeftByAnInterruptedCopyIsRemoved() throws {
         try self.seedSource(["OnboardingCompleted": true])
         try self.writeFile("parakeet_custom_vocabulary.json", "vocabulary", under: self.legacyFolder)
-        let orphan = self.root.appendingPathComponent(".LiquidVoice.migrating-crashed", isDirectory: true)
+        let orphan = self.root.appendingPathComponent(".MouthKeys.migrating-crashed", isDirectory: true)
         try self.writeFile("partial.json", "half", under: orphan)
 
         let report = self.makeMigration().runIfNeeded()
@@ -502,7 +615,7 @@ final class AppIdentityMigrationTests: XCTestCase {
     func testDebugBuildsNeverMigrateTheInstalledAppsData() {
         XCTAssertNil(AppIdentityMigration.forInstalledApp())
         XCTAssertNil(AppIdentityMigration.forInstalledApp(
-            bundleIdentifier: "com.stage11.liquidvoice",
+            bundleIdentifier: "com.stage11.mouthkeys",
             bundleURL: URL(fileURLWithPath: "/Applications/MouthKeys.app"),
             isTestHost: false
         ))
@@ -515,30 +628,30 @@ final class AppIdentityMigrationTests: XCTestCase {
             FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications/MouthKeys.app")
         ))
         XCTAssertFalse(AppIdentityMigration.isInstalledLocation(
-            URL(fileURLWithPath: "/Users/someone/Projects/LiquidVoice/DerivedData/Build/Products/Release/MouthKeys.app")
+            URL(fileURLWithPath: "/Users/someone/Projects/MouthKeys/DerivedData/Build/Products/Release/MouthKeys.app")
         ))
         XCTAssertFalse(AppIdentityMigration.isInstalledLocation(URL(fileURLWithPath: "/ApplicationsElsewhere/MouthKeys.app")))
     }
 
     func testTheNewIdentifiersAreUsedEverywhereTheOldOnesWere() {
-        XCTAssertEqual(Bundle.main.bundleIdentifier, "com.stage11.liquidvoice.dev")
-        XCTAssertEqual(AppStorageLocation.bundleIdentifier, "com.stage11.liquidvoice.dev")
-        XCTAssertEqual(AppStorageLocation.appBundleIdentifiers, ["com.stage11.liquidvoice", "com.stage11.liquidvoice.dev"])
-        XCTAssertEqual(AppStorageLocation.folderName, "LiquidVoice-Dev")
-        XCTAssertEqual(AppStorageLocation.logFolderName, "LiquidVoice-Dev")
-        XCTAssertEqual(LegacyAppIdentity.bundleIdentifier, "com.FluidApp.app")
-        XCTAssertEqual(LegacyAppIdentity.folderName, "FluidVoice")
+        XCTAssertEqual(Bundle.main.bundleIdentifier, "com.stage11.mouthkeys.dev")
+        XCTAssertEqual(AppStorageLocation.bundleIdentifier, "com.stage11.mouthkeys.dev")
+        XCTAssertEqual(AppStorageLocation.appBundleIdentifiers, ["com.stage11.mouthkeys", "com.stage11.mouthkeys.dev"])
+        XCTAssertEqual(AppStorageLocation.folderName, "MouthKeys-Dev")
+        XCTAssertEqual(AppStorageLocation.logFolderName, "MouthKeys-Dev")
+        XCTAssertEqual(PreviousAppIdentity.newestFirst.map(\.bundleIdentifier), ["com.stage11.liquidvoice", "com.FluidApp.app"])
+        XCTAssertEqual(PreviousAppIdentity.newestFirst.map(\.folderName), ["LiquidVoice", "FluidVoice"])
 
-        XCTAssertTrue(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.stage11.liquidvoice"))
+        XCTAssertTrue(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.stage11.mouthkeys"))
         XCTAssertFalse(MicrophoneChangeOverlayController.supportsAlerts(bundleIdentifier: "com.FluidApp.app.dev"))
-        XCTAssertEqual(SystemPasteboardManager.sessionType.rawValue, "com.stage11.liquidvoice.dev.PasteSession")
+        XCTAssertEqual(SystemPasteboardManager.sessionType.rawValue, "com.stage11.mouthkeys.dev.PasteSession")
         for name in [
             DeliveryDebugTriggers.deliverText,
             DeliveryDebugTriggers.pasteLastTranscript,
             DeliveryDebugTriggers.showDeliveryFailure,
             DeliveryDebugTriggers.deliverTextAndSend,
         ] {
-            XCTAssertTrue(name.rawValue.hasPrefix("com.stage11.liquidvoice.debug."), name.rawValue)
+            XCTAssertTrue(name.rawValue.hasPrefix("com.stage11.mouthkeys.debug."), name.rawValue)
         }
         // Kept on purpose: the keychain service is not tied to the bundle identifier.
         XCTAssertEqual(KeychainService.serviceName, "com.fluidvoice.provider-api-keys")

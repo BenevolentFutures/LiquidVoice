@@ -3,7 +3,7 @@ import Foundation
 /// Every outbound link the app opens. MouthKeys' own links point at its fork; the only
 /// upstream links are deliberate credit to FluidVoice by altic-dev, which MouthKeys is built on.
 /// Nothing here is fetched: these URLs are only ever opened in the user's browser.
-enum LiquidVoiceLinks {
+enum MouthKeysLinks {
     static let newIssue = URL(string: "https://github.com/BenevolentFutures/MouthKeys/issues/new")!
     /// The newest signed release. MouthKeys does not update itself; people download each release.
     static let latestRelease = URL(string: "https://github.com/BenevolentFutures/MouthKeys/releases/latest")!

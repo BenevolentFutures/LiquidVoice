@@ -81,7 +81,7 @@ final class TypingServiceTransientPasteboardTests: XCTestCase {
     func testSnapshotSkipsOversizedRepresentationsButKeepsTheRest() throws {
         let pasteboard = Self.makePasteboard()
         defer { pasteboard.releaseGlobally() }
-        let hugeType = NSPasteboard.PasteboardType("com.liquidvoice.tests.huge")
+        let hugeType = NSPasteboard.PasteboardType("com.stage11.mouthkeys.tests.huge")
         let item = NSPasteboardItem()
         XCTAssertTrue(item.setData(Data(count: SystemPasteboardManager.maximumRepresentationBytes + 1), forType: hugeType))
         XCTAssertTrue(item.setString("keep me", forType: .string))
@@ -100,7 +100,7 @@ final class TypingServiceTransientPasteboardTests: XCTestCase {
     func testOversizedFilePayloadStillRestoresItsFilename() throws {
         let pasteboard = Self.makePasteboard()
         defer { pasteboard.releaseGlobally() }
-        let hugeType = NSPasteboard.PasteboardType("com.liquidvoice.tests.huge")
+        let hugeType = NSPasteboard.PasteboardType("com.stage11.mouthkeys.tests.huge")
         let item = NSPasteboardItem()
         XCTAssertTrue(item.setString("file:///tmp/Quarterly%20Report.mov", forType: .fileURL))
         XCTAssertTrue(item.setData(Data(count: SystemPasteboardManager.maximumRepresentationBytes + 1), forType: hugeType))
@@ -119,7 +119,7 @@ final class TypingServiceTransientPasteboardTests: XCTestCase {
     func testSnapshotWithNothingSmallEnoughStillLetsThePasteProceed() throws {
         let pasteboard = Self.makePasteboard()
         defer { pasteboard.releaseGlobally() }
-        let hugeType = NSPasteboard.PasteboardType("com.liquidvoice.tests.huge")
+        let hugeType = NSPasteboard.PasteboardType("com.stage11.mouthkeys.tests.huge")
         let item = NSPasteboardItem()
         XCTAssertTrue(item.setData(Data(count: SystemPasteboardManager.maximumRepresentationBytes + 1), forType: hugeType))
         XCTAssertTrue(pasteboard.writeObjects([item]))
@@ -150,7 +150,7 @@ final class TypingServiceTransientPasteboardTests: XCTestCase {
     func testUnreadableRepresentationIsSkippedInsteadOfFailingTheSnapshot() throws {
         let pasteboard = Self.makePasteboard()
         defer { pasteboard.releaseGlobally() }
-        let lazyType = NSPasteboard.PasteboardType("com.liquidvoice.tests.lazy")
+        let lazyType = NSPasteboard.PasteboardType("com.stage11.mouthkeys.tests.lazy")
         let provider = EmptyDataProvider()
         let item = NSPasteboardItem()
         XCTAssertTrue(item.setString("still here", forType: .string))
@@ -169,7 +169,7 @@ final class TypingServiceTransientPasteboardTests: XCTestCase {
     func testSnapshotRestoresEveryRepresentation() throws {
         let pasteboard = Self.makePasteboard()
         defer { pasteboard.releaseGlobally() }
-        let customType = NSPasteboard.PasteboardType("com.liquidvoice.tests.custom")
+        let customType = NSPasteboard.PasteboardType("com.stage11.mouthkeys.tests.custom")
         let customData = Data([0x01, 0x02, 0x03])
         let originalItem = NSPasteboardItem()
         XCTAssertTrue(originalItem.setString("original", forType: .string))
@@ -266,7 +266,7 @@ final class TypingServiceTransientPasteboardTests: XCTestCase {
         defer { pasteboard.releaseGlobally() }
 
         let temporaryDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("liquidvoice-image-pasteboard-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("mouthkeys-image-pasteboard-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
 
@@ -352,7 +352,7 @@ final class TypingServiceTransientPasteboardTests: XCTestCase {
     func testLargeRepresentationUnderTheCapIsSnapshottedAndRestored() throws {
         let pasteboard = Self.makePasteboard()
         defer { pasteboard.releaseGlobally() }
-        let customType = NSPasteboard.PasteboardType("com.liquidvoice.tests.large")
+        let customType = NSPasteboard.PasteboardType("com.stage11.mouthkeys.tests.large")
         let originalData = Data(repeating: 0xab, count: 20 * 1024 * 1024)
         let originalItem = NSPasteboardItem()
         XCTAssertTrue(originalItem.setData(originalData, forType: customType))
@@ -406,7 +406,7 @@ final class TypingServiceTransientPasteboardTests: XCTestCase {
     static let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
 
     static func makePasteboard() -> NSPasteboard {
-        let pasteboard = NSPasteboard(name: NSPasteboard.Name("com.liquidvoice.tests.pasteboard.\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("com.stage11.mouthkeys.tests.pasteboard.\(UUID().uuidString)"))
         pasteboard.clearContents()
         return pasteboard
     }
@@ -506,7 +506,7 @@ final class ClipboardPasteSessionTests: XCTestCase {
     }
 
     func testPasteOffersTheTranscriptThenRestoresTheOriginalClipboard() throws {
-        let customType = NSPasteboard.PasteboardType("com.liquidvoice.tests.custom")
+        let customType = NSPasteboard.PasteboardType("com.stage11.mouthkeys.tests.custom")
         let item = NSPasteboardItem()
         item.setString("before", forType: .string)
         item.setData(Data([7, 8, 9]), forType: customType)
@@ -769,7 +769,7 @@ final class ClipboardPasteSessionTests: XCTestCase {
     }
 
     func testWhenNothingCouldBeSnapshottedTheTranscriptIsLeftAsAVisibleCopy() throws {
-        let hugeType = NSPasteboard.PasteboardType("com.liquidvoice.tests.huge")
+        let hugeType = NSPasteboard.PasteboardType("com.stage11.mouthkeys.tests.huge")
         let item = NSPasteboardItem()
         XCTAssertTrue(item.setData(Data(count: SystemPasteboardManager.maximumRepresentationBytes + 1), forType: hugeType))
         XCTAssertTrue(self.pasteboard.writeObjects([item]))
@@ -856,7 +856,7 @@ final class PasteKeyCodeTests: XCTestCase {
 
     @MainActor
     func testCacheResolvesOnceThenOnlyOnLayoutChanges() {
-        let name = Notification.Name("LiquidVoice.PasteKeyCacheTest.\(UUID().uuidString)")
+        let name = Notification.Name("MouthKeys.PasteKeyCacheTest.\(UUID().uuidString)")
         var selectedKey: CGKeyCode = 9
         var lookups = 0
         let cache = PasteKeyCodeCache(notificationName: name) {
@@ -882,7 +882,7 @@ final class PasteKeyCodeTests: XCTestCase {
 
     @MainActor
     func testCachedReadsNeverWaitOnTheMainThread() {
-        let cache = PasteKeyCodeCache(notificationName: Notification.Name("LiquidVoice.PasteKeyCacheTest.\(UUID().uuidString)")) { 9 }
+        let cache = PasteKeyCodeCache(notificationName: Notification.Name("MouthKeys.PasteKeyCacheTest.\(UUID().uuidString)")) { 9 }
         cache.start()
         let finished = DispatchSemaphore(value: 0)
         DispatchQueue.global().async {

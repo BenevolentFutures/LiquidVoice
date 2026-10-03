@@ -83,7 +83,7 @@ final class LapelMicBatteryMonitor {
     /// timer while an input is selected, sends the heartbeat only while it is the receiver, and
     /// logs a poll only when its outcome changed.
     private final nonisolated class Worker: @unchecked Sendable {
-        private let queue = DispatchQueue(label: "com.stage11.liquidvoice.mic-battery", qos: .utility)
+        private let queue = DispatchQueue(label: "com.stage11.mouthkeys.mic-battery", qos: .utility)
         private let transport = LarkA1HIDTransport()
         private var uid: String?
         private var timer: DispatchSourceTimer?

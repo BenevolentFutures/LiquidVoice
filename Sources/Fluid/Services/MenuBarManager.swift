@@ -567,7 +567,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
     private var debugTriggerObservers: [NSObjectProtocol] = []
     #endif
 
-    /// Debug builds with `LiquidVoiceDebugDeliveryTriggers` on: distributed notifications that
+    /// Debug builds with `MouthKeysDebugDeliveryTriggers` on: distributed notifications that
     /// open Settings (at the top or at the microphone and hotkey cards) and the status menu, so a VM run can screenshot them without synthesized
     /// clicks (which need the Accessibility grant a VM cannot give).
     private func registerDebugTriggersIfEnabled() {
@@ -577,17 +577,17 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
         }
         let center = DistributedNotificationCenter.default()
         self.debugTriggerObservers.append(center.addObserver(
-            forName: Notification.Name("com.stage11.liquidvoice.debug.openSettings"), object: nil, queue: .main
+            forName: Notification.Name("com.stage11.mouthkeys.debug.openSettings"), object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.openPreferencesFromUI() }
         })
         self.debugTriggerObservers.append(center.addObserver(
-            forName: Notification.Name("com.stage11.liquidvoice.debug.openMicrophoneSettings"), object: nil, queue: .main
+            forName: Notification.Name("com.stage11.mouthkeys.debug.openMicrophoneSettings"), object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.openMicrophoneSettingsFromUI() }
         })
         self.debugTriggerObservers.append(center.addObserver(
-            forName: Notification.Name("com.stage11.liquidvoice.debug.scrollMainWindow"), object: nil, queue: .main
+            forName: Notification.Name("com.stage11.mouthkeys.debug.scrollMainWindow"), object: nil, queue: .main
         ) { note in
             // object: the y offset (points from the top) for the tallest scroll view in the main window.
             let offset = CGFloat(Double((note.object as? String) ?? "0") ?? 0)
@@ -604,7 +604,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
             }
         })
         self.debugTriggerObservers.append(center.addObserver(
-            forName: Notification.Name("com.stage11.liquidvoice.debug.openStatusMenu"), object: nil, queue: .main
+            forName: Notification.Name("com.stage11.mouthkeys.debug.openStatusMenu"), object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 // Opens the menu on the next turn so this observer returns before menu tracking.
@@ -612,7 +612,7 @@ final class MenuBarManager: NSObject, ObservableObject, NSMenuDelegate {
             }
         })
         self.debugTriggerObservers.append(center.addObserver(
-            forName: Notification.Name("com.stage11.liquidvoice.debug.closeStatusMenu"), object: nil, queue: .main
+            forName: Notification.Name("com.stage11.mouthkeys.debug.closeStatusMenu"), object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.menu?.cancelTracking() }
         })
